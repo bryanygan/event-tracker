@@ -138,6 +138,13 @@ def _tm_time(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def is_tracked_team_event(raw: dict) -> bool:
+    """Sports feeds are broad (college, G League...); keep games whose headliner is in SPORTS_TEAMS.
+    The home team is listed first in Ticketmaster's attractions, so this keeps home games only."""
+    attractions = raw.get("_embedded", {}).get("attractions") or []
+    return bool(attractions) and clean_text(attractions[0].get("name")) in config.SPORTS_TEAMS
+
+
 def is_junk(raw: dict) -> bool:
     name = raw.get("name", "")
     return any(p.search(name) for p in _JUNK)

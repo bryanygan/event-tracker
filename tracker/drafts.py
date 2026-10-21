@@ -27,7 +27,12 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
             out, warnings = retry, retry_warnings
-    if script and (warnings or facts["artist"].lower() not in out["hook"].lower()):  # e.g. "THROW" for THROWN
+    # Templated hooks must name the artist/team exactly (one said "THROW" for THROWN) and stay short
+    hook_ok = not script or (any(n.lower() in out["hook"].lower() for n in templates.hook_names(facts))
+                             and len(out["hook"].split()) <= templates.MAX_HOOK_WORDS)
+    if facts.get("format") in ("team_week", "big_game"):
+        out["hashtags"] = templates.game_hashtags(facts)
+    if script and (warnings or not hook_ok):
         # Templated formats have a known-good fallback hook, so a flagged one is replaced, not shipped.
         out["hook"] = templates.fallback_hook(facts)
         warnings = llm.check_facts(out, facts)

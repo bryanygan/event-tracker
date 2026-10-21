@@ -58,6 +58,8 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         else:
             client = tm.TicketmasterClient()
             raw = client.fetch_events()
+            for classification in config.SPORTS_CLASSIFICATIONS:
+                raw += [r for r in client.fetch_events(classification) if tm.is_tracked_team_event(r)]
             calls = client.calls
             tm.save_raw(raw, RAW_CACHE)
         events = [tm.normalize(r) for r in raw if not tm.is_junk(r)]

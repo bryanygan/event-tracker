@@ -68,3 +68,13 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Repo is public (user confirmed they want that). Squash-merged templates + Cloudflare branches into `main` as
   `9bc0c27` and `d4bc0e1`, scanned `main` history for the leaked strings (none), deleted both branches locally
   and on GitHub. No ref reaches the leaked commit `6927b43` any more.
+
+### Sixers + setlist.fm (same day, evening)
+- `feature/sixers`: TM basketball feed (103 events: Sixers, Villanova, Blue Coats, NCAA) filtered to Sixers home
+  games (40); game scoring; `team_week` + `big_game` templated formats. Verified on real data.
+- A live full run was **killed by Claude Code for low system memory** during drafting. Cause: 8 orphaned Ollama
+  `llama-server.exe` runners (one per drafting session today), the newest holding 2.2 GB. Killed them
+  (free RAM 2.2 → 5.4 GB), fixed `ollama_session` (tree kill + orphan sweep) on `fix/ollama-runner-leak`, verified
+  live that nothing remains, merged to `main`, merged `main` into `feature/sixers`. Did not restart the run.
+- setlist.fm key received (`SETLISTFM_API_KEY`). Probed: cityName search is fuzzy (Camden matches), so the plan
+  uses venue coords within the radius. `tracker/fetchers/setlistfm.py` written, not wired in or committed yet.

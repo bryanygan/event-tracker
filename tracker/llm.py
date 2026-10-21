@@ -81,6 +81,16 @@ FORMAT_GUIDES = {
         "Example script: \"Just announced: [Artist] is coming to [Venue] on [show_date]. Tickets go on sale "
         "[public_onsale]. Tag whoever you're going with.\""
     ),
+    "team_week": (
+        "Video: '{artist} home games this week.' The script is already written; write the hook only. "
+        "Hype, quick, Philly sports fan voice. Mention the {artist}.\n"
+        "Example hook: \"[Team] are home [number] times this week\""
+    ),
+    "big_game": (
+        "Video: big home game, {artist} vs. the {opponent}. The script is already written; write the hook "
+        "only. Rivalry energy, but don't invent records, standings, injuries or players.\n"
+        "Example hook: \"[Opponent] in Philly this week. You know what that means\""
+    ),
     "status_change": (
         "Video: quick news update. {artist}'s Philly show changed. Say plainly what changed and tell "
         "ticket holders to check their email or Ticketmaster.\n"
@@ -333,6 +343,16 @@ def onscreen_lines(facts: dict) -> list[str]:
     elif fmt == "status_change":
         s = facts["show"]
         lines.append(f"{facts['artist']} · {s['date']} · {facts['change'].upper()}")
+        return lines
+    elif fmt == "team_week":
+        lines.append(f"{facts['artist'].upper()} HOME GAMES · {facts['week']}")
+        for g in facts["shows"]:  # venue is nearly always the same arena, so show the tip-off time instead
+            lines.append(" · ".join(b for b in (g["date"], g["artist"], g.get("time")) if b))
+        return lines
+    elif fmt == "big_game":
+        g = facts["show"]
+        lines.append(f"BIG GAME: {g['artist']}")
+        lines.append(" · ".join(b for b in (g["date"], g.get("time"), g.get("venue")) if b))
         return lines
     for s in facts.get("shows", []):
         bits = [s["date"], s.get("artist") or s.get("event_name"), s.get("venue")]

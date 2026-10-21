@@ -7,6 +7,8 @@ const KIND_LABEL: Record<Alert['kind'], string> = {
   weekend: 'This weekend',
   stacked_month: 'Stacked month',
   status_change: 'Status change',
+  team_week: 'Home games this week',
+  big_game: 'Big game',
 }
 
 const STATUS_LABEL: Record<Draft['status'], string> = {
