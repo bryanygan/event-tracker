@@ -75,3 +75,22 @@ def test_games_stay_out_of_music_formats(conn):
 def test_hook_accepts_team_aliases():
     facts = {"artist": "Sixers", "team": "Philadelphia 76ers"}
     assert "76ers" in templates.hook_names(facts) and "Sixers" in templates.hook_names(facts)
+
+
+def test_big_game_hook_may_name_the_opponent_and_long_hooks_fall_back(tmp_path, monkeypatch):
+    from tracker import drafts
+    c = db.connect(tmp_path / "s.db")
+    facts = {"format": "big_game", "artist": "Sixers", "team": "Philadelphia 76ers", "opponent": "Milwaukee Bucks",
+             "show": {"artist": "Sixers vs. Bucks", "date": "Sat, Oct 24", "time": "7:30 PM",
+                      "venue": "Xfinity Mobile Arena", "opponent": "Milwaukee Bucks", "kind": "game"}}
+    detectors.save_alerts(c, [{"key": "a", "kind": "big_game", "title": "t", "score": 1, "facts": facts},
+                              {"key": "b", "kind": "big_game", "title": "t", "score": 1, "facts": facts}])
+    hooks = iter(["Bucks in town Saturday. Let's go", "Sixers " + "really " * 15 + "big game"])
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None: {
+        "hook": next(hooks), "hashtags": ["#philly", "#SixersVsBucks", "#seahawksvsjets", "#NBA"], "model": "m",
+        "script": script, "caption": caption})
+    first = c.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(c, 1),)).fetchone()
+    assert first["hook"] == "Bucks in town Saturday. Let's go"
+    assert first["hashtags"] == "#philly #Sixers #NBA #PhillySports #SixersVsBucks"
+    second = c.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(c, 2),)).fetchone()
+    assert second["hook"] == "The Bucks are coming to Philly"  # 17 words -> template fallback

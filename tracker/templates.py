@@ -139,9 +139,25 @@ def script_for(facts: dict) -> str | None:
 
 
 def hook_names(facts: dict) -> list[str]:
-    """Names a hook must contain one of: the artist, or a team's aliases ("Sixers" / "76ers")."""
+    """Names a hook must contain one of: the artist, a team's aliases ("Sixers" / "76ers"), or for a big
+    game the opponent ("The Bucks are coming to Philly" is a fine hook)."""
+    names = [facts["artist"], *(config.SPORTS_TEAMS.get(facts.get("team"), {}).get("aliases", []))]
+    if facts.get("opponent"):
+        names.append(facts["opponent"].split()[-1])
+    return names
 
-    return [facts["artist"], *(config.SPORTS_TEAMS.get(facts.get("team"), {}).get("aliases", []))]
+
+MAX_HOOK_WORDS = 12  # the model once crammed a whole week's schedule into the hook
+
+
+def game_hashtags(facts: dict) -> list[str]:
+    """Hashtags for game videos, from the facts. The model's were unusable for sports
+    (#seahawksvsjets, #ClevelandVikings, #NBAPlayoffs in October)."""
+    team = facts["artist"]
+    opponents = [facts.get("opponent")] if facts.get("opponent") else [g.get("opponent") for g in facts.get("shows", [])]
+    tags = ["#philly", f"#{team}", "#NBA", "#PhillySports"]
+    tags += [f"#{team}Vs{o.split()[-1]}" for o in opponents if o][:3]
+    return list(dict.fromkeys(tags))
 
 
 def _game_when(g: dict) -> str:
