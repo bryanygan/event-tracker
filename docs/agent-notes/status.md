@@ -39,20 +39,21 @@ commented code over abstraction.
 
 ## Git
 
-- Remote: `github.com/bryanygan/event-tracker`. User's rule: **skeleton went on `main`; new features go on
-  branches.** Commit and push as you go once verified; ask before merging.
-- `main`: skeleton, pythonw fix, merged `feature/live-ticketmaster` (`7460200`).
-- `feature/presale-templates` (pushed, not merged): templated presale/status scripts + captions.
-- `feature/cloudflare-pages` (pushed, not merged, **checked out**; built on presale-templates): Pages snapshot.
+- Remote: `github.com/bryanygan/event-tracker`, **public** (the user wants it public). User's rule: skeleton
+  went on `main`; new features go on branches. Commit and push as you go once verified; ask before merging.
+- `main` (**checked out**, which is what the scheduled tasks run): skeleton → pythonw fix → merge of
+  `feature/live-ticketmaster` → squash `9bc0c27` (presale templates) → squash `d4bc0e1` (Cloudflare Pages).
+- The templates and Cloudflare branches were **squash-merged and deleted on purpose**: the Cloudflare branch
+  had a commit with the account ID and the user's other infra names (see gotchas.md). Don't restore them.
+  `feature/live-ticketmaster` still exists (already merged; safe to delete).
 - Spotify keys stay in `.env.example` (user wants them kept for possible future use).
 
 ## Next up
 
 1. ~~Cloudflare setup~~ Done 2026-10-21: https://philly-events.pages.dev live behind Access (see environment.md).
    Every pipeline run republishes. Confirm the user can log in on their phone.
-2. Ask whether to merge `feature/presale-templates` and `feature/cloudflare-pages` into `main`.
-3. After the 2026-10-22 runs, check that `new_tour` alerts fire on real diffs (they can't fire on a baseline).
-4. Brief's phase 5+: setlist.fm for "back after X years" (needs a key), Sixers via TM `classificationName=sports`,
+2. After the 2026-10-22 runs, check that `new_tour` alerts fire on real diffs (they can't fire on a baseline).
+3. Brief's phase 5+: setlist.fm for "back after X years" (needs a key), Sixers via TM `classificationName=sports`,
    food/festivals via scrapers, phone notifications, slideshow assets (user has a related project at
    `C:\Users\Admin\Documents\ttspotslideshow`).
 

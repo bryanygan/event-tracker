@@ -65,3 +65,6 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   reusing the user's "Admin Only" policy, deployed a data-free placeholder to activate DNS, verified main +
   wildcard URLs redirect to Access, extended the guard to check a made-up subdomain, then published the real
   snapshot. Verified `/data/*.json` and the deployment URL also require login.
+- Repo is public (user confirmed they want that). Squash-merged templates + Cloudflare branches into `main` as
+  `9bc0c27` and `d4bc0e1`, scanned `main` history for the leaked strings (none), deleted both branches locally
+  and on GitHub. No ref reaches the leaked commit `6927b43` any more.
