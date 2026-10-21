@@ -27,6 +27,26 @@ MAX_RESULTS_PER_QUERY = 950  # stay below TM's 1000 deep-paging cap
 
 _JUNK = [re.compile(p, re.I) for p in config.JUNK_EVENT_PATTERNS]
 
+# Age-limit boilerplate TM venues append to event names, e.g. "(21+ Event)",
+# "(21 and Over)", "- All Ages (under 16 with adult)". Not something we want read out in a script.
+_NAME_NOISE = re.compile(
+    r"\s*\((?:\d\d\s*(?:\+|and over|& over)|all ages)[^)]*\)"  # (21+ Event), (18+), (21 and Over), (All Ages)
+    r"|\s*[-–]\s*all ages\b(?:\s*\([^)]*\))?",      # - All Ages (under 16 with adult)
+    re.I,
+)
+
+
+def clean_text(s: str | None) -> str | None:
+    """Normalize whitespace (TM names often contain non-breaking spaces)."""
+    if s is None:
+        return None
+    return re.sub(r"\s+", " ", s.replace("\xa0", " ")).strip()
+
+
+def clean_event_name(s: str | None) -> str:
+    s = _NAME_NOISE.sub("", clean_text(s) or "")
+    return re.sub(r"\s*[-–:]\s*$", "", s).strip()
+
 
 class BudgetExceeded(RuntimeError):
     pass
@@ -37,7 +57,7 @@ class TicketmasterClient:
                  budget: int = config.TM_DAILY_CALL_BUDGET, min_interval: float = config.TM_MIN_SECONDS_BETWEEN_CALLS):
         self.api_key = api_key or config.TICKETMASTER_API_KEY
         if not self.api_key:
-            raise RuntimeError("TICKETMASTER_API_KEY is missing. Add it to .env")
+            raise RuntimeError("TICKETMASTER_CONSUMER_KEY is missing. Add it to .env")
         self.session = session or requests.Session()
         self.budget = budget
         self.min_interval = min_interval
@@ -143,7 +163,7 @@ def normalize(raw: dict) -> dict:
 
     return {
         "id": raw["id"],
-        "name": raw.get("name", "").strip(),
+        "name": clean_event_name(raw.get("name")),
         "url": raw.get("url"),
         "image_url": image,
         "local_date": start.get("localDate"),
@@ -159,22 +179,22 @@ def normalize(raw: dict) -> dict:
         "onsale_end": public.get("endDateTime"),
         "venue": {
             "id": venue.get("id"),
-            "name": venue.get("name"),
+            "name": clean_text(venue.get("name")),
             "city": (venue.get("city") or {}).get("name"),
             "state": (venue.get("state") or {}).get("stateCode"),
         } if venue.get("id") else None,
         "attractions": [
             {
                 "id": a["id"],
-                "name": a.get("name", "").strip(),
+                "name": clean_text(a.get("name")) or "",
                 "genre": ((a.get("classifications") or [{}])[0].get("genre") or {}).get("name"),
                 "subgenre": ((a.get("classifications") or [{}])[0].get("subGenre") or {}).get("name"),
                 "tm_upcoming_total": (a.get("upcomingEvents") or {}).get("_total"),
             }
-            for a in emb.get("attractions") or [] if a.get("id")
+            for a in emb.get("attractions") or [] if a.get("id") and clean_text(a.get("name"))
         ],
         "presales": [
-            {"name": p.get("name", "Presale").strip(), "start_utc": p.get("startDateTime"), "end_utc": p.get("endDateTime")}
+            {"name": clean_text(p.get("name")) or "Presale", "start_utc": p.get("startDateTime"), "end_utc": p.get("endDateTime")}
             for p in sales.get("presales") or []
         ],
     }

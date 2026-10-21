@@ -82,6 +82,15 @@ def test_normalize_and_junk_filter():
     assert not tm.is_junk(raw)
 
 
+def test_normalize_cleans_names():
+    raw = tm_event(name="The Jayhawks - All Ages (under 16 with adult)", artist="The Jayhawks")
+    raw["_embedded"]["venues"][0]["name"] = "TLO Temple "
+    n = tm.normalize(raw)
+    assert (n["name"], n["attractions"][0]["name"], n["venue"]["name"]) == ("The Jayhawks", "The Jayhawks", "TLO Temple")
+    assert tm.clean_event_name("Mike Dawes (21 and Over)") == "Mike Dawes"
+    assert tm.clean_event_name("Boyz II Men (30th Anniversary)") == "Boyz II Men (30th Anniversary)"
+
+
 def test_normalize_handles_missing_fields():
     raw = tm_event(price=None)
     del raw["sales"]
@@ -130,19 +139,26 @@ def test_new_tour_detected_only_for_notable_new_artists(conn):
     assert a["facts"]["already_had_philly_dates"] is False
 
 
-def test_sales_soon_groups_multi_night_runs(conn):
-    presale = [("Citi Presale", "2026-10-22T14:00:00Z", "2026-10-23T03:00:00Z")]
+def test_sales_soon_one_alert_per_artist_listing_all_windows(conn):
+    presale = [("Citi Presale", "2026-10-22T14:00:00Z", "2026-10-23T03:00:00Z"),
+               ("VIP Packages Onsale", "2026-10-22T14:00:00Z", None)]
     ingest(conn, [
         tm_event(event_id="x1", name="Star", date="2027-02-01", presales=presale, onsale="2026-10-24T14:00:00Z"),
         tm_event(event_id="x2", name="Star", date="2027-02-02", presales=presale, onsale="2026-10-24T14:00:00Z"),
         tm_event(event_id="far", name="Later", presales=[("P", "2026-11-30T14:00:00Z", None)]),
+        tm_event(event_id="tiny", name="Tiny", venue="Some Bar", upcoming=1,
+                 presales=[("Artist Presale", "2026-10-22T14:00:00Z", None)]),
     ])
-    alerts = detectors.detect_sales_soon(conn, NOW, "2026-10-21")
-    names = sorted(a["facts"]["sale_name"] for a in alerts)
-    assert names == ["Citi Presale", "General public on-sale"]
-    citi = next(a for a in alerts if a["facts"]["sale_name"] == "Citi Presale")
-    assert len(citi["facts"]["shows"]) == 2
-    assert citi["facts"]["sale_opens"] == "Thu, Oct 22 at 10:00 AM ET"  # 14:00Z = 10 AM EDT
+    [alert] = detectors.detect_sales_soon(conn, NOW, "2026-10-21")  # not "Later" (too far), not "Tiny" (too small)
+    f = alert["facts"]
+    assert f["artist"] == "Star" and len(f["shows"]) == 2
+    assert f["sale_opens"] == "Thu, Oct 22 at 10:00 AM ET"  # 14:00Z = 10 AM EDT
+    assert [s["name"] for s in f["all_sales"]] == ["Citi Presale", "General public on-sale"]  # VIP skipped
+
+
+def test_sales_already_open_dont_alert(conn):
+    ingest(conn, [tm_event(event_id="x", name="Star", onsale="2026-10-01T14:00:00Z")])
+    assert detectors.detect_sales_soon(conn, NOW, "2026-10-21") == []
 
 
 def test_weekend_roundup_picks_varied_genres(conn):
@@ -177,3 +193,11 @@ def test_alerts_are_deduplicated(conn):
     a = {"key": "k1", "kind": "weekend", "title": "t", "score": 1, "facts": {}}
     assert len(detectors.save_alerts(conn, [a])) == 1
     assert detectors.save_alerts(conn, [a]) == []
+
+
+def test_stacked_month_skips_current_month_after_the_15th(conn):
+    raws = [tm_event(event_id=f"o{i}", name=f"Rock {i}", date=f"2026-10-{22 + i}", venue="The Met Philadelphia",
+                     upcoming=50) for i in range(6)]
+    ingest(conn, raws)
+    assert detectors.detect_stacked_months(conn, NOW.date()) == []  # Oct 21: October is nearly over
+    assert len(detectors.detect_stacked_months(conn, NOW.date().replace(day=10))) == 1

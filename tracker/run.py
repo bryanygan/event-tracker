@@ -1,4 +1,4 @@
-"""Pipeline entry point: fetch → store/diff → enrich → detect → draft.
+"""Pipeline entry point: fetch → store/diff → enrich (Deezer) → detect → draft.
 
 Usage (from the project folder):
     .venv\\Scripts\\python -m tracker.run              # full run (what Task Scheduler calls)
@@ -11,11 +11,12 @@ import argparse
 import json
 import logging
 import sys
+from contextlib import closing
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from . import config, db, detectors, drafts, store
-from .fetchers import spotify
+from .fetchers import deezer
 from .fetchers import ticketmaster as tm
 
 log = logging.getLogger("tracker")
@@ -45,7 +46,9 @@ def setup_logging():
 
 
 def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
-    conn = conn or db.connect()
+    if conn is None:
+        with closing(db.connect()) as own:
+            return run(from_cache, make_drafts, own)
     baseline = store.is_first_run(conn, "ticketmaster")
     run_id = store.start_run(conn, "ticketmaster")
     calls = 0
@@ -64,9 +67,9 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         log.info("Changes: %s", counts or "none")
 
         try:
-            spotify.enrich_headliners(conn)
+            deezer.enrich_headliners(conn)
         except Exception as exc:  # enrichment is a nice-to-have; never fail the run over it
-            log.warning("Spotify enrichment failed: %s", exc)
+            log.warning("Deezer enrichment failed: %s", exc)
 
         alerts = detectors.run_all(conn, run_id)
         new_alert_ids = detectors.save_alerts(conn, alerts)

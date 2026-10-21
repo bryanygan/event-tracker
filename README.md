@@ -2,14 +2,16 @@
 
 Tracks Philly-area concerts, notices things worth a video, and drafts scripts for you to review.
 Nothing posts automatically. Brief: [event-tracker-pipeline.md](event-tracker-pipeline.md).
+Working on this with an AI agent? Start with [docs/agent-notes/](docs/agent-notes/README.md).
 
 ```
 Task Scheduler (6:30 AM, 4:30 PM)
   └─ python -m tracker.run
        1. fetchers/ticketmaster.py   30 mi around City Hall, next 240 days, music only
        2. store.py                   upsert into SQLite, log changes (new / price / status / date / presale)
-       3. fetchers/spotify.py        headliner popularity + genres (cached 30 days)
-       4. detectors.py               new tour · presale/on-sale in 72h · weekend · stacked month · cancel/postpone
+       3. fetchers/deezer.py         headliner popularity from Deezer fan counts (no key; cached 14 days)
+       4. detectors.py               new tour · presale/on-sale in 72h (one alert per artist) · weekend ·
+                                     stacked month · cancel/postpone
        5. drafts.py + llm.py         Ollama writes hook/script/caption/hashtags for the top 8 new alerts
 Dashboard (always on): python -m tracker.api → http://127.0.0.1:8765
 ```
@@ -69,13 +71,21 @@ The prompt and per-format examples are at the top of `tracker/llm.py`.
   would flag 1000 "just announced" shows.
 - **Ticketmaster deep paging cap.** The API stops at 1000 results per query, so the fetcher splits the
   date range in half until each window fits.
+- **Deezer instead of Spotify for popularity.** Spotify's API no longer returns popularity, followers or genres
+  for development-mode apps (checked Oct 2026: artist objects come back with only id/name/images, and top-tracks
+  is 403). Deezer's public search gives fan counts with no key. It undercounts some US acts (Zach Bryan: 125K),
+  so it's blended with venue size and tour size instead of used alone. Genres come from Ticketmaster.
+  The Spotify keys in `.env` are currently unused.
+- **One presale alert per artist.** Real data had 4–5 sale windows per show (Citi, Live Nation, venue, VIP,
+  general); one alert lists them all. VIP/package on-sales are ignored (`IGNORED_SALE_PATTERNS`).
+- **Event names are cleaned** of "(21+ Event)", "- All Ages (under 16 with adult)" and non-breaking spaces.
 - **Twice-daily fetch.** Presales and on-sales mostly open at 10 AM local; 6:30 AM and 4:30 PM runs with a 72h
-  window give at least a day's notice. One full pull costs a few dozen API calls against the 5000/day limit.
+  window give at least a day's notice. A full pull of ~500 Philly music events is 3 API calls against the 5000/day limit.
 - **Below-normal task priority**, so Homebridge always wins the CPU.
 
 ## Not done yet (next phases)
 
 - "Back after X years" angle (needs setlist.fm API key).
 - Sixers, food, festivals (Ticketmaster `classificationName=sports` covers the Sixers; others need scrapers).
-- "Under $40 this month" format (Ticketmaster price ranges are missing on many events).
+- "Under $40 this month" format (only ~15% of Ticketmaster events include a price range).
 - Phone notifications for big presales; slideshow/asset generation.

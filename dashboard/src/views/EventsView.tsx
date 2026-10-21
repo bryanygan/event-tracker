@@ -31,7 +31,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
       <div className="table-wrap">
         <table className="events">
           <thead>
-            <tr><th>Date</th><th>Artist</th><th>Venue</th><th>Genre</th><th>Price</th><th title="notability">★</th><th>Status</th></tr>
+            <tr><th>Date</th><th>Artist</th><th>Venue</th><th>Genre</th><th>Price</th><th title="Deezer fans">Fans</th><th title="notability score">★</th><th>Status</th></tr>
           </thead>
           <tbody>
             {events?.map((e) => (
@@ -45,6 +45,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
                 <td>{e.venue_name}</td>
                 <td>{e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}</td>
                 <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
+                <td className="nowrap">{e.fans != null ? fmtFans(e.fans) : ''}</td>
                 <td>{Math.round(e.score)}</td>
                 <td>{e.status !== 'onsale' ? <span className="pill">{e.status}</span> : ''}</td>
               </tr>
@@ -56,6 +57,8 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
   )
 }
 
+const fmtFans = (n: number) =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)
 const fmtDate = (d: string) =>
   new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 const fmtTime = (t: string) => {

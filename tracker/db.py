@@ -38,11 +38,9 @@ CREATE TABLE IF NOT EXISTS attractions (
     genre TEXT,
     subgenre TEXT,
     tm_upcoming_total INTEGER,      -- how many events TM lists for them worldwide (tour size proxy)
-    spotify_id TEXT,
-    spotify_popularity INTEGER,     -- 0-100, NULL if unknown
-    spotify_followers INTEGER,
-    spotify_genres TEXT,            -- comma separated
-    spotify_checked_at TEXT,
+    fans INTEGER,                   -- Deezer fan count, NULL if unknown/unmatched
+    popularity INTEGER,             -- 0-100 derived from fans (log scale), NULL if unknown
+    popularity_checked_at TEXT,
     first_seen TEXT NOT NULL
 );
 
@@ -134,4 +132,21 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")  # lets the dashboard read while a run writes
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS won't add them to an
+# existing database, so add any that are missing. (Old unused columns are left in place.)
+_ADDED_COLUMNS = {
+    "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT"},
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, cols in _ADDED_COLUMNS.items():
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col, typ in cols.items():
+            if col not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    conn.commit()

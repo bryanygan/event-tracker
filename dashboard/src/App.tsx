@@ -58,7 +58,7 @@ export default function App() {
         </div>
         <div className="run-box">
           <button onClick={runNow} disabled={job?.running || !summary?.has_tm_key}
-                  title={summary?.has_tm_key ? '' : 'Add TICKETMASTER_API_KEY to .env'}>
+                  title={summary?.has_tm_key ? '' : 'Add TICKETMASTER_CONSUMER_KEY to .env'}>
             {job?.running ? 'Working…' : 'Run pipeline now'}
           </button>
           <span className="muted small">
@@ -72,7 +72,7 @@ export default function App() {
       </header>
 
       {summary && !summary.has_tm_key && (
-        <div className="banner">TICKETMASTER_API_KEY is missing from <code>.env</code>, so the pipeline can't fetch.</div>
+        <div className="banner">TICKETMASTER_CONSUMER_KEY is missing from <code>.env</code>, so the pipeline can't fetch.</div>
       )}
       {job?.error && !job.running && <div className="banner error">Last job failed: {job.error}</div>}
       {error && <div className="banner error">{error}</div>}

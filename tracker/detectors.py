@@ -8,6 +8,7 @@ Each detector returns alert dicts:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
@@ -129,45 +130,69 @@ def _presales_for(conn, event_ids: list[str]) -> list[dict]:
 
 
 def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> list[dict]:
-    """Presales or public on-sales opening within the next PRESALE_WINDOW_HOURS."""
+    """One alert per artist when any presale/on-sale for their Philly show(s) opens soon.
+
+    Triggered by a window opening within PRESALE_WINDOW_HOURS; the facts then list every
+    upcoming window for those shows (presales + general on-sale) so the video can cover both.
+    VIP/package on-sales are ignored, and so are small acts (PRESALE_MIN_SCORE).
+    """
     horizon = now + timedelta(hours=config.PRESALE_WINDOW_HOURS)
     events = {e["id"]: e for e in upcoming_events(conn, today)}
 
-    windows = []  # (event, sale_name, start_iso)
-    for r in conn.execute("SELECT event_id, name, start_utc FROM presales WHERE start_utc IS NOT NULL"):
-        windows.append((r["event_id"], r["name"], r["start_utc"]))
-    for e in events.values():
-        if e["onsale_start"]:
-            windows.append((e["id"], "General public on-sale", e["onsale_start"]))
+    # artist -> {"events": {...}, "windows": {(name, start)}}
+    by_artist: dict[str, dict] = defaultdict(lambda: {"events": {}, "windows": set(), "triggered": False})
 
-    grouped: dict[tuple, list[dict]] = defaultdict(list)
-    for event_id, name, start in windows:
+    def add(event_id, name, start):
         e = events.get(event_id)
-        if not e or e["status"] in ("cancelled", "postponed"):
-            continue
-        if now < parse_utc(start) <= horizon:
-            grouped[(e["headliner_id"] or e["id"], name, start)].append(e)
+        if not e or not start or e["status"] in ("cancelled", "postponed") or _ignored_sale(name):
+            return
+        opens = parse_utc(start)
+        if opens <= now:
+            return
+        group = by_artist[e["headliner_id"] or e["id"]]
+        group["events"][e["id"]] = e
+        group["windows"].add((name, start))
+        if opens <= horizon:
+            group["triggered"] = True
+
+    for r in conn.execute("SELECT event_id, name, start_utc FROM presales"):
+        add(r["event_id"], r["name"], r["start_utc"])
+    for e in events.values():
+        add(e["id"], "General public on-sale", e["onsale_start"])
 
     alerts = []
-    for (artist_key, name, start), evs in grouped.items():
-        evs.sort(key=lambda e: e["local_date"])
+    for artist_key, group in by_artist.items():
+        evs = sorted(group["events"].values(), key=lambda e: e["local_date"])
+        best = max(e["score"] for e in evs)
+        if not group["triggered"] or best < config.PRESALE_MIN_SCORE:
+            continue
+        # Earliest first; at the same time, presales before the general on-sale.
+        windows = sorted(group["windows"], key=lambda w: (w[1], w[0] == "General public on-sale", w[0]))
         head = evs[0]
+        first_name, first_start = windows[0]
         alerts.append({
-            "key": f"sale:{artist_key}:{name}:{start}",
+            "key": f"sale:{artist_key}:{head['local_date']}",
             "kind": "presale_soon",
-            "title": f"{name} for {head['headliner']} opens {fmt_utc_local(start)}",
-            "score": max(e["score"] for e in evs),
+            "title": f"Tickets for {head['headliner']} open {fmt_utc_local(first_start)} ({first_name})",
+            "score": best,
             "facts": {
                 "format": "presale",
                 "artist": head["headliner"],
-                "sale_name": name,
-                "sale_opens": fmt_utc_local(start),
-                "hours_until_open": round((parse_utc(start) - now).total_seconds() / 3600),
-                "note": "Presale codes are not in our data. Do not invent one; tell viewers to check the artist/TM page.",
+                "sale_name": first_name,
+                "sale_opens": fmt_utc_local(first_start),
+                "hours_until_open": round((parse_utc(first_start) - now).total_seconds() / 3600),
+                "all_sales": [{"name": n, "opens": fmt_utc_local(st)} for n, st in windows],
                 "shows": [event_facts(e) for e in evs],
             },
         })
     return alerts
+
+
+_IGNORED_SALES = [re.compile(p, re.I) for p in config.IGNORED_SALE_PATTERNS]
+
+
+def _ignored_sale(name: str) -> bool:
+    return any(p.search(name or "") for p in _IGNORED_SALES)
 
 
 def upcoming_weekend(today: date) -> tuple[date, date]:
@@ -213,8 +238,9 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
 
 def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
     """A genre with lots of notable shows in this month or next."""
-    this_month = today.strftime("%Y-%m")
     next_month = (today.replace(day=1) + timedelta(days=32)).strftime("%Y-%m")
+    # Past mid-month, "this month is stacked" comes too late to be useful; look at next month only.
+    this_month = today.strftime("%Y-%m") if today.day <= 15 else next_month
     buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today.isoformat()):
         ym = e["local_date"][:7]

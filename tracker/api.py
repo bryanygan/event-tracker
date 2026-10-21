@@ -12,7 +12,9 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException
+from contextlib import closing
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -32,6 +34,15 @@ _job = {"name": None, "started": None, "error": None, "finished": None}
 
 def conn():
     return db.connect()
+
+
+def get_db():
+    """One connection per request, always closed (open SQLite handles lock the file on Windows)."""
+    c = conn()
+    try:
+        yield c
+    finally:
+        c.close()
 
 
 def _start_job(name: str, fn) -> dict:
@@ -59,8 +70,7 @@ def job_status():
 
 
 @app.get("/api/summary")
-def summary():
-    c = conn()
+def summary(c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()
     last = c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
     return {
@@ -71,7 +81,6 @@ def summary():
         "last_run": dict(last) if last else None,
         "model": config.OLLAMA_MODEL,
         "has_tm_key": bool(config.TICKETMASTER_API_KEY),
-        "has_spotify": bool(config.SPOTIFY_CLIENT_ID and config.SPOTIFY_CLIENT_SECRET),
     }
 
 
@@ -83,8 +92,7 @@ def _draft_row(r) -> dict:
 
 
 @app.get("/api/alerts")
-def list_alerts(status: str = "open", limit: int = 100):
-    c = conn()
+def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
     if where is None:
         raise HTTPException(400, "status must be open, dismissed or all")
@@ -102,10 +110,9 @@ class AlertUpdate(BaseModel):
 
 
 @app.patch("/api/alerts/{alert_id}")
-def update_alert(alert_id: int, body: AlertUpdate):
+def update_alert(alert_id: int, body: AlertUpdate, c=Depends(get_db)):
     if body.status not in ("new", "drafted", "dismissed"):
         raise HTTPException(400, "bad status")
-    c = conn()
     if not c.execute("UPDATE alerts SET status=? WHERE id=?", (body.status, alert_id)).rowcount:
         raise HTTPException(404)
     c.commit()
@@ -113,13 +120,14 @@ def update_alert(alert_id: int, body: AlertUpdate):
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)
-def regenerate(alert_id: int):
-    if not conn().execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
+def regenerate(alert_id: int, c=Depends(get_db)):
+    if not c.execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
         raise HTTPException(404)
 
     def work():
         with llm.ollama_session():
-            drafts.draft_alert(conn(), alert_id)
+            with closing(conn()) as job_conn:
+                drafts.draft_alert(job_conn, alert_id)
     return _start_job(f"draft for alert {alert_id}", work)
 
 
@@ -133,13 +141,12 @@ class DraftUpdate(BaseModel):
 
 
 @app.patch("/api/drafts/{draft_id}")
-def update_draft(draft_id: int, body: DraftUpdate):
+def update_draft(draft_id: int, body: DraftUpdate, c=Depends(get_db)):
     fields = body.model_dump(exclude_none=True)
     if "status" in fields and fields["status"] not in ("pending", "approved", "filmed", "rejected"):
         raise HTTPException(400, "bad status")
     if not fields:
         return {"ok": True}
-    c = conn()
     sets = ", ".join(f"{k}=?" for k in fields)
     if not c.execute(f"UPDATE drafts SET {sets} WHERE id=?", [*fields.values(), draft_id]).rowcount:
         raise HTTPException(404)
@@ -148,8 +155,7 @@ def update_draft(draft_id: int, body: DraftUpdate):
 
 
 @app.get("/api/events")
-def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300):
-    c = conn()
+def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     end = (today.fromordinal(today.toordinal() + days)).isoformat()
     rows = [e for e in upcoming_events(c, today.isoformat()) if e["local_date"] <= end]
@@ -161,20 +167,20 @@ def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300):
         rows = [e for e in rows if e["genre"] == genre]
     rows.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     keep = ["id", "name", "headliner", "support", "local_date", "local_time", "status", "venue_name", "genre",
-            "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "spotify_popularity",
-            "spotify_genres", "first_seen"]
+            "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "popularity", "fans",
+            "first_seen"]
     return [{k: e.get(k) for k in keep} for e in rows[:limit]]
 
 
 @app.get("/api/genres")
-def genres():
-    return [r[0] for r in conn().execute(
+def genres(c=Depends(get_db)):
+    return [r[0] for r in c.execute(
         "SELECT genre FROM events WHERE active=1 AND genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC")]
 
 
 @app.get("/api/runs")
-def runs(limit: int = 20):
-    return [dict(r) for r in conn().execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
+def runs(limit: int = 20, c=Depends(get_db)):
+    return [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
 
 
 @app.post("/api/run", status_code=202)

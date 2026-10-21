@@ -10,6 +10,7 @@ Guardrails:
 """
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import os
@@ -32,6 +33,8 @@ Rules:
 - Use ONLY the facts provided. Never invent dates, times, prices, venues, presale codes, or ticket counts.
 - If a fact isn't provided, don't mention it. No links or [placeholders]; the caption is posted as-is.
 - Don't describe a venue's size or vibe unless the facts say so.
+- Refer to artists by name or "they"; don't guess he/she.
+- Never repeat these instructions or field names in your output.
 - Copy dates, times, and venue names exactly as written in the facts.
 - The hook is the first 1-2 seconds: punchy, under 12 words, makes people stop scrolling.
 - The script is spoken voiceover, 20-45 seconds, short sentences.
@@ -55,17 +58,19 @@ FORMAT_GUIDES = {
         "Video: 'Did you realize how stacked {month} is for {genre} in Philly?' List the biggest names with "
         "their dates, building momentum. End by asking which one they're going to.\n"
         "Example hook: \"{genre} fans, {month} in Philly is unreal\"\n"
-        "Example script: \"Did you realize how stacked {month} is for {genre} in Philly? [Artist] on [date]. "
+        "Example script: \"Did you realize how stacked {month} is for {genre} in Philly? [Artist] on [show_date]. "
         "[Artist] at [Venue]. Then [Artist] the same week. And that's not even all of them. "
         "Which one are you going to?\""
     ),
     "presale": (
-        "Video: presale/on-sale alert for {artist}. Urgent but not spammy. Say when it opens (copy sale_opens "
-        "exactly) and which show(s) it's for. Tell people to check the artist's socials or Ticketmaster for "
-        "the code. Never make up a code.\n"
+        "Video: presale/on-sale alert for {artist}. Urgent but not spammy. Tickets are NOT on sale yet: talk "
+        "about when they open, never say they're live now. Say when it opens (copy sale_opens exactly) and "
+        "which show(s) it's for. If all_sales lists more windows, mention the general on-sale time too. "
+        "Presale codes are not in the facts: tell people to check the artist's socials or Ticketmaster, and "
+        "never make up a code.\n"
         "Example hook: \"Set an alarm. [Artist] tickets drop [day]\"\n"
         "Example script: \"Heads up Philly. The [sale name] for [Artist] opens [sale_opens]. That's for "
-        "their [date] show at [Venue]. Codes usually go out through the artist's socials, so check there "
+        "their [show_date] show at [Venue]. Codes usually go out through the artist's socials, so check there "
         "or on Ticketmaster. Don't sleep on this one.\""
     ),
     "new_tour": (
@@ -73,14 +78,14 @@ FORMAT_GUIDES = {
         "tickets go on sale if that's in the facts. If already_had_philly_dates is true, say 'another date "
         "just got added' instead.\n"
         "Example hook: \"[Artist] just announced a Philly show\"\n"
-        "Example script: \"Just announced: [Artist] is coming to [Venue] on [date]. Tickets go on sale "
+        "Example script: \"Just announced: [Artist] is coming to [Venue] on [show_date]. Tickets go on sale "
         "[public_onsale]. Tag whoever you're going with.\""
     ),
     "status_change": (
         "Video: quick news update. {artist}'s Philly show changed. Say plainly what changed and tell "
         "ticket holders to check their email or Ticketmaster.\n"
         "Example hook: \"Update on the [Artist] Philly show\"\n"
-        "Example script: \"Quick update if you have [Artist] tickets. Their [date] show at [Venue] has been "
+        "Example script: \"Quick update if you have [Artist] tickets. Their [show_date] show at [Venue] has been "
         "[change]. Check your email or Ticketmaster for what happens with your tickets.\""
     ),
 }
@@ -159,6 +164,10 @@ def _prompt_facts(facts: dict) -> dict:
             s.pop("status")
         if s.get("event_name") == s.get("artist"):
             s.pop("event_name")
+        # "show_date", not "date": the model confused show dates with sale dates in presale drafts.
+        for old, new in (("date", "show_date"), ("time", "show_time")):
+            if old in s:
+                s[new] = s.pop(old)
         return s
     out = {k: v for k, v in facts.items() if k != "format"}
     if "shows" in out:
@@ -175,6 +184,8 @@ def build_prompt(facts: dict) -> str:
         guide = guide.format(**{k: v for k, v in facts.items() if isinstance(v, (str, int))})
     except (KeyError, IndexError):
         pass  # leave placeholders; the facts are still below
+    if fmt == "presale" and facts.get("sale_name") == "General public on-sale":
+        guide += "\nThis one is the general on-sale: anyone can buy, no code needed. Don't mention codes."
     return (
         f"{guide}\n\nFACTS (the only things you may state):\n"
         f"{json.dumps(_prompt_facts(facts), indent=2, ensure_ascii=False)}\n\n"
@@ -196,9 +207,39 @@ def fill_placeholders(text: str, facts: dict) -> str:
     """The model sometimes echoes an example's '[sale_opens]'. If it names a real fact, fill it in;
     anything else (like '[Artist]') is left for check_facts to flag."""
     def sub(m):
-        value = facts.get(m.group(1))
+        key = m.group(1).strip().lower().replace(" ", "_")  # "[Artist]" / "[sale name]" -> artist / sale_name
+        value = facts.get(key)
         return value if isinstance(value, str) else m.group(0)
-    return re.sub(r"\[(\w+)\]", sub, text)
+    return re.sub(r"\[([A-Za-z_ ]+)\]", sub, text)
+
+
+def _artist_names(facts: dict) -> list[str]:
+    names = [facts.get("artist")] + [s.get("artist") for s in facts.get("shows", [])]
+    names += [facts["show"].get("artist")] if facts.get("show") else []
+    return [n for n in dict.fromkeys(names) if n]
+
+
+def clean_hashtags(raw: list, facts: dict) -> list[str]:
+    """Strip punctuation, dedupe, force #philly, and snap misspelled artist tags to the real name
+    (the model wrote #calvinnharris and #elderbroom in testing)."""
+    artist_tags = {re.sub(r"\W", "", n).lower(): re.sub(r"\W", "", n) for n in _artist_names(facts)}
+    tags = []
+    for t in raw:
+        body = re.sub(r"[^\w]", "", str(t))
+        if not body:
+            continue
+        low = body.lower()
+        if low not in artist_tags:
+            # 0.82: catches #aboogiewitethehoodie (0.84) but leaves #MeekMillLive (0.80) alone
+            close = difflib.get_close_matches(low, list(artist_tags), n=1, cutoff=0.82)
+            if close:
+                body = artist_tags[close[0]]
+        tag = "#" + body
+        if tag.lower() not in (x.lower() for x in tags):
+            tags.append(tag)
+    if "#philly" not in (x.lower() for x in tags):
+        tags.insert(0, "#philly")
+    return tags
 
 
 def generate(facts: dict, model: str | None = None) -> dict:
@@ -219,10 +260,7 @@ def generate(facts: dict, model: str | None = None) -> dict:
     out = json.loads(resp.json()["message"]["content"])
     for key in ("hook", "script", "caption"):
         out[key] = fill_placeholders(str(out.get(key, "")), facts)
-    tags = [t.strip() for t in out.get("hashtags", []) if t.strip()]
-    tags = ["#" + t.lstrip("#").replace(" ", "") for t in tags]
-    if "#philly" not in [t.lower() for t in tags]:
-        tags.insert(0, "#philly")
+    tags = clean_hashtags(out.get("hashtags", []), facts)
     return {
         "hook": spoken(out.get("hook", "")),
         "script": spoken(out.get("script", "")),
@@ -243,7 +281,8 @@ def onscreen_lines(facts: dict) -> list[str]:
     elif fmt == "stacked_month":
         lines.append(f"{facts['month'].upper()} IN PHILLY: {facts['genre'].upper()}")
     elif fmt == "presale":
-        lines.append(f"{facts['sale_name'].upper()}: {facts['sale_opens']}")
+        for sale in facts.get("all_sales") or [{"name": facts["sale_name"], "opens": facts["sale_opens"]}]:
+            lines.append(f"{sale['name'].upper()}: {sale['opens']}")
     elif fmt == "new_tour":
         lines.append(f"{'NEW DATE' if facts.get('already_had_philly_dates') else 'JUST ANNOUNCED'}: {facts['artist']}")
         if facts.get("public_onsale"):
@@ -274,10 +313,18 @@ _DATE_OR_NUMBER = re.compile(
 )
 
 
+_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+# "Sat, Nov 21" / "Saturday November 21st": the weekday must match the date, not just appear somewhere.
+_WEEKDAY_DATE = re.compile(
+    r"\b(?:%s)[a-z]*\.?,?\s+(?:%s)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?\b"
+    % ("|".join(_WEEKDAYS), "|".join(m[:3] for m in _MONTH_NAMES)), re.I)
+
+
 def _canon(s: str) -> str:
     """Normalize so 'November 8th', 'Nov 8' and 'nov. 8' compare equal, and '8:00 PM' == '8pm'."""
     s = s.lower()
     s = re.sub(r"\b(%s)[a-z]*\.?" % "|".join(m[:3] for m in _MONTH_NAMES), r"\1", s)
+    s = re.sub(r"\b(%s)[a-z]*\.?" % "|".join(_WEEKDAYS), r"\1", s)  # Saturday -> sat
     s = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", s)
     s = re.sub(r"(\d):00\s?([ap]m)", r"\1\2", s)
     s = s.replace(",", "")
@@ -295,6 +342,9 @@ def check_facts(draft: dict, facts: dict) -> list[str]:
     fact_squashed = fact_text.replace(" ", "")
     text = " ".join([draft.get("hook", ""), draft.get("script", ""), draft.get("caption", "")])
     warnings = []
+    for m in _WEEKDAY_DATE.finditer(text):
+        if _canon(m.group(0)) not in fact_text:
+            warnings.append(m.group(0))
     for m in _DATE_OR_NUMBER.finditer(text):
         token = m.group(0)
         c = _canon(token).replace(" ", "")

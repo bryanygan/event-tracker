@@ -57,7 +57,8 @@ export type EventRow = {
   onsale_start: string | null
   url: string | null
   score: number
-  spotify_popularity: number | null
+  popularity: number | null
+  fans: number | null
   first_seen: string
 }
 
@@ -78,7 +79,6 @@ export type Summary = {
   last_run: Run | null
   model: string
   has_tm_key: boolean
-  has_spotify: boolean
 }
 
 export type Job = { name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean }
