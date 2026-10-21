@@ -15,6 +15,7 @@ LOG_DIR = ROOT / "logs"
 # The Discovery API only uses the consumer key (sent as `apikey`). The secret is kept in .env
 # for possible future OAuth-style endpoints but isn't used today.
 TICKETMASTER_API_KEY = (os.getenv("TICKETMASTER_CONSUMER_KEY") or os.getenv("TICKETMASTER_API_KEY", "")).strip()
+SETLISTFM_API_KEY = os.getenv("SETLISTFM_API_KEY", "").strip()  # "first Philly show since ..." history
 
 # Cloudflare Pages read-only snapshot (tracker/publish.py). Leave PAGES_PROJECT empty to disable.
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
@@ -45,6 +46,8 @@ STACKED_MONTH_MIN_EVENTS = 5       # notable shows in one genre/month to call it
 STACKED_MONTH_MIN_SCORE = 50       # an event must score at least this to count as notable
 WEEKEND_TOP_N = 8                  # events per weekend roundup
 NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notability
+COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the gap is at least this
+COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
 
 # --- Sports ---
 # Extra Ticketmaster classifications fetched each run (~1 API call each), and which teams to keep from them.

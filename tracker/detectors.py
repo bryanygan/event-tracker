@@ -88,6 +88,34 @@ def matchup(e: dict) -> str:
     return f"{team_short(e['headliner'])} vs. {opponent_short(e.get('opponent'))}"
 
 
+def history_facts(e: dict, today: str) -> dict | None:
+    """'Last Philly show' from setlist.fm, or None. Only a *found* show is reported: setlist.fm is
+    crowd-sourced, so "nothing found" never becomes "first time ever"."""
+    last = e.get("last_area_show_date")
+    if not last:
+        return None
+    d, t = date.fromisoformat(last), date.fromisoformat(today)
+    years = (t - d).days // 365
+    return {
+        "last_philly_show": f"{d:%b} {d.day}, {d.year}",
+        "last_philly_show_year": d.year,
+        "last_philly_venue": e.get("last_area_show_venue"),
+        "years_since_last_philly_show": years,
+        "is_comeback": years >= config.COMEBACK_MIN_YEARS,
+        "source": "setlist.fm",
+    }
+
+
+def comeback_prefix(history: dict | None) -> str:
+    if history and history["is_comeback"]:
+        return f"Back after {history['years_since_last_philly_show']} years: "
+    return ""
+
+
+def comeback_bonus(history: dict | None) -> float:
+    return config.COMEBACK_BONUS if history and history["is_comeback"] else 0
+
+
 def month_label(ym: str) -> str:
     return datetime.strptime(ym, "%Y-%m").strftime("%B %Y")
 
@@ -118,12 +146,13 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
         events.sort(key=lambda e: e["local_date"])
         head = events[0]
         presales = _presales_for(conn, [e["id"] for e in events])
+        history = history_facts(head, today)
         alerts.append({
             "key": f"new:{artist_id}:{head['local_date']}",
             "kind": "new_tour",
-            "title": f"{'Added date' if prior else 'New Philly show'}: {head['headliner']}"
+            "title": f"{comeback_prefix(history)}{'Added date' if prior else 'New Philly show'}: {head['headliner']}"
                      f" — {fmt_date(head['local_date'])} at {head['venue_name']}",
-            "score": best + (0 if prior else 10),
+            "score": best + (0 if prior else 10) + comeback_bonus(history),
             "facts": {
                 "format": "new_tour",
                 "artist": head["headliner"],
@@ -132,6 +161,7 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
                 "shows": [event_facts(e) for e in events],
                 "public_onsale": fmt_utc_local(head["onsale_start"]) if head["onsale_start"] else None,
                 "presales": presales,
+                "history": history,
             },
         })
     return alerts
@@ -185,11 +215,13 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
         windows = sorted(group["windows"], key=lambda w: (w[1], w[0] == "General public on-sale", w[0]))
         head = evs[0]
         first_name, first_start = windows[0]
+        history = history_facts(head, today)
         alerts.append({
             "key": f"sale:{artist_key}:{head['local_date']}",
             "kind": "presale_soon",
-            "title": f"Tickets for {head['headliner']} open {fmt_utc_local(first_start)} ({first_name})",
-            "score": best,
+            "title": f"{comeback_prefix(history)}Tickets for {head['headliner']} open {fmt_utc_local(first_start)}"
+                     f" ({first_name})",
+            "score": best + comeback_bonus(history),
             "facts": {
                 "format": "presale",
                 "artist": head["headliner"],
@@ -198,6 +230,7 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
                 "hours_until_open": round((parse_utc(first_start) - now).total_seconds() / 3600),
                 "all_sales": [{"name": n, "opens": fmt_utc_local(st)} for n, st in windows],
                 "shows": [event_facts(e) for e in evs],
+                "history": history,
             },
         })
     return alerts

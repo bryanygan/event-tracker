@@ -9,10 +9,14 @@ Task Scheduler (6:30 AM, 4:30 PM)
   └─ python -m tracker.run
        1. fetchers/ticketmaster.py   30 mi around City Hall, next 240 days, music only
        2. store.py                   upsert into SQLite, log changes (new / price / status / date / presale)
+       1b. same fetcher, basketball   Sixers home games (teams listed in config.SPORTS_TEAMS)
        3. fetchers/deezer.py         headliner popularity from Deezer fan counts (no key; cached 14 days)
+       3b. fetchers/setlistfm.py     last Philly-area show per artist → "first Philly show since 2019"
        4. detectors.py               new tour · presale/on-sale in 72h (one alert per artist) · weekend ·
-                                     stacked month · cancel/postpone
-       5. drafts.py + llm.py         Ollama writes hook/script/caption/hashtags for the top 8 new alerts
+                                     stacked month · cancel/postpone · Sixers home games this week · big game
+       5. drafts.py + templates.py   presale/status/Sixers: Python writes script + caption, Ollama the hook;
+          + llm.py                   other formats: Ollama writes everything. Top 8 new alerts per run.
+       6. publish.py                 read-only snapshot → Cloudflare Pages (behind Access)
 Dashboard (always on): python -m tracker.api → http://127.0.0.1:8765
 ```
 
@@ -85,7 +89,8 @@ The prompt and per-format examples are at the top of `tracker/llm.py`.
 
 ## Not done yet (next phases)
 
-- "Back after X years" angle (needs setlist.fm API key).
-- Sixers, food, festivals (Ticketmaster `classificationName=sports` covers the Sixers; others need scrapers).
+- Food, festivals, other things to do (no clean API; needs scrapers).
+- Other teams/leagues: add Ticketmaster attraction names to `SPORTS_TEAMS` (and a classification to
+  `SPORTS_CLASSIFICATIONS`), e.g. Villanova or the NCAA Women's Championship from the basketball feed.
 - "Under $40 this month" format (only ~15% of Ticketmaster events include a price range).
 - Phone notifications for big presales; slideshow/asset generation.

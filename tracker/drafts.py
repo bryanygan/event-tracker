@@ -36,6 +36,9 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
         # Templated formats have a known-good fallback hook, so a flagged one is replaced, not shipped.
         out["hook"] = templates.fallback_hook(facts)
         warnings = llm.check_facts(out, facts)
+    if templates.comeback(facts):  # not an error, but crowd-sourced data deserves a second look
+        warnings.append(f"Verify: last Philly show {facts['history']['last_philly_show']} "
+                        f"({facts['history']['last_philly_venue']}) is from setlist.fm, which is crowd-sourced")
     cur = conn.execute(
         """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",

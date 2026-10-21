@@ -78,3 +78,11 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   live that nothing remains, merged to `main`, merged `main` into `feature/sixers`. Did not restart the run.
 - setlist.fm key received (`SETLISTFM_API_KEY`). Probed: cityName search is fuzzy (Camden matches), so the plan
   uses venue coords within the radius. `tracker/fetchers/setlistfm.py` written, not wired in or committed yet.
+- User approved drafting the Sixers alerts and merging `feature/sixers`. Drafted (cleanup verified: 0 runners
+  left, RAM unchanged). Fixes from review: big-game hooks may name the opponent, templated hooks ≤ 12 words,
+  game hashtags templated (model gave #seahawksvsjets, #ClevelandVikings). Merged to `main` (`cb0ae9f`).
+- `feature/setlist-history`: schema columns + migration, `enrich_history` in the run, history facts on presale and
+  new-tour alerts, comeback script/caption/on-screen lines, verify warning, setlist.fm credit in captions.
+  Switched lookup from "page last 100 setlists" (20/40 found) to artist+city search + recent page (90/100).
+  Live: Papa Roach (Met, Aug 2019) and Calvin Harris (Wells Fargo, Dec 2018) presales got the comeback angle;
+  refreshed those two alerts' facts and redrafted them (other presale alerts kept their original facts).
