@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Job, type Summary } from './api'
+import { api, STATIC, type Job, type Summary } from './api'
 import AlertsView from './views/AlertsView'
 import EventsView from './views/EventsView'
 import RunsView from './views/RunsView'
@@ -22,6 +22,7 @@ export default function App() {
 
   // Poll the background job while one is running; refresh everything when it finishes.
   useEffect(() => {
+    if (STATIC) return // nothing runs on a snapshot
     let wasRunning = false
     const tick = () =>
       api.job().then((j) => {
@@ -43,6 +44,15 @@ export default function App() {
     }
   }
 
+  const publishNow = async () => {
+    setError(null)
+    try {
+      setJob(await api.publish())
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const last = summary?.last_run
   return (
     <div className="app">
@@ -56,22 +66,50 @@ export default function App() {
           <Stat label="open alerts" value={summary?.open_alerts} />
           <Stat label="drafts to review" value={summary?.pending_drafts} />
         </div>
-        <div className="run-box">
-          <button onClick={runNow} disabled={job?.running || !summary?.has_tm_key}
-                  title={summary?.has_tm_key ? '' : 'Add TICKETMASTER_CONSUMER_KEY to .env'}>
-            {job?.running ? 'Working…' : 'Run pipeline now'}
-          </button>
-          <span className="muted small">
-            {job?.running
-              ? `${job.name} since ${job.started?.slice(11)}`
-              : last
-                ? `Last run ${fmtWhen(last.started_at)} · ${last.ok ? 'ok' : 'FAILED'}`
-                : 'No runs yet'}
-          </span>
-        </div>
+        {STATIC ? (
+          <div className="run-box">
+            <span className="pill">Read-only snapshot</span>
+            <span className="muted small">
+              {summary?.generated_at ? `Updated ${fmtWhen(summary.generated_at)}` : ''}
+            </span>
+          </div>
+        ) : (
+          <div className="run-box">
+            <div className="actions-inline">
+              <button onClick={runNow} disabled={job?.running || !summary?.has_tm_key}
+                      title={summary?.has_tm_key ? '' : 'Add TICKETMASTER_CONSUMER_KEY to .env'}>
+                {job?.running ? 'Working…' : 'Run pipeline now'}
+              </button>
+              {summary?.publish !== undefined && (
+                <button className="ghost" onClick={publishNow} disabled={job?.running}
+                        title="Push a read-only snapshot to Cloudflare Pages">
+                  Publish snapshot
+                </button>
+              )}
+            </div>
+            <span className="muted small">
+              {job?.running
+                ? `${job.name} since ${job.started?.slice(11)}`
+                : last
+                  ? `Last run ${fmtWhen(last.started_at)} · ${last.ok ? 'ok' : 'FAILED'}`
+                  : 'No runs yet'}
+            </span>
+            {summary?.publish && (
+              <span className={`small ${summary.publish.ok ? 'muted' : 'error-text'}`}>
+                Web snapshot {fmtWhen(summary.publish.at)}: {summary.publish.message}
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
-      {summary && !summary.has_tm_key && (
+      {STATIC && (
+        <div className="banner">
+          Read-only copy of the dashboard. Copy buttons work; edits and draft status changes happen on the
+          mini PC at 127.0.0.1:8765 and show up here after the next publish.
+        </div>
+      )}
+      {!STATIC && summary && !summary.has_tm_key && (
         <div className="banner">TICKETMASTER_CONSUMER_KEY is missing from <code>.env</code>, so the pipeline can't fetch.</div>
       )}
       {job?.error && !job.running && <div className="banner error">Last job failed: {job.error}</div>}

@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, drafts, llm
+from . import config, db, drafts, llm, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -81,6 +81,8 @@ def summary(c=Depends(get_db)):
         "last_run": dict(last) if last else None,
         "model": config.OLLAMA_MODEL,
         "has_tm_key": bool(config.TICKETMASTER_API_KEY),
+        # None = Pages not configured (UI hides the publish button); {} = configured, never published
+        "publish": (publish.last_status() or {}) if publish.configured() else None,
     }
 
 
@@ -181,6 +183,19 @@ def genres(c=Depends(get_db)):
 @app.get("/api/runs")
 def runs(limit: int = 20, c=Depends(get_db)):
     return [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+@app.post("/api/publish", status_code=202)
+def trigger_publish():
+    if not publish.configured():
+        raise HTTPException(400, "Cloudflare Pages isn't configured (PAGES_PROJECT in .env)")
+
+    def work():
+        with closing(conn()) as job_conn:
+            result = publish.publish(job_conn)
+        if not result.startswith("published"):
+            raise RuntimeError(result)
+    return _start_job("publish snapshot", work)
 
 
 @app.post("/api/run", status_code=202)

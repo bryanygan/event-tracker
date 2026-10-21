@@ -100,6 +100,16 @@ already running, it's left alone.
 
 ## Operations
 
+**Cloudflare Pages = read-only snapshot behind Cloudflare Access** (2026-10-21, user's choice over an
+interactive tunnel or a public site). The same React app is built with `VITE_STATIC=1`
+(`npm run build:static` → `dashboard/dist-static`) and reads `data/*.json` instead of the API; edit controls are
+compiled out. `tracker/publish.py` exports the JSON (by calling the API's own endpoint functions, so it's the
+same data) into `data/site/`, then runs `wrangler pages deploy` (pinned wrangler 4.148.0, a devDependency of
+`dashboard/`). Runs at the end of every pipeline run and from a "Publish snapshot" button. **Guardrail:** before
+uploading it GETs `https://<project>.pages.dev/` and refuses unless the answer is a redirect to
+`*.cloudflareaccess.com` (`PAGES_ALLOW_PUBLIC=1` overrides). `_headers` adds noindex/no-referrer/DENY framing;
+`robots.txt` disallows all. `tests/conftest.py` blanks all Cloudflare config so tests can never deploy.
+
 **Twice-daily schedule (6:30 AM, 4:30 PM).** Presales/on-sales mostly open 10 AM local Tue–Fri; with a 72h
 window that gives ≥1 day notice. Tasks run windowless (`pythonw`), Priority 7 (below normal), only while the user
 is logged on (Interactive), `MultipleInstances IgnoreNew`, `StartWhenAvailable`.

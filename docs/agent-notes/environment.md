@@ -51,6 +51,21 @@ Both have working dir = project root, Priority 7, Interactive logon. Remove with
 - Search/artist objects: only `external_urls, href, id, images, name, type, uri`. No popularity/followers/
   genres. `top-tracks` → 403. Effectively useless for ranking; not used.
 
+## Cloudflare (set up 2026-10-21)
+
+**This repo is public**: don't write account IDs, emails, other projects' names/domains, or the Zero Trust
+team domain into these notes. Read them from the Cloudflare API when needed.
+
+- Pages project **`philly-events`** → https://philly-events.pages.dev (production branch `main`). Created via the
+  REST API. The account has other Pages projects and Access apps for unrelated sites: don't touch them.
+- Access app **"Philly Events dashboard"** covers `philly-events.pages.dev` and `*.philly-events.pages.dev`,
+  session 720h, using the user's existing **reusable policy "Admin Only"** (the user chose to reuse it).
+  Recreate with `python -m tracker.publish --setup-access "Admin Only"`.
+- Token (`CLOUDFLARE_API_TOKEN`) is account-scoped with Pages:Edit + Access Apps and Policies:Edit. It can NOT
+  run `wrangler whoami` or read `/access/organizations` (403); neither is needed.
+- Verified after the first deploy: main URL, `/data/*.json`, and the per-deployment `<hash>.` URL all 302 to the
+  Access login.
+
 ## Useful commands
 
 ```powershell

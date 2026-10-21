@@ -22,8 +22,9 @@ commented code over abstraction.
 | Runner | `tracker/run.py` | `python -m tracker.run [--from-cache] [--no-drafts]` |
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
+| Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
-| Tests | `tests/` | 48 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
+| Tests | `tests/` | 57 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
 ## Live on the machine right now
 
@@ -39,15 +40,17 @@ commented code over abstraction.
 ## Git
 
 - Remote: `github.com/bryanygan/event-tracker`. User's rule: **skeleton went on `main`; new features go on
-  branches.** Commit and push as you go once things are verified.
-- `main`: `09e41b9` skeleton, `4f32a3d` pythonw/Task Scheduler fix.
-- `feature/live-ticketmaster` (pushed, not merged): consumer-key rename, Deezer, per-artist presale alerts,
-  name cleaning, real venue tiers, DB connection closing, stacked-month cutoff, LLM output fixes, agent notes.
+  branches.** Commit and push as you go once verified; ask before merging.
+- `main`: skeleton, pythonw fix, merged `feature/live-ticketmaster` (`7460200`).
+- `feature/presale-templates` (pushed, not merged): templated presale/status scripts + captions.
+- `feature/cloudflare-pages` (pushed, not merged, **checked out**; built on presale-templates): Pages snapshot.
+- Spotify keys stay in `.env.example` (user wants them kept for possible future use).
 
 ## Next up
 
-1. Ask the user whether to merge `feature/live-ticketmaster` into `main` (or open a PR).
-2. Draft quality decision pending with the user (see "Open questions").
+1. ~~Cloudflare setup~~ Done 2026-10-21: https://philly-events.pages.dev live behind Access (see environment.md).
+   Every pipeline run republishes. Confirm the user can log in on their phone.
+2. Ask whether to merge `feature/presale-templates` and `feature/cloudflare-pages` into `main`.
 3. After the 2026-10-22 runs, check that `new_tour` alerts fire on real diffs (they can't fire on a baseline).
 4. Brief's phase 5+: setlist.fm for "back after X years" (needs a key), Sixers via TM `classificationName=sports`,
    food/festivals via scrapers, phone notifications, slideshow assets (user has a related project at
@@ -55,9 +58,4 @@ commented code over abstraction.
 
 ## Open questions for the user
 
-- Should the Spotify keys be removed from `.env.example`, or kept for future use (e.g. artist images/links)?
-- **Draft quality.** qwen2.5:3b gets facts right now but writes thin scripts and hashtag-only captions,
-  and can mix up semantics (read "Eagles Presale" as an Eagles show). Options offered: (a) deterministic
-  templates for presale/status scripts with the LLM only doing hooks/captions; (b) qwen2.5:7b (~3 min/draft,
-  ~5 GB RAM, watch Homebridge); (c) keep 3B and edit by hand.
 - Is Deezer's ranking good enough, or would they get a Last.fm key (listeners + tags) as a second signal?

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type Alert, type Draft, type Job, type ShowFacts } from '../api'
+import { api, STATIC, type Alert, type Draft, type Job, type ShowFacts } from '../api'
 
 const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
@@ -7,6 +7,13 @@ const KIND_LABEL: Record<Alert['kind'], string> = {
   weekend: 'This weekend',
   stacked_month: 'Stacked month',
   status_change: 'Status change',
+}
+
+const STATUS_LABEL: Record<Draft['status'], string> = {
+  pending: 'Pending review',
+  approved: 'Approved',
+  filmed: 'Filmed',
+  rejected: 'Rejected',
 }
 
 type Props = { refreshKey: number; busy: boolean; onJob: (j: Job) => void; onChange: () => void }
@@ -25,10 +32,12 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
   return (
     <>
       <div className="toolbar">
-        <select value={filter} onChange={(e) => setFilter(e.target.value as 'open' | 'dismissed')}>
-          <option value="open">Open</option>
-          <option value="dismissed">Dismissed</option>
-        </select>
+        {!STATIC && (  // the snapshot only contains open alerts
+          <select value={filter} onChange={(e) => setFilter(e.target.value as 'open' | 'dismissed')}>
+            <option value="open">Open</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
+        )}
         <select value={kind} onChange={(e) => setKind(e.target.value as Alert['kind'] | '')}>
           <option value="">All types</option>
           {Object.entries(KIND_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -88,12 +97,12 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
       )}
       {showOlder && older.map((d) => <DraftView key={d.id} draft={d} onChange={onDraftChange} />)}
 
-      <div className="actions">
+      {!STATIC && <div className="actions">
         <button onClick={onRegenerate} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
         {alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>}
-      </div>
+      </div>}
     </section>
   )
 }
@@ -136,15 +145,14 @@ function DraftView({ draft, onChange }: { draft: Draft; onChange: () => void }) 
       <div className="draft-foot">
         <span className="muted small">#{draft.id} · {draft.model} · {new Date(draft.created_at).toLocaleString()}</span>
         <CopyButton label="Copy caption + tags" text={`${fields.caption}\n\n${fields.hashtags}`} />
-        {editing
-          ? <><button onClick={save}>Save</button><button className="ghost" onClick={() => setEditing(false)}>Cancel</button></>
-          : <button className="ghost" onClick={() => setEditing(true)}>Edit</button>}
-        <select value={draft.status} onChange={(e) => setStatus(e.target.value as Draft['status'])}>
-          <option value="pending">Pending review</option>
-          <option value="approved">Approved</option>
-          <option value="filmed">Filmed</option>
-          <option value="rejected">Rejected</option>
-        </select>
+        {STATIC ? <span className="pill">{STATUS_LABEL[draft.status]}</span> : <>
+          {editing
+            ? <><button onClick={save}>Save</button><button className="ghost" onClick={() => setEditing(false)}>Cancel</button></>
+            : <button className="ghost" onClick={() => setEditing(true)}>Edit</button>}
+          <select value={draft.status} onChange={(e) => setStatus(e.target.value as Draft['status'])}>
+            {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </>}
       </div>
     </div>
   )

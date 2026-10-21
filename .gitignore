@@ -8,3 +8,5 @@ drafts/
 logs/
 dashboard/node_modules/
 dashboard/dist/
+.wrangler/
+dashboard/.wrangler/

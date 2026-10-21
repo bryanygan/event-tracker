@@ -47,3 +47,21 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   retried once. Spot-check after: both problem drafts correct, but scripts are thin and captions are mostly
   hashtags. That's likely the 3B model's ceiling; options put to the user.
 - Committed and pushed `feature/live-ticketmaster`; restarted the dashboard task.
+
+### User: merge, templates (option a), keep Spotify keys, Cloudflare Pages site
+- Merged `feature/live-ticketmaster` → `main` (`7460200`).
+- `feature/presale-templates`: presale/status scripts and captions templated, LLM writes hooks + hashtags.
+  Regenerated all 11 presale drafts: all accurate, 0 warnings, ~45 s each. Follow-up: hook must contain the exact
+  artist name (one said "THROW" for THROWN), venue hashtags snapped too. Not merged yet.
+- Spotify keys kept in `.env.example` at the user's request (unused).
+- Asked what "Cloudflare Pages website" meant → **private, read-only dashboard snapshot**; user has a Cloudflare
+  account but no domain, tunnel or Zero Trust yet.
+- `feature/cloudflare-pages` (built on the templates branch): static build mode, `tracker/publish.py`, Access
+  guardrail, publish after each run + button, `tests/conftest.py`. Verified export (14 alerts, 492 events,
+  ~600 KB) and served it locally. **Not deployed yet**: waiting on the user's API token, account ID, project
+  name and Zero Trust setup.
+- Cloudflare: user added token/account ID and `PAGES_PROJECT=philly-events`. Created the project via API
+  (wrangler's create silently did nothing), fixed `site_url()` to read the real subdomain, created an Access app
+  reusing the user's "Admin Only" policy, deployed a data-free placeholder to activate DNS, verified main +
+  wildcard URLs redirect to Access, extended the guard to check a made-up subdomain, then published the real
+  snapshot. Verified `/data/*.json` and the deployment URL also require login.

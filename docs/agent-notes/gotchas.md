@@ -8,6 +8,8 @@
   `sed -n` output hides these bytes (`cat -A` shows `^H`). **Use the Edit/Write tools for anything containing
   regex backslashes.** Check with `grep -lP '[\x01-\x08]' tracker/*.py tests/*.py`.
 - `sed -i` with `\n` and backslashes is just as fragile; prefer Edit.
+- Same trap, third time (notes update): a Windows path like `C:\Users\...` inside a Python `"""..."""` string in
+  a heredoc is a `\U` unicode escape, so the script fails with a SyntaxError. Even for docs, use Edit.
 
 ## Windows / Task Scheduler
 
@@ -67,6 +69,24 @@
   on-sale. Neither is caught automatically; the presale guide now addresses both explicitly. **Read presale
   captions before posting.**
 - It guessed artist pronouns; the system prompt now says to use the name or "they".
+
+## Cloudflare
+
+- `wrangler pages project create` exited 0 but **did not create the project** (non-interactive/CI mode printed
+  a config suggestion instead). Creating it with `POST /accounts/{id}/pages/projects` worked. Trust the API's
+  `success` field, not wrangler's exit code; verify with `GET .../pages/projects/<name>`.
+- **The GitHub repo is public.** wrangler writes `.wrangler/cache/pages.json` (account ID) into the working
+  dir; it got committed once (`6927b43`) before `.wrangler/` was gitignored. Check `git status` for stray
+  files before every commit, and keep account/infra details out of docs.
+- If `<name>.pages.dev` is taken, Cloudflare silently appends a suffix (e.g. `<name>-2h7.pages.dev`).
+  `publish.site_url()` reads the real `subdomain` from the API; never hardcode `<name>.pages.dev`.
+- A new project's hostname doesn't resolve until the first deployment, so the Access guard can't pass before
+  then. The fix was a data-free placeholder deploy first, then the check, then real data. Don't "fix" it by
+  disabling the guard. Per-deployment hostnames take ~1–2 min longer to resolve.
+- Every deploy is also served at `<hash>.<project>.pages.dev`. The Access app must include `*.<host>`;
+  the guard checks a made-up `guardcheck.<host>` to prove the wildcard is locked.
+- `python -I` ignores `PYTHONIOENCODING` (`-I` implies `-E`), so wrangler's box-drawing/emoji output crashed
+  `print` on cp1252. In `-I` scripts call `sys.stdout.reconfigure(encoding="utf-8")`.
 
 ## Tests
 

@@ -15,7 +15,7 @@ from contextlib import closing
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, db, detectors, drafts, store
+from . import config, db, detectors, drafts, publish, store
 from .fetchers import deezer
 from .fetchers import ticketmaster as tm
 
@@ -87,6 +87,8 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
             log.info("Generated %d drafts", len(made))
         except Exception as exc:
             log.exception("Drafting failed: %s", exc)  # data is saved; drafts can be retried from the dashboard
+    published = publish.publish(conn)  # no-op unless Cloudflare Pages is configured; never raises
+    log.info("Web snapshot: %s", published)
     return {"run_id": run_id, "events": len(events), "changes": counts, "new_alerts": len(new_alert_ids),
             "drafts": len(made)}
 

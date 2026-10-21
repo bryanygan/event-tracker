@@ -95,6 +95,7 @@ button.tab.active { background: var(--accent); color: var(--accent-text); border
 .onscreen { margin: 3px 0 0; padding-left: 18px; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
 .draft-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .draft-foot > span { flex: 1; }
+.actions-inline { display: flex; gap: 6px; }
 .actions { display: flex; gap: 8px; margin-top: 12px; }
 
 .table-wrap { overflow-x: auto; }
