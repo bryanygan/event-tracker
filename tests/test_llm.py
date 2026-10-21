@@ -100,3 +100,33 @@ def test_clean_hashtags_keeps_valid_variants():
     facts = {"shows": [{"artist": "A Boogie Wit Da Hoodie"}, {"artist": "Meek Mill"}, {"artist": "Doja Cat"}]}
     tags = llm.clean_hashtags(["#ABoogieWitheTheHoodie", "#MeekMillLive", "#DojaCatTour"], facts)
     assert tags == ["#philly", "#ABoogieWitDaHoodie", "#MeekMillLive", "#DojaCatTour"]
+
+
+def test_ollama_session_stops_the_whole_process_tree(monkeypatch):
+    """Regression (2026-10-21): killing only `ollama serve` orphaned a 2.2 GB runner per run."""
+    import subprocess
+    calls = []
+    monkeypatch.setattr(llm.os, "name", "nt")
+    monkeypatch.setattr(llm, "_ollama_exe", lambda: "ollama.exe")
+    up = iter([False, True])  # down at start, up after launch
+    monkeypatch.setattr(llm, "_ollama_up", lambda: next(up, True))
+
+    class FakeProc:
+        pid = 4242
+        def wait(self, timeout=None): return 0
+        def kill(self): calls.append("kill")
+    monkeypatch.setattr(llm.subprocess, "Popen", lambda *a, **k: FakeProc())
+    monkeypatch.setattr(llm.subprocess, "CREATE_NO_WINDOW", 0, raising=False)
+    monkeypatch.setattr(llm.subprocess, "run", lambda args, **k: calls.append(args) or
+                        subprocess.CompletedProcess(args, 128, "", ""))
+    with llm.ollama_session():
+        pass
+    assert ["taskkill", "/F", "/IM", "llama-server.exe"] in calls       # orphan sweep before starting
+    assert ["taskkill", "/F", "/T", "/PID", "4242"] == calls[-1]        # tree kill on exit
+
+
+def test_ollama_session_leaves_a_running_ollama_alone(monkeypatch):
+    monkeypatch.setattr(llm, "_ollama_up", lambda: True)
+    monkeypatch.setattr(llm.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no kills")))
+    with llm.ollama_session():
+        pass
