@@ -42,11 +42,9 @@ commented code over abstraction.
 - Remote: `github.com/bryanygan/event-tracker`, **public** (the user wants it public). User's rule: skeleton
   went on `main`; new features go on branches. Commit and push as you go once verified; ask before merging.
 - `main`: skeleton → pythonw fix → merge of `feature/live-ticketmaster` → squash `9bc0c27` (presale templates)
-  → squash `d4bc0e1` (Cloudflare Pages) → merge of `fix/ollama-runner-leak` (`f113735`).
-- `feature/sixers` (pushed, not merged, **checked out**, so the scheduled tasks run it; includes the leak fix).
-  It's checked out because the DB already holds Sixers games/alerts from a live run; on `main` the next run
-  would mark those 40 games "removed". Merge it into `main`, or check out `main` only after deciding about that.
-- Uncommitted: `tracker/fetchers/setlistfm.py` (start of the setlist.fm feature, goes on `feature/setlist-history`).
+  → squash `d4bc0e1` (Cloudflare Pages) → merge of `fix/ollama-runner-leak` (`f113735`) → merge of
+  `feature/sixers` (`cb0ae9f`, branch deleted). `main` is what the scheduled tasks should run.
+- In progress: `feature/setlist-history` (setlist.fm "first Philly show since …").
 - The templates and Cloudflare branches were **squash-merged and deleted on purpose**: the Cloudflare branch
   had a commit with the account ID and the user's other infra names (see gotchas.md). Don't restore them.
   `feature/live-ticketmaster` still exists (already merged; safe to delete).
