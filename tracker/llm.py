@@ -214,8 +214,9 @@ def fill_placeholders(text: str, facts: dict) -> str:
 
 
 def _artist_names(facts: dict) -> list[str]:
-    names = [facts.get("artist")] + [s.get("artist") for s in facts.get("shows", [])]
-    names += [facts["show"].get("artist")] if facts.get("show") else []
+    """Artist and venue names: the proper nouns a hashtag should spell exactly."""
+    shows = facts.get("shows", []) + ([facts["show"]] if facts.get("show") else [])
+    names = [facts.get("artist")] + [s.get("artist") for s in shows] + [s.get("venue") for s in shows]
     return [n for n in dict.fromkeys(names) if n]
 
 
@@ -237,36 +238,55 @@ def clean_hashtags(raw: list, facts: dict) -> list[str]:
         tag = "#" + body
         if tag.lower() not in (x.lower() for x in tags):
             tags.append(tag)
-    if "#philly" not in (x.lower() for x in tags):
-        tags.insert(0, "#philly")
-    return tags
+    tags = [t for t in tags if t.lower() != "#philly"]
+    return ["#philly"] + tags  # always present, always first
 
 
-def generate(facts: dict, model: str | None = None) -> dict:
-    """Call Ollama once and return the parsed draft dict. Raises on failure."""
+HOOK_ONLY_SCHEMA = {
+    "type": "object",
+    "properties": {k: DRAFT_SCHEMA["properties"][k] for k in ("hook", "hashtags")},
+    "required": ["hook", "hashtags"],
+}
+
+
+def generate(facts: dict, model: str | None = None, script: str | None = None,
+             caption: str | None = None) -> dict:
+    """Call Ollama once and return the parsed draft dict. Raises on failure.
+
+    With a templated `script` and `caption` (presale/status formats), the model only writes the
+    hook and hashtags.
+    """
     model = model or config.OLLAMA_MODEL
+    prompt = build_prompt(facts)
+    if script:
+        prompt += ("\n\nThe voiceover script is ALREADY WRITTEN (below). Do not rewrite it. Write only a hook "
+                   "(the first line on screen, leading into this script) and hashtags.\n"
+                   f"SCRIPT: {script}\n"
+                   'Return JSON: {"hook": str, "hashtags": [str]}')
     resp = requests.post(f"{config.OLLAMA_URL}/api/chat", timeout=600, json={
         "model": model,
         "stream": False,
-        "format": DRAFT_SCHEMA,
+        "format": HOOK_ONLY_SCHEMA if script else DRAFT_SCHEMA,
         "keep_alive": "2m",
         "options": {"temperature": 0.8, "num_ctx": 4096, "num_predict": 700},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_prompt(facts)},
+            {"role": "user", "content": prompt},
         ],
     })
     resp.raise_for_status()
     out = json.loads(resp.json()["message"]["content"])
     for key in ("hook", "script", "caption"):
         out[key] = fill_placeholders(str(out.get(key, "")), facts)
-    tags = clean_hashtags(out.get("hashtags", []), facts)
+    # Captions often arrive as "text #tag #tag" or only tags: move tags to the hashtag list.
+    caption_tags = re.findall(r"(?<!\w)#\w+", out["caption"])
+    tags = clean_hashtags(list(out.get("hashtags", [])) + caption_tags, facts)
     return {
-        "hook": spoken(out.get("hook", "")),
-        "script": spoken(out.get("script", "")),
-        "caption": out.get("caption", "").strip(),
+        "hook": spoken(out["hook"]),
+        "script": script or spoken(out["script"]),
+        "caption": caption or re.sub(r"[ \t]*(?<!\w)#\w+", "", out["caption"]).strip(),
         "hashtags": tags[:8],
-        "model": model,
+        "model": f"template + {model}" if script else model,
     }
 
 

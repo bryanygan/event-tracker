@@ -81,7 +81,7 @@ def test_fill_placeholders_is_case_insensitive():
 def test_clean_hashtags_fixes_artist_typos_and_punctuation():
     facts = {"artist": "Calvin Harris", "shows": [{"artist": "Calvin Harris"}]}
     tags = llm.clean_hashtags(["#calvinnharris", "#Rockin'Philly", "#philly", "#PHILLY", "#tiktok"], facts)
-    assert tags == ["#CalvinHarris", "#RockinPhilly", "#philly", "#tiktok"]
+    assert tags == ["#philly", "#CalvinHarris", "#RockinPhilly", "#tiktok"]
 
 
 def test_presale_prompt_for_general_onsale_says_no_code():

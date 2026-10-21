@@ -18,12 +18,12 @@ commented code over abstraction.
 | Popularity | `tracker/fetchers/deezer.py` | Deezer `nb_fan` → 0-100 log scale. Replaced Spotify (see decisions) |
 | Scoring | `tracker/scoring.py` | 0.5 popularity + 0.3 venue tier + 0.2 tour size; `upcoming_events()` is the shared event view |
 | Detectors | `tracker/detectors.py` | new_tour, presale_soon (1 per artist), weekend (Wed+), stacked_month, status_change |
-| LLM drafting | `tracker/llm.py`, `tracker/drafts.py` | Ollama qwen2.5:3b; on-screen text built from facts; `check_facts` tripwire |
+| LLM drafting | `tracker/llm.py`, `tracker/drafts.py`, `tracker/templates.py` | Ollama qwen2.5:3b; presale/status scripts + captions templated, LLM writes hooks/hashtags; on-screen text from facts; `check_facts` tripwire |
 | Runner | `tracker/run.py` | `python -m tracker.run [--from-cache] [--no-drafts]` |
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
-| Tests | `tests/` | 40 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
+| Tests | `tests/` | 48 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
 ## Live on the machine right now
 

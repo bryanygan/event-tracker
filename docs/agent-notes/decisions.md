@@ -82,6 +82,16 @@ alone. Placeholders are deliberate: if the model copies one, it's visible. `fill
 
 **Ollama structured output** (`format` = JSON schema) for reliable parsing. `keep_alive: 2m`.
 
+**Presale and status-change drafts are templated** (2026-10-21, user chose this over a 7B model or hand-editing).
+`tracker/templates.py` writes the voiceover script *and* the caption from facts; the LLM writes only the hook and
+hashtags. Reason: in real drafts the 3B model paired the wrong time with the wrong sale ("show opens Friday" for a
+Thursday presale; "Eagles Presale" read as an Eagles show), which `check_facts` can't catch because every token is
+in the facts. Captions were templated too (a step beyond the original "LLM does hook + caption" plan) because the
+model's captions either pasted the whole script or had the same pairing errors. A flagged hook falls back to
+`templates.fallback_hook`. Scripts use spoken dates ("Thursday, October 22 at 10 AM Eastern") via `speakable()`;
+`check_facts` still matches them. Wording varies per artist (hash-picked opener/closer/CTA). Weekend,
+stacked-month and new-tour drafts are still fully LLM-written.
+
 **Max 8 drafts per run**, highest-score alerts first (~10 min of CPU).
 
 **Ollama is started on demand and stopped after** (`llm.ollama_session`). The user had disabled Ollama's

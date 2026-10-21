@@ -1,10 +1,11 @@
-"""Create drafts for alerts: LLM text + fact-built on-screen lines + fact-check warnings."""
+"""Create drafts for alerts: LLM text (or a template script + LLM hook/caption) + fact-built
+on-screen lines + fact-check warnings."""
 from __future__ import annotations
 
 import json
 import logging
 
-from . import llm
+from . import llm, templates
 from .store import now_iso
 
 log = logging.getLogger(__name__)
@@ -16,13 +17,20 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
     """Generate one draft for an alert. Assumes Ollama is reachable. Returns draft id."""
     alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     facts = json.loads(alert["facts"])
-    out = llm.generate(facts, model=model)
+    # presale/status: Python writes the voiceover and caption; the model only writes hook + hashtags
+    script = templates.script_for(facts)
+    caption = templates.caption_for(facts) if script else None
+    out = llm.generate(facts, model=model, script=script, caption=caption)
     warnings = llm.check_facts(out, facts)
     if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
-        retry = llm.generate(facts, model=model)
+        retry = llm.generate(facts, model=model, script=script, caption=caption)
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
             out, warnings = retry, retry_warnings
+    if script and (warnings or facts["artist"].lower() not in out["hook"].lower()):  # e.g. "THROW" for THROWN
+        # Templated formats have a known-good fallback hook, so a flagged one is replaced, not shipped.
+        out["hook"] = templates.fallback_hook(facts)
+        warnings = llm.check_facts(out, facts)
     cur = conn.execute(
         """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",
