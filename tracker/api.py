@@ -203,7 +203,8 @@ def main():
     import uvicorn
     from .run import setup_logging
     setup_logging()
-    uvicorn.run(app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT, log_level="warning")
+    # log_config=None: use our handlers (logs/pipeline.log) instead of uvicorn's console setup
+    uvicorn.run(app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT, log_level="warning", log_config=None)
 
 
 if __name__ == "__main__":

@@ -23,20 +23,25 @@ RAW_CACHE = config.CACHE_DIR / "tm_last_pull.json"
 
 
 def setup_logging():
-    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252 and choke on emoji
-        if stream and hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    if sys.stdout is None or sys.stderr is None:
+        # pythonw.exe (Task Scheduler) has no console: libraries that print or call isatty()
+        # would crash, so give them a file instead.
+        console_log = open(config.LOG_DIR / "console.log", "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stdout or console_log
+        sys.stderr = sys.stderr or console_log
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252 and choke on emoji
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     file = RotatingFileHandler(config.LOG_DIR / "pipeline.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
     file.setFormatter(fmt)
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.handlers = [file]
-    if sys.stdout:  # None under pythonw.exe (scheduled, windowless runs)
-        console = logging.StreamHandler(sys.stdout)
-        console.setFormatter(fmt)
-        root.handlers.append(console)
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(fmt)
+    root.handlers.append(console)
 
 
 def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
