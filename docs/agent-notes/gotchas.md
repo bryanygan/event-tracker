@@ -29,8 +29,13 @@
   closed it. Stop the dashboard task before moving/deleting `data/tracker.db`.
 - `ollama list` with the server down can hang and/or launch the Ollama tray app (`ollama app.exe`). The user
   keeps Ollama off; if you start it, stop both `ollama` and `ollama app` afterwards.
-- Ollama on this version (0.32) didn't leave an `ollama_llama_server.exe`; the `taskkill` in `ollama_session` is
-  a harmless no-op then. Verified 2026-10-21: after a cold-start draft run, no ollama processes remained.
+- **Memory leak, found 2026-10-21 (my earlier "no leftovers" check was wrong).** Ollama 0.32's model runner is
+  `lib\ollama\llama-server.exe` (older versions: `ollama_llama_server.exe`). `ollama_session` killed only
+  `ollama serve` plus the *old* runner name, and my checks only matched `ollama*`, so every drafting session left
+  a runner behind. 8 accumulated in one afternoon; the newest held 2.2 GB, and Claude Code killed a pipeline run
+  for low memory. Fix: kill by process tree (`taskkill /F /T /PID`), and sweep orphaned runners before starting
+  Ollama (orphans appear when the pipeline itself is killed mid-run). **When checking for leftovers, match
+  `ollama|llama-server`**, and check free RAM (`Win32_OperatingSystem.FreePhysicalMemory`).
 
 ## Data assumptions that were wrong
 

@@ -127,6 +127,7 @@ def ollama_session():
         exe = _ollama_exe()
         if not exe:
             raise RuntimeError("Ollama isn't running and ollama.exe wasn't found")
+        _kill_orphan_runners()
         log.info("Starting Ollama (%s)", exe)
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         proc = subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -143,15 +144,37 @@ def ollama_session():
     finally:
         if proc:
             log.info("Stopping Ollama (we started it)")
-            proc.terminate()
-            try:
-                proc.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-            # `ollama serve` spawns a runner process that holds the model in RAM; make sure it goes too.
-            if os.name == "nt":
-                subprocess.run(["taskkill", "/F", "/IM", "ollama_llama_server.exe"],
-                               capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            _stop_tree(proc)
+
+
+# `ollama serve` starts a model runner child that holds the model in RAM (~2.2 GB for qwen2.5:3b). Its name
+# changes between Ollama versions (ollama_llama_server.exe before, llama-server.exe in 0.32), so we kill by
+# process tree, not by name. Killing only `ollama serve` left one orphaned runner per run on 2026-10-21.
+_RUNNER_NAMES = ("llama-server.exe", "ollama_llama_server.exe")
+
+
+def _stop_tree(proc: subprocess.Popen) -> None:
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    else:
+        proc.terminate()
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def _kill_orphan_runners() -> None:
+    """Runners left behind when a previous run was killed before it could clean up (its children survive).
+    Only called when Ollama isn't serving, so no live session owns these processes."""
+    if os.name != "nt":
+        return
+    for name in _RUNNER_NAMES:
+        r = subprocess.run(["taskkill", "/F", "/IM", name], capture_output=True, text=True,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+        if r.returncode == 0:
+            log.warning("Killed orphaned Ollama runner(s) %s left by an earlier run", name)
 
 
 # ---------- prompt + generation ----------
