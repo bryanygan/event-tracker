@@ -12,9 +12,9 @@ DB_PATH = Path(os.getenv("TRACKER_DB", DATA_DIR / "tracker.db"))
 CACHE_DIR = DATA_DIR / "cache"
 LOG_DIR = ROOT / "logs"
 
-TICKETMASTER_API_KEY = os.getenv("TICKETMASTER_API_KEY", "").strip()
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip()
+# The Discovery API only uses the consumer key (sent as `apikey`). The secret is kept in .env
+# for possible future OAuth-style endpoints but isn't used today.
+TICKETMASTER_API_KEY = (os.getenv("TICKETMASTER_CONSUMER_KEY") or os.getenv("TICKETMASTER_API_KEY", "")).strip()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
@@ -34,34 +34,68 @@ TM_DAILY_CALL_BUDGET = 1000  # our own cap, well under the 5000 limit
 
 # --- Detector tuning ---
 PRESALE_WINDOW_HOURS = 72          # alert when presale/on-sale opens within this window
+PRESALE_MIN_SCORE = 45             # skip presale alerts for small acts
 STACKED_MONTH_MIN_EVENTS = 5       # notable shows in one genre/month to call it "stacked"
-STACKED_MONTH_MIN_SCORE = 40       # an event must score at least this to count as notable
+STACKED_MONTH_MIN_SCORE = 50       # an event must score at least this to count as notable
 WEEKEND_TOP_N = 8                  # events per weekend roundup
-NEW_TOUR_MIN_SCORE = 30            # ignore brand-new listings below this notability
+NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notability
 
-# Bigger room = bigger draw. Used for notability when Spotify data is missing.
-# Matched case-insensitively as substrings of the TM venue name.
+# Sale windows that aren't really presales (add-on packages). Matched case-insensitively.
+IGNORED_SALE_PATTERNS = [r"\bvip\b", r"\bpackage", r"\bhospitality\b", r"\bsuite", r"\bparking\b"]
+
+# Bigger room = bigger draw: one of the three notability signals (see scoring.py).
+# Matched case-insensitively as substrings of the TM venue name; FIRST match wins,
+# so more specific names go first (e.g. Mann's main stage before its smaller Skyline Stage).
+# Numbers are rough capacity tiers, not exact.
 VENUE_TIERS = {
+    # stadiums
     "lincoln financial field": 100,
     "citizens bank park": 100,
-    "wells fargo center": 90,
+    "subaru park": 85,
+    # arenas / amphitheaters
     "xfinity mobile arena": 90,
+    "wells fargo center": 90,          # old name of Xfinity Mobile Arena
     "freedom mortgage pavilion": 80,
-    "mann center": 75,
+    "td pavilion": 80,                 # Mann main stage
+    "mann": 65,                        # Skyline Stage at Highmark Mann, etc.
     "liacouras center": 70,
+    "cure insurance arena": 70,
+    # big theaters / large clubs (2,000-3,500)
+    "the met presented": 65,
     "the met philadelphia": 65,
     "the fillmore": 60,
     "franklin music hall": 55,
-    "union transfer": 50,
+    "xcite center": 55,
+    "pennsylvania convention center": 55,
+    "marian anderson hall": 50,
+    "academy of music": 50,
     "the dell music center": 50,
+    "union transfer": 50,
+    # mid-size (800-1,500)
+    "theatre of living arts": 45,
+    "brooklyn bowl": 45,
     "keswick theatre": 45,
-    "academy of music": 45,
     "the queen": 40,
+    "lansdowne theater": 35,
+    "ardmore music hall": 35,
+    "scottish rite auditorium": 35,
+    "harrah's": 35,
+    "colonial theatre": 30,
+    "the playhouse on rodney square": 30,
+    "the ave live": 30,
     "underground arts": 30,
-    "johnny brenda": 25,
+    "miller theater": 30,
+    # small rooms
+    "the foundry": 25,                 # small room inside the Fillmore
     "world cafe live": 25,
+    "noto": 25,
+    "perelman theater": 25,
+    "johnny brenda": 20,
+    "milkboy": 15,
+    "nikki lopez": 15,
+    "hard rock cafe": 15,
 }
-DEFAULT_VENUE_TIER = 25
+DEFAULT_VENUE_TIER = 20
 
 # Ticketmaster lists add-ons as "events". Names matching these are skipped.
 JUNK_EVENT_PATTERNS = [

@@ -65,3 +65,38 @@ def test_fill_placeholders_only_fills_real_fact_keys():
     facts = {"sale_opens": "Thu, Oct 22 at 10:00 AM ET", "shows": []}
     assert llm.fill_placeholders("Drops [sale_opens] for [Artist]", facts) == \
         "Drops Thu, Oct 22 at 10:00 AM ET for [Artist]"
+
+
+def test_check_facts_flags_wrong_weekday_for_date():
+    facts = {"shows": [{"date": "Sat, Nov 21", "artist": "Pouya"}]}
+    assert llm.check_facts({"hook": "", "script": "Saturday, November 21st: Pouya", "caption": ""}, facts) == []
+    warnings = llm.check_facts({"hook": "", "script": "Mon, Nov 21 - Pouya", "caption": ""}, facts)
+    assert "Not in facts: Mon, Nov 21" in warnings
+
+
+def test_fill_placeholders_is_case_insensitive():
+    assert llm.fill_placeholders("[Artist] tickets", {"artist": "Zach Bryan"}) == "Zach Bryan tickets"
+
+
+def test_clean_hashtags_fixes_artist_typos_and_punctuation():
+    facts = {"artist": "Calvin Harris", "shows": [{"artist": "Calvin Harris"}]}
+    tags = llm.clean_hashtags(["#calvinnharris", "#Rockin'Philly", "#philly", "#PHILLY", "#tiktok"], facts)
+    assert tags == ["#CalvinHarris", "#RockinPhilly", "#philly", "#tiktok"]
+
+
+def test_presale_prompt_for_general_onsale_says_no_code():
+    p = llm.build_prompt({"format": "presale", "artist": "X", "sale_name": "General public on-sale",
+                          "sale_opens": "Thu", "shows": []})
+    assert "no code needed" in p
+
+
+def test_prompt_labels_show_dates_distinctly():
+    p = llm.build_prompt({"format": "presale", "artist": "X", "sale_name": "Presale", "sale_opens": "Thu, Oct 22",
+                          "shows": [{"artist": "X", "date": "Tue, May 25", "time": "7:00 PM"}]})
+    assert '"show_date": "Tue, May 25"' in p and '"show_time": "7:00 PM"' in p
+
+
+def test_clean_hashtags_keeps_valid_variants():
+    facts = {"shows": [{"artist": "A Boogie Wit Da Hoodie"}, {"artist": "Meek Mill"}, {"artist": "Doja Cat"}]}
+    tags = llm.clean_hashtags(["#ABoogieWitheTheHoodie", "#MeekMillLive", "#DojaCatTour"], facts)
+    assert tags == ["#philly", "#ABoogieWitDaHoodie", "#MeekMillLive", "#DojaCatTour"]

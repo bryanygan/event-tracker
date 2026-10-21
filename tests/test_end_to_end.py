@@ -1,4 +1,4 @@
-"""Whole pipeline from a cached pull, with the LLM and Spotify stubbed out."""
+"""Whole pipeline from a cached pull, with the LLM and Deezer stubbed out."""
 import json
 from contextlib import nullcontext
 
@@ -6,7 +6,7 @@ import pytest
 import responses
 
 from tracker import db, llm, run as pipeline
-from tracker.fetchers import spotify
+from tracker.fetchers import deezer
 from tests.factory import tm_event
 
 
@@ -15,7 +15,7 @@ def env(tmp_path, monkeypatch):
     cache = tmp_path / "tm_last_pull.json"
     monkeypatch.setattr(pipeline, "RAW_CACHE", cache)
     monkeypatch.setattr(llm, "ollama_session", nullcontext)
-    monkeypatch.setattr(spotify.SpotifyClient, "configured", property(lambda self: False))
+    monkeypatch.setattr(deezer, "enrich_headliners", lambda conn: 0)
 
     def fake_generate(facts, model=None):
         return {"hook": "Philly, listen up", "script": f"{facts['format']} script", "caption": "Save this",
@@ -48,20 +48,55 @@ def test_two_runs_produce_alerts_and_drafts(env):
 
 
 @responses.activate
-def test_spotify_enrichment_picks_exact_match(tmp_path):
+def test_deezer_enrichment_picks_exact_match_with_most_fans(tmp_path):
     conn = db.connect(tmp_path / "s.db")
     from tracker import store
     from tracker.fetchers import ticketmaster as tm
     r = store.start_run(conn, "x")
     store.upsert_events(conn, r, [tm.normalize(tm_event(name="Mt. Joy"))], baseline=True)
 
-    responses.post("https://accounts.spotify.com/api/token", json={"access_token": "t", "expires_in": 3600})
-    responses.get("https://api.spotify.com/v1/search", json={"artists": {"items": [
-        {"id": "wrong", "name": "Mt. Joy Tribute", "popularity": 90},
-        {"id": "right", "name": "Mt. Joy", "popularity": 66, "followers": {"total": 900000}, "genres": ["indie folk"]},
-    ]}})
-    n = spotify.enrich_headliners(conn, spotify.SpotifyClient("id", "secret"))
-    assert n == 1
+    responses.get(deezer.SEARCH_URL, json={"data": [
+        {"id": 1, "name": "Mt. Joy Tribute", "nb_fan": 9_000_000},
+        {"id": 2, "name": "Mt. Joy", "nb_fan": 120},
+        {"id": 3, "name": "mt. joy", "nb_fan": 250_000},
+    ]})
+    assert deezer.enrich_headliners(conn, deezer.DeezerClient(min_interval=0)) == 1
     row = conn.execute("SELECT * FROM attractions WHERE name='Mt. Joy'").fetchone()
-    assert (row["spotify_id"], row["spotify_popularity"], row["spotify_genres"]) == ("right", 66, "indie folk")
-    assert spotify.enrich_headliners(conn, spotify.SpotifyClient("id", "secret")) == 0  # cached for 30 days
+    assert (row["fans"], row["popularity"]) == (250_000, 68)
+    assert deezer.enrich_headliners(conn, deezer.DeezerClient(min_interval=0)) == 0  # cached
+
+
+def test_popularity_scale():
+    assert [deezer.popularity_from_fans(f) for f in (None, 50, 10_000, 1_000_000, 10**9)] == [None, 0, 40, 80, 100]
+
+
+def test_migration_adds_columns_to_old_db(tmp_path):
+    import sqlite3
+    old = sqlite3.connect(tmp_path / "old.db")
+    old.execute("CREATE TABLE attractions (id TEXT PRIMARY KEY, name TEXT NOT NULL, genre TEXT, subgenre TEXT, "
+                "tm_upcoming_total INTEGER, spotify_popularity INTEGER, first_seen TEXT NOT NULL)")
+    old.commit(); old.close()
+    cols = {r["name"] for r in db.connect(tmp_path / "old.db").execute("PRAGMA table_info(attractions)")}
+    assert {"fans", "popularity", "popularity_checked_at"} <= cols
+
+
+@responses.activate
+def test_deezer_non_quota_error_skips_artist_but_quota_error_stops():
+    client = deezer.DeezerClient(min_interval=0)
+    responses.get(deezer.SEARCH_URL, json={"error": {"type": "ParameterException", "code": 500}})
+    assert client.find_artist("x") is None
+    responses.replace(responses.GET, deezer.SEARCH_URL, json={"error": {"type": "Exception", "code": 4}})
+    with pytest.raises(Exception, match="quota"):
+        client.find_artist("y")
+
+
+def test_draft_retries_once_when_flagged(tmp_path, monkeypatch):
+    from tracker import detectors, drafts
+    conn = db.connect(tmp_path / "r.db")
+    detectors.save_alerts(conn, [{"key": "k", "kind": "weekend", "title": "t", "score": 1,
+                                  "facts": {"format": "weekend", "weekend": "Fri, Oct 23", "shows": []}}])
+    outputs = iter([{"hook": "Oct 31 at 9pm!", "script": "", "caption": "", "hashtags": [], "model": "m"},
+                    {"hook": "Fri, Oct 23 is it", "script": "", "caption": "", "hashtags": [], "model": "m"}])
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None: next(outputs))
+    d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
+    assert d["hook"] == "Fri, Oct 23 is it" and json.loads(d["warnings"]) == []

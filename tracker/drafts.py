@@ -18,6 +18,11 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
     facts = json.loads(alert["facts"])
     out = llm.generate(facts, model=model)
     warnings = llm.check_facts(out, facts)
+    if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
+        retry = llm.generate(facts, model=model)
+        retry_warnings = llm.check_facts(retry, facts)
+        if len(retry_warnings) < len(warnings):
+            out, warnings = retry, retry_warnings
     cur = conn.execute(
         """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",
