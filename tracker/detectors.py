@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import config
-from .scoring import upcoming_events
+from .scoring import is_game, upcoming_events
 from .store import now_iso
 
 TZ = ZoneInfo(config.TIMEZONE)
@@ -70,7 +70,22 @@ def event_facts(e: dict) -> dict:
         "url": e["url"],
         "support": e.get("support"),
     }
+    if is_game(e):  # "Sixers vs. Cavaliers" reads better than "Philadelphia 76ers" in a roundup
+        f.update(artist=matchup(e), opponent=e.get("opponent"), kind="game", support=None, genre=e["subgenre"])
     return {k: v for k, v in f.items() if v}
+
+
+def team_short(name: str) -> str:
+    return (config.SPORTS_TEAMS.get(name) or {}).get("short", name)
+
+
+def opponent_short(name: str | None) -> str:
+    """'Cleveland Cavaliers' -> 'Cavaliers' (NBA nicknames are the last word, incl. 'Trail Blazers' -> 'Blazers')."""
+    return (name or "TBA").split()[-1]
+
+
+def matchup(e: dict) -> str:
+    return f"{team_short(e['headliner'])} vs. {opponent_short(e.get('opponent'))}"
 
 
 def month_label(ym: str) -> str:
@@ -87,7 +102,7 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
         return []
     by_artist: dict[str, list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today):
-        if e["id"] in new_ids and e["headliner_id"]:
+        if e["id"] in new_ids and e["headliner_id"] and not is_game(e):  # schedule releases aren't tours
             by_artist[e["headliner_id"]].append(e)
 
     alerts = []
@@ -244,6 +259,8 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
     buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today.isoformat()):
         ym = e["local_date"][:7]
+        if is_game(e):
+            continue  # "stacked month" is a music format
         if ym in (this_month, next_month) and e["genre"] and e["score"] >= config.STACKED_MONTH_MIN_SCORE:
             if e["status"] != "cancelled":
                 buckets[(ym, e["genre"])].append(e)
@@ -304,6 +321,58 @@ def detect_status_changes(conn: sqlite3.Connection, run_id: int, today: str) -> 
     return alerts
 
 
+def detect_team_week(conn: sqlite3.Connection, today: date) -> list[dict]:
+    """'Sixers home games this week' (Mon-Sun), one alert per team per week, from the first run of the week."""
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    by_team: dict[str, list[dict]] = defaultdict(list)
+    for e in upcoming_events(conn, today.isoformat()):
+        if is_game(e) and e["local_date"] <= sunday.isoformat() and e["status"] != "cancelled":
+            by_team[e["headliner"]].append(e)
+    alerts = []
+    for team, games in by_team.items():
+        games.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
+        alerts.append({
+            "key": f"team_week:{team}:{monday.isoformat()}",
+            "kind": "team_week",
+            "title": f"{team_short(team)} home games this week: {len(games)}",
+            "score": max(e["score"] for e in games),
+            "facts": {
+                "format": "team_week",
+                "artist": team_short(team),
+                "team": team,
+                "week": f"{fmt_date(monday.isoformat())} – {fmt_date(sunday.isoformat())}",
+                "shows": [event_facts(e) for e in games],
+            },
+        })
+    return alerts
+
+
+def detect_big_games(conn: sqlite3.Connection, today: date) -> list[dict]:
+    """A marquee opponent visiting within BIG_GAME_WINDOW_DAYS. One alert per game."""
+    horizon = (today + timedelta(days=config.BIG_GAME_WINDOW_DAYS)).isoformat()
+    alerts = []
+    for e in upcoming_events(conn, today.isoformat()):
+        if not is_game(e) or e["local_date"] > horizon or e["status"] == "cancelled":
+            continue
+        if e.get("opponent") not in config.MARQUEE_OPPONENTS:
+            continue
+        alerts.append({
+            "key": f"big_game:{e['id']}",
+            "kind": "big_game",
+            "title": f"Big game: {matchup(e)} — {fmt_date(e['local_date'])}",
+            "score": e["score"],
+            "facts": {
+                "format": "big_game",
+                "artist": team_short(e["headliner"]),
+                "team": e["headliner"],
+                "opponent": e["opponent"],
+                "show": event_facts(e),
+            },
+        })
+    return alerts
+
+
 def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     local_today = now.astimezone(TZ).date()
@@ -314,6 +383,8 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
         + detect_weekend(conn, local_today)
         + detect_stacked_months(conn, local_today)
         + detect_status_changes(conn, run_id, today)
+        + detect_team_week(conn, local_today)
+        + detect_big_games(conn, local_today)
     )
     return alerts
 

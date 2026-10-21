@@ -46,6 +46,24 @@ STACKED_MONTH_MIN_SCORE = 50       # an event must score at least this to count 
 WEEKEND_TOP_N = 8                  # events per weekend roundup
 NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notability
 
+# --- Sports ---
+# Extra Ticketmaster classifications fetched each run (~1 API call each), and which teams to keep from them.
+# The basketball feed also has Villanova, the Delaware Blue Coats and NCAA events; to track one, add its
+# Ticketmaster attraction name here. "short" is what scripts say; "aliases" are accepted in hooks.
+SPORTS_CLASSIFICATIONS = ["basketball"]
+SPORTS_TEAMS = {
+    "Philadelphia 76ers": {"short": "Sixers", "aliases": ["Sixers", "76ers"]},
+}
+# Opponents that make a home game a "big game" alert (Ticketmaster attraction names).
+MARQUEE_OPPONENTS = [
+    "Boston Celtics", "New York Knicks", "Los Angeles Lakers", "Golden State Warriors", "Brooklyn Nets",
+    "Milwaukee Bucks", "Miami Heat", "Cleveland Cavaliers", "Denver Nuggets", "Oklahoma City Thunder",
+]
+SPORTS_BASE_SCORE = 55        # any home game; music scores come from popularity/venue/tour instead
+MARQUEE_BONUS = 25
+WEEKEND_GAME_BONUS = 5        # Fri-Sun games
+BIG_GAME_WINDOW_DAYS = 7      # raise a "big game" alert this many days ahead
+
 # Sale windows that aren't really presales (add-on packages). Matched case-insensitively.
 IGNORED_SALE_PATTERNS = [r"\bvip\b", r"\bpackage", r"\bhospitality\b", r"\bsuite", r"\bparking\b"]
 

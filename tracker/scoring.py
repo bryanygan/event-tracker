@@ -10,6 +10,9 @@ Tweak the weights here; everything downstream just reads `score`.
 from __future__ import annotations
 
 import math
+from datetime import date
+
+from . import config
 
 WEIGHTS = {"popularity": 0.5, "venue": 0.3, "tour": 0.2}
 
@@ -49,11 +52,29 @@ WHERE e.active = 1 AND e.local_date >= ?
 """
 
 
+def is_game(e: dict) -> bool:
+    return e.get("segment") == "Sports"
+
+
+def game_score(opponent: str | None, local_date: str) -> float:
+    """Home games: base + marquee opponent + weekend. (Fan counts mean nothing for a team.)"""
+    s = config.SPORTS_BASE_SCORE
+    if opponent in config.MARQUEE_OPPONENTS:
+        s += config.MARQUEE_BONUS
+    if date.fromisoformat(local_date).weekday() >= 4:
+        s += config.WEEKEND_GAME_BONUS
+    return float(min(s, 100))
+
+
 def upcoming_events(conn, today: str) -> list[dict]:
     """Upcoming events as dicts with a computed `score`, highest first."""
     rows = [dict(r) for r in conn.execute(EVENT_VIEW_SQL + " ORDER BY e.local_date", (today,))]
     for r in rows:
-        r["score"] = score(r["popularity"], r["venue_tier"], r["tm_upcoming_total"])
         r["headliner"] = r["headliner"] or r["name"]
+        if is_game(r):
+            r["opponent"] = (r["support"] or "").split(", ")[0] or None  # home team first, opponent second
+            r["score"] = game_score(r["opponent"], r["local_date"])
+        else:
+            r["score"] = score(r["popularity"], r["venue_tier"], r["tm_upcoming_total"])
     rows.sort(key=lambda r: r["score"], reverse=True)
     return rows

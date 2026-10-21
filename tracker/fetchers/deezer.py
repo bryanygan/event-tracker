@@ -69,7 +69,7 @@ def enrich_headliners(conn, client: DeezerClient | None = None, limit: int = MAX
     rows = conn.execute(
         """SELECT DISTINCT a.id, a.name, a.tm_upcoming_total FROM attractions a
            JOIN event_attractions ea ON ea.attraction_id = a.id AND ea.position = 0
-           JOIN events e ON e.id = ea.event_id AND e.active = 1
+           JOIN events e ON e.id = ea.event_id AND e.active = 1 AND e.segment IS NOT 'Sports'
            WHERE a.popularity_checked_at IS NULL OR a.popularity_checked_at < ?
            ORDER BY a.tm_upcoming_total DESC LIMIT ?""", (cutoff, limit)).fetchall()
     done = 0
