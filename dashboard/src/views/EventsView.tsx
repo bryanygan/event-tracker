@@ -1,0 +1,64 @@
+import { useEffect, useState } from 'react'
+import { api, type EventRow } from '../api'
+
+export default function EventsView({ refreshKey }: { refreshKey: number }) {
+  const [q, setQ] = useState('')
+  const [genre, setGenre] = useState('')
+  const [days, setDays] = useState(30)
+  const [genres, setGenres] = useState<string[]>([])
+  const [events, setEvents] = useState<EventRow[] | null>(null)
+
+  useEffect(() => { api.genres().then(setGenres) }, [refreshKey])
+  useEffect(() => {
+    const t = setTimeout(() => api.events({ q, genre, days }).then(setEvents), 200) // debounce typing
+    return () => clearTimeout(t)
+  }, [q, genre, days, refreshKey])
+
+  const newCutoff = Date.now() - 3 * 24 * 3600 * 1000
+  return (
+    <>
+      <div className="toolbar">
+        <input placeholder="Search artist or venue" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={genre} onChange={(e) => setGenre(e.target.value)}>
+          <option value="">All genres</option>
+          {genres.map((g) => <option key={g}>{g}</option>)}
+        </select>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          {[7, 14, 30, 60, 120, 240].map((d) => <option key={d} value={d}>Next {d} days</option>)}
+        </select>
+        <span className="muted small">{events?.length ?? 0} events</span>
+      </div>
+      <div className="table-wrap">
+        <table className="events">
+          <thead>
+            <tr><th>Date</th><th>Artist</th><th>Venue</th><th>Genre</th><th>Price</th><th title="notability">★</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {events?.map((e) => (
+              <tr key={e.id}>
+                <td className="nowrap">{fmtDate(e.local_date)}{e.local_time ? ` ${fmtTime(e.local_time)}` : ''}</td>
+                <td>
+                  {e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.headliner}</a> : e.headliner}
+                  {new Date(e.first_seen).getTime() > newCutoff && <span className="pill new">new</span>}
+                  {e.support && <div className="muted small">w/ {e.support}</div>}
+                </td>
+                <td>{e.venue_name}</td>
+                <td>{e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}</td>
+                <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
+                <td>{Math.round(e.score)}</td>
+                <td>{e.status !== 'onsale' ? <span className="pill">{e.status}</span> : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+const fmtDate = (d: string) =>
+  new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+const fmtTime = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`
+}

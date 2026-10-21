@@ -1,0 +1,98 @@
+"""Pipeline entry point: fetch → store/diff → enrich → detect → draft.
+
+Usage (from the project folder):
+    .venv\\Scripts\\python -m tracker.run              # full run (what Task Scheduler calls)
+    .venv\\Scripts\\python -m tracker.run --no-drafts  # data + alerts only, skip the LLM
+    .venv\\Scripts\\python -m tracker.run --from-cache # replay the last raw pull, no API calls
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
+from . import config, db, detectors, drafts, store
+from .fetchers import spotify
+from .fetchers import ticketmaster as tm
+
+log = logging.getLogger("tracker")
+RAW_CACHE = config.CACHE_DIR / "tm_last_pull.json"
+
+
+def setup_logging():
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252 and choke on emoji
+        if stream and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    file = RotatingFileHandler(config.LOG_DIR / "pipeline.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    file.setFormatter(fmt)
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.handlers = [file]
+    if sys.stdout:  # None under pythonw.exe (scheduled, windowless runs)
+        console = logging.StreamHandler(sys.stdout)
+        console.setFormatter(fmt)
+        root.handlers.append(console)
+
+
+def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
+    conn = conn or db.connect()
+    baseline = store.is_first_run(conn, "ticketmaster")
+    run_id = store.start_run(conn, "ticketmaster")
+    calls = 0
+    try:
+        if from_cache:
+            raw = json.loads(RAW_CACHE.read_text(encoding="utf-8"))
+        else:
+            client = tm.TicketmasterClient()
+            raw = client.fetch_events()
+            calls = client.calls
+            tm.save_raw(raw, RAW_CACHE)
+        events = [tm.normalize(r) for r in raw if not tm.is_junk(r)]
+        log.info("Fetched %d raw events, %d after filtering (%d API calls)%s",
+                 len(raw), len(events), calls, " [baseline run]" if baseline else "")
+        counts = store.upsert_events(conn, run_id, events, baseline=baseline)
+        log.info("Changes: %s", counts or "none")
+
+        try:
+            spotify.enrich_headliners(conn)
+        except Exception as exc:  # enrichment is a nice-to-have; never fail the run over it
+            log.warning("Spotify enrichment failed: %s", exc)
+
+        alerts = detectors.run_all(conn, run_id)
+        new_alert_ids = detectors.save_alerts(conn, alerts)
+        log.info("Detectors raised %d alerts, %d new", len(alerts), len(new_alert_ids))
+        store.finish_run(conn, run_id, fetched=len(events), api_calls=calls, ok=True)
+    except Exception as exc:
+        log.exception("Run failed")
+        store.finish_run(conn, run_id, fetched=0, api_calls=calls, ok=False, error=str(exc))
+        raise
+
+    made = []
+    if make_drafts:
+        try:
+            made = drafts.draft_pending(conn)
+            log.info("Generated %d drafts", len(made))
+        except Exception as exc:
+            log.exception("Drafting failed: %s", exc)  # data is saved; drafts can be retried from the dashboard
+    return {"run_id": run_id, "events": len(events), "changes": counts, "new_alerts": len(new_alert_ids),
+            "drafts": len(made)}
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description="Philly events pipeline")
+    p.add_argument("--from-cache", action="store_true", help="replay last raw Ticketmaster pull (no API calls)")
+    p.add_argument("--no-drafts", action="store_true", help="skip LLM drafting")
+    args = p.parse_args(argv)
+    setup_logging()
+    started = datetime.now()
+    result = run(from_cache=args.from_cache, make_drafts=not args.no_drafts)
+    log.info("Done in %ss: %s", (datetime.now() - started).seconds, result)
+
+
+if __name__ == "__main__":
+    main()
