@@ -120,10 +120,14 @@ def recent(conn, limit: int = 50) -> list[dict]:
 # ---------- one-time setup ----------
 
 def team_domain() -> str:
-    """Your Zero Trust team domain, read from where the Pages snapshot's Access login redirects to (no extra
-    token permission needed)."""
+    """Your Zero Trust team domain: from .env if already set, else read from where the Pages snapshot's Access
+    login redirects to (no extra token permission needed)."""
     from urllib.parse import urlsplit
     from .publish import site_url
+    if config.CF_ACCESS_TEAM_DOMAIN:
+        return config.CF_ACCESS_TEAM_DOMAIN
+    if not config.PAGES_PROJECT:
+        raise SystemExit("Set CF_ACCESS_TEAM_DOMAIN in .env (https://<team>.cloudflareaccess.com).")
     r = requests.get(site_url(), allow_redirects=False, timeout=15)
     where = urlsplit(r.headers.get("location", ""))
     if not (where.hostname or "").endswith(".cloudflareaccess.com"):

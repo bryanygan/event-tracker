@@ -41,6 +41,11 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 DASHBOARD_HOST = "127.0.0.1"
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8765"))  # Homebridge UI uses 8581
 
+# One pipeline run at a time across processes (tracker/run.py). The 11:30 midday check (--midday) only looks up
+# this many artists' Philly history on setlist.fm, newest first, so new tours still get "back after X years".
+RUN_LOCK = DATA_DIR / "pipeline.lock"
+MIDDAY_SETLIST_ARTISTS = 15
+
 # Editing from your phone (tracker/remote.py): a Cloudflare Tunnel hostname that points at the dashboard, locked
 # by a Cloudflare Access app. Requests for REMOTE_HOST are only served with a valid Access login for that app.
 # All three empty = phone editing off (the default). Set them with `python -m tracker.remote --setup HOST`.

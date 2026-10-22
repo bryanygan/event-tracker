@@ -100,3 +100,39 @@ def test_draft_retries_once_when_flagged(tmp_path, monkeypatch):
     monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None: next(outputs))
     d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
     assert d["hook"] == "Fri, Oct 23 is it" and json.loads(d["warnings"]) == []
+
+
+def test_midday_run_detects_but_never_drafts_or_looks_up(env, monkeypatch):
+    cache, conn = env
+    cache.write_text(json.dumps([tm_event(event_id="a", name="Old Band")]))
+    pipeline.run(from_cache=True, conn=conn, midday=True)
+    cache.write_text(json.dumps([tm_event(event_id="a", name="Old Band"),
+                                 tm_event(event_id="b", name="Huge Star", venue="Lincoln Financial Field", upcoming=90,
+                                          date="2027-06-01")]))
+
+    def boom(*a, **kw):
+        raise AssertionError("midday must not start Ollama, look things up or publish")
+    monkeypatch.setattr(llm, "generate", boom)
+    monkeypatch.setattr(llm, "ollama_session", boom)
+    monkeypatch.setattr(pipeline.context, "auto_lookup", boom)
+    monkeypatch.setattr(pipeline.publish, "publish", boom)
+    out = pipeline.run(from_cache=True, conn=conn, midday=True)
+    assert out["new_alerts"] >= 1 and out["drafts"] == 0
+    assert conn.execute("SELECT COUNT(*) FROM drafts").fetchone()[0] == 0
+    assert any(r["kind"] == "new_tour" for r in conn.execute("SELECT kind FROM alerts"))
+
+
+def test_only_one_run_at_a_time():
+    with pipeline.single_run():
+        with pytest.raises(pipeline.RunBusy):
+            with pipeline.single_run():
+                pass
+    with pipeline.single_run():  # released afterwards
+        pass
+
+
+def test_busy_scheduled_run_exits_quietly(monkeypatch, caplog):
+    monkeypatch.setattr(pipeline, "setup_logging", lambda: None)
+    with pipeline.single_run(), caplog.at_level("INFO"):
+        pipeline.main(["--midday"])
+    assert "Skipped this midday run" in caplog.text

@@ -302,3 +302,18 @@ conflicts, no lag; every feature works the same on the phone).
   read-only fallback and links to the live dashboard when it's on.
 - The user's tunnel is shared with their other services: the user adds the public hostname themselves in the
   Zero Trust dashboard (our token has no tunnel permission, and we don't edit their other routes).
+
+## Midday check + Pages snapshot retired (2026-10-22, P1-12)
+
+- User: "maybe 11:30 instead of 12:30, we can see how that does." `python -m tracker.run --midday`, task
+  `PhillyEvents-Midday` daily 11:30 AM: same fetch + detectors (so new tours/presales show up same day), but no
+  drafting (Ollama never starts), no Perplexity lookups, no publish, and only `MIDDAY_SETLIST_ARTISTS` (15)
+  setlist.fm history checks, newest artists first. Turn off: `Disable-ScheduledTask -TaskName PhillyEvents-Midday`.
+- Every run now holds an OS file lock (`data/pipeline.lock`, `run.single_run`); a run that finds it held logs
+  "Skipped" and exits. Covers scheduled tasks vs the dashboard's "Run pipeline now". The OS releases the lock if
+  the process dies, so it can't go stale.
+- Why: the 2hollis Philly date (Fillmore, 2027-02-16) wasn't in Ticketmaster's area search at 6:30 AM on
+  2026-10-22; it was there by ~4 PM. The user found it by hand. The 4:30 run picks such shows up; 11:30 halves the gap.
+- User: "we can ditch the philly-events.pages.dev website since events.prin.cloud is up and running." Deleted the
+  Pages project and its Access app ("Philly Events dashboard"; the "(editing)" app is the live one) and blanked
+  PAGES_PROJECT. `tracker/publish.py` and the static build stay as an optional, off-by-default feature.

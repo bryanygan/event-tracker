@@ -22,7 +22,7 @@ commented code over abstraction.
 | Runner | `tracker/run.py` | `python -m tracker.run [--from-cache] [--no-drafts]` |
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
-| Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
+| Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | **Retired 2026-10-22** (Pages project + its Access app deleted, PAGES_PROJECT blank); code kept, off |
 | Phone editing | `tracker/remote.py` | Live dashboard through a Cloudflare Tunnel hostname; requests need a verified Access login (off until configured) |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
 | Tests | `tests/` | 96 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
@@ -88,7 +88,8 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-09 manual trend notes | Merged 2026-10-22: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
 | P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
 | P2-15 phone editing | Live 2026-10-22 (`d9b0fac`): REMOTE_HOST route added to the user's existing tunnel (the ttspotslideshow one) + its own Access app ("Admin Only"); user's first 3 phone edits audited ok |
-| P1-12..13, P2-14 | Not started. Midday pass needs a user decision |
+| P1-12 midday check | Built 2026-10-22 on `feature/midday`: `--midday` at 11:30 AM, no LLM/lookups/publish; one-run-at-a-time lock |
+| P1-13, P2-14 | Not started |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
 P0-06 merged 2026-10-22 (user approved); branch deleted.
