@@ -197,7 +197,10 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     path = Path(path or config.DB_PATH)
     if str(path) != ":memory:":
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=30)
+    # check_same_thread=False: FastAPI may close a request's connection on a different worker thread than
+    # the one that opened it (sync dependency teardown), which sqlite3 otherwise refuses with a 500.
+    # Each connection is still used by one request/job at a time.
+    conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")  # lets the dashboard read while a run writes
