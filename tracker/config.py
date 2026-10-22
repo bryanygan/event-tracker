@@ -77,13 +77,13 @@ GENRE_LOOKUP_SKIP_PATTERNS = [r"\bopen mic\b", r"\bkaraoke\b", r"\btrivia\b", r"
 # EXPERIMENTAL weights for "is this a good video right now?", separate from event notability (scoring.py).
 # Guesses from the creator roadmap, not measured: revisit once logged posts have numbers. Bump the version
 # whenever you change a weight or a rule, so a post's saved score says which rules produced it.
-OPPORTUNITY_RULES_VERSION = "2026-10-22.A"  # .A: lane weekend cut gets its own story value
+OPPORTUNITY_RULES_VERSION = "2026-10-22.AB"  # .A: lane weekend cut story value; .B: trend notes fill "search"
 OPPORTUNITY_WEIGHTS = {
     "audience": 0.25,    # how many people care (notability, incl. your-taste boost)
     "timing": 0.25,      # fresh news / deadline coming up
     "story": 0.20,       # comeback, big name in a small room, a genuinely packed month
     "local": 0.15,       # Philly + in your lane
-    "search": 0.10,      # search demand / content gap: no data source yet, so always unknown for now
+    "search": 0.10,      # search demand / trends: from your trend notes (trends.py); unknown when none match
     "ready": 0.05,       # facts complete, draft written and clean
 }
 NEWS_FRESH_HOURS = 24      # announcements: post within a day...
@@ -93,6 +93,7 @@ RECENT_POST_DAYS = 14      # warn when you already posted about the same artist 
 # were "strong" because every presale alert is by construction <72h out and maxes the timing component.
 QUEUE_STRONG, QUEUE_MEDIUM = 80, 65
 REASON_MIN = 75            # a component counts as a reason on the card at this value or above
+TREND_NOTE_DAYS = 7        # a trend note stops counting this long after you saw it (unless you set expires_at)
 
 # --- Posted videos (tracker/posts.py) ---
 # A group (a format, a video style) needs this many posts with numbers at the same age before the

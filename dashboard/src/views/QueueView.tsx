@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type Job, type Queue, type QueueItem, type Stage, type Summary } from '../api'
 import { fmtWhen } from '../App'
 import { AlertCard, KIND_LABEL } from './AlertsView'
+import TrendNotes, { TrendPills } from './TrendNotes'
 
 const STAGE_LABEL: Record<Stage, string> = {
   new: 'New idea',
@@ -68,10 +69,11 @@ export default function QueueView({ refreshKey, busy, summary, onJob, onChange }
         </select>
         <span className="muted small">
           {shown.length} ideas · ranked by an <strong>experimental</strong> opportunity score (rules {queue.rules_version}):
-          audience, timing, story, Philly/your lane, readiness. Search demand isn’t measured yet, so it’s left out
-          rather than guessed. It’s a hint for what to make next, not a view prediction.
+          audience, timing, story, Philly/your lane, readiness, and search demand from your trend notes (left out
+          rather than guessed when none match). It’s a hint for what to make next, not a view prediction.
         </span>
       </div>
+      <TrendNotes onChange={changed} />
       {shown.length === 0 && <p className="muted">Nothing here.</p>}
       {shown.map((i) => (
         <QueueCard key={i.alert_id} item={i} alert={alerts.find((a) => a.id === i.alert_id)} busy={busy}
@@ -116,6 +118,7 @@ function QueueCard({ item, alert, busy, onJob, onChange }: {
         ? <p className="hook-used">“{item.draft.hook}”</p>
         : alert?.angles[0] && <p className="hook-used muted" title="suggested angle; open to pick one">“{alert.angles[0].hook}”</p>}
       {alert?.context?.fresh && <p className="muted small" title="open the card to read it with sources">🌐 Web context: {alert.context.answer.split('\n')[0].replace(/^\s*[-*]\s*/, '').replace(/\*+|\[\d+\]/g, '')}</p>}
+      <TrendPills matches={item.trend_notes} />
       {item.reasons.length > 0 && <ul className="reasons">{item.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
       {item.caveats.length > 0 && <div className="warn"><ul>{item.caveats.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
       {item.posts.map((p) => (

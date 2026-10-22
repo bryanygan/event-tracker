@@ -228,3 +228,19 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
   when 80%+ of them are already in the general roundup or a stacked month. Label names every lane genre present
   (sub-genres fold into Hip-Hop / R&B / EDM / Pop). Story value 45 vs 35 for the general roundup
   (`OPPORTUNITY_RULES_VERSION` 2026-10-22.A).
+
+## Trend notes (P1-09, 2026-10-22; `tracker/trends.py`)
+
+- **Typed in by hand, never scraped.** Kind (search/sound/hashtag/topic/other), text, match terms, scope
+  (philly/national/unknown), confidence, optional momentum/source link/notes, observed_at, expires_at
+  (default `TREND_NOTE_DAYS` = 7). Validated server-side; source links must be http(s).
+- **Matching is exact, not fuzzy.** A term matches when it equals (casefolded, spaces collapsed) an artist, genre,
+  venue, team or opponent on the idea, or appears as a whole word in the idea's title (counts ×0.8, and the card
+  says which term matched). No similarity matching, so namesakes don't pick up each other's notes by accident.
+- **Search component** = best live match: confidence high/medium/low → 100/75/50, × scope philly 1.0 /
+  national 0.7 / unknown 0.6. The reason text always says "National (not Philly-specific)" or "Scope unknown"
+  for those. Expired notes never count; cards show them only as "+N expired". No match → "search" stays unknown
+  and is left out of the score exactly as before. Rules version bumped to `2026-10-22.B`.
+- Genre-level notes (e.g. "Pop") match every idea in that genre, by design; use artist terms for precise ones.
+- UI: a collapsed "Trend notes (N active)" panel on "What to post" (no new tab, to keep phones uncluttered),
+  pills on matching queue cards. The snapshot exports `trends.json` read-only (it's behind Cloudflare Access).

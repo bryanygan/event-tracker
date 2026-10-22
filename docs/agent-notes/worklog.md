@@ -127,3 +127,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   genres), Hip-Hop goes to 11, and "Your lane this weekend: Pop, EDM & Hip-Hop (8 shows)" is raised.
   Heads-up: on the first real run the filled genres change 5 existing roundups' shows, so their drafts show
   "facts changed" (a real change, not a bug).
+
+### P1-09 trend notes (2026-10-22, agent B on `feature/trend-notes`)
+- `tracker/trends.py`, `trend_notes` table, `/api/trends` CRUD, queue "search" component, snapshot `trends.json`,
+  `TrendNotes.tsx` panel + card pills. 20 new tests (165 total). Real-data check on a DB copy (port 8768):
+  a national artist note, a Philly genre note and an expired note matched the right 7 ideas; the other 14 kept
+  "search" unknown. Screenshots at desktop and ~420px width.

@@ -104,6 +104,7 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
         "posts": api.list_posts(c=conn),
         "queue": api.queue(c=conn),
         "analytics": {g: api.analytics(group_by=g, c=conn) for g in ("format", "video_style")},
+        "trends": api.list_trends(c=conn),  # your own notes; the snapshot sits behind Cloudflare Access
     }
     for name, payload in files.items():
         (data / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
