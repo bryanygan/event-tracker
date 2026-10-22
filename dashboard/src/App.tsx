@@ -86,7 +86,7 @@ export default function App() {
                       title={summary?.has_tm_key ? '' : 'Add TICKETMASTER_CONSUMER_KEY to .env'}>
                 {job?.running ? 'Working…' : 'Run pipeline now'}
               </button>
-              {summary?.publish !== undefined && (
+              {summary?.publish != null && (  // null = Pages snapshot turned off
                 <button className="ghost" onClick={publishNow} disabled={job?.running}
                         title="Push a read-only snapshot to Cloudflare Pages">
                   Publish snapshot

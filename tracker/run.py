@@ -4,14 +4,19 @@ Usage (from the project folder):
     .venv\\Scripts\\python -m tracker.run              # full run (what Task Scheduler calls)
     .venv\\Scripts\\python -m tracker.run --no-drafts  # data + alerts only, skip the LLM
     .venv\\Scripts\\python -m tracker.run --from-cache # replay the last raw pull, no API calls
+    .venv\\Scripts\\python -m tracker.run --midday     # quick 11:30 check: fetch + detect, no LLM/web lookups
+
+Only one run at a time across processes (scheduled tasks and the dashboard's "Run pipeline now"): a second one
+logs that it was skipped and exits.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import os
 import sys
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
@@ -72,10 +77,39 @@ def fetch_calendars(conn, run_id: int, tm_events: list[dict], from_cache: bool =
     return out, tuple(first_seen), tuple(failed)
 
 
-def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
+class RunBusy(Exception):
+    pass
+
+
+@contextmanager
+def single_run():
+    """Hold an OS file lock for the whole run. The OS drops it if the process dies, so it never goes stale."""
+    config.RUN_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    f = open(config.RUN_LOCK, "a+")
+    try:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RunBusy("another pipeline run is in progress") from None
+        yield
+    finally:
+        f.close()  # closing the handle releases the lock
+
+
+def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: bool = False) -> dict:
+    """One pipeline run. `midday`: the quick late-morning check for tours and presales announced after the
+    6:30 run. Same fetch and detectors, but no drafting (Ollama never starts), no paid web lookups, and only a
+    few setlist.fm history checks (new artists first), so it takes about a minute."""
     if conn is None:
-        with closing(db.connect()) as own:
-            return run(from_cache, make_drafts, own)
+        with single_run(), closing(db.connect()) as own:
+            return run(from_cache, make_drafts and not midday, own, midday)
+    make_drafts = make_drafts and not midday
     baseline = store.is_first_run(conn, "ticketmaster")
     run_id = store.start_run(conn, "ticketmaster")
     calls = 0
@@ -109,7 +143,7 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         except Exception as exc:  # enrichment is a nice-to-have; never fail the run over it
             log.warning("Deezer enrichment failed: %s", exc)
         try:
-            setlistfm.enrich_history(conn)
+            setlistfm.enrich_history(conn, limit=config.MIDDAY_SETLIST_ARTISTS if midday else setlistfm.MAX_ARTISTS_PER_RUN)
         except Exception as exc:
             log.warning("setlist.fm history failed: %s", exc)
 
@@ -122,7 +156,7 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         store.finish_run(conn, run_id, fetched=0, api_calls=calls, ok=False, error=str(exc))
         raise
 
-    if not from_cache:  # replays don't spend money; the caps in context.py keep real runs to cents a month
+    if not (from_cache or midday):  # replays don't spend money; the caps in context.py keep real runs to cents a month
         try:
             looked_up = context.auto_lookup(conn)
             if looked_up:
@@ -137,8 +171,9 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
             log.info("Generated %d drafts", len(made))
         except Exception as exc:
             log.exception("Drafting failed: %s", exc)  # data is saved; drafts can be retried from the dashboard
-    published = publish.publish(conn)  # no-op unless Cloudflare Pages is configured; never raises
-    log.info("Web snapshot: %s", published)
+    if not midday:
+        published = publish.publish(conn)  # no-op unless Cloudflare Pages is configured; never raises
+        log.info("Web snapshot: %s", published)
     return {"run_id": run_id, "events": len(events), "changes": counts, "new_alerts": len(new_alert_ids),
             "drafts": len(made)}
 
@@ -147,11 +182,16 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="Philly events pipeline")
     p.add_argument("--from-cache", action="store_true", help="replay last raw Ticketmaster pull (no API calls)")
     p.add_argument("--no-drafts", action="store_true", help="skip LLM drafting")
+    p.add_argument("--midday", action="store_true", help="quick check: no drafts, web lookups or publish")
     args = p.parse_args(argv)
     setup_logging()
     started = datetime.now()
-    result = run(from_cache=args.from_cache, make_drafts=not args.no_drafts)
-    log.info("Done in %ss: %s", (datetime.now() - started).seconds, result)
+    try:
+        result = run(from_cache=args.from_cache, make_drafts=not args.no_drafts, midday=args.midday)
+    except RunBusy as exc:
+        log.info("Skipped this %srun: %s", "midday " if args.midday else "", exc)
+        return
+    log.info("Done in %ss%s: %s", (datetime.now() - started).seconds, " (midday)" if args.midday else "", result)
 
 
 if __name__ == "__main__":

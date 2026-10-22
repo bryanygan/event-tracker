@@ -1,5 +1,7 @@
-# Registers two Windows Task Scheduler tasks for the current user:
+# Registers three Windows Task Scheduler tasks for the current user:
 #   PhillyEvents-Pipeline   fetch + detect + draft at 6:30 AM and 4:30 PM
+#   PhillyEvents-Midday     quick fetch + detect at 11:30 AM (no LLM, no paid lookups); turn off with
+#                           Disable-ScheduledTask -TaskName PhillyEvents-Midday
 #   PhillyEvents-Dashboard  local dashboard at http://127.0.0.1:8765, started at logon
 #
 # Both run windowless (pythonw), at below-normal priority, only while you're logged on,
@@ -30,6 +32,19 @@ $triggers = @(
 Register-ScheduledTask -TaskName "PhillyEvents-Pipeline" -Action $pipelineAction -Trigger $triggers `
     -Settings $settings -Principal $principal -Description "Philly events: fetch, detect, draft" -Force | Out-Null
 
+# Midday: tours and presales are often announced late morning, after the 6:30 run. Data + detectors only, so
+# Ollama never starts. If another run is going, it logs "skipped" and exits (lock in tracker/run.py).
+$middaySettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 20) `
+    -Priority 7 `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$middayAction = New-ScheduledTaskAction -Execute $pythonw -Argument "-m tracker.run --midday" -WorkingDirectory $root
+Register-ScheduledTask -TaskName "PhillyEvents-Midday" -Action $middayAction `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At "11:30AM") `
+    -Settings $middaySettings -Principal $principal -Description "Philly events: quick midday check, no drafts" -Force | Out-Null
+
 # Dashboard: always-on while logged in; restart if it crashes.
 $dashSettings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable -MultipleInstances IgnoreNew `
@@ -42,4 +57,4 @@ Register-ScheduledTask -TaskName "PhillyEvents-Dashboard" -Action $dashAction `
     -Settings $dashSettings -Principal $principal -Description "Philly events dashboard on 127.0.0.1:8765" -Force | Out-Null
 
 Start-ScheduledTask -TaskName "PhillyEvents-Dashboard"
-Write-Host "Installed. Dashboard: http://127.0.0.1:8765  (pipeline runs 6:30 AM and 4:30 PM)"
+Write-Host "Installed. Dashboard: http://127.0.0.1:8765  (pipeline runs 6:30 AM and 4:30 PM, quick check 11:30 AM)"

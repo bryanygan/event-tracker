@@ -4,7 +4,7 @@ from tracker import config
 
 
 @pytest.fixture(autouse=True)
-def no_real_services(monkeypatch):
+def no_real_services(monkeypatch, tmp_path):
     """Tests must never deploy to Cloudflare or call keyed APIs, whatever is in the real .env."""
     monkeypatch.setattr(config, "PAGES_PROJECT", "")
     monkeypatch.setattr(config, "CLOUDFLARE_API_TOKEN", "")
@@ -17,6 +17,7 @@ def no_real_services(monkeypatch):
     for name in ("REMOTE_HOST", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD"):  # or trust the real tunnel setup
         monkeypatch.setattr(config, name, "")
     monkeypatch.setattr(config, "REMOTE_EMAILS", set())
+    monkeypatch.setattr(config, "RUN_LOCK", tmp_path / "pipeline.lock")  # never contend with a real run
     from tracker import api, listening
     monkeypatch.setattr(listening, "_cache", {})
     monkeypatch.setattr(api, "LOCAL_HOSTS", api.LOCAL_HOSTS | {"testserver"})  # TestClient's Host header
