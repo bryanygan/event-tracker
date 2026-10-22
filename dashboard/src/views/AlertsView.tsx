@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type ShowFacts, type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
+import { SlidesOverlay } from './SlidesOverlay'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
@@ -136,6 +137,7 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
   const [showOlder, setShowOlder] = useState(false)
+  const [slidesOpen, setSlidesOpen] = useState(false)
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
   const [latest, ...older] = alert.drafts
 
@@ -203,12 +205,14 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       )}
       {showOlder && older.map((d) => <DraftView key={d.id} draft={d} alertId={alert.id} onChange={onDraftChange} />)}
 
-      {!STATIC && <div className="actions">
-        <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
-        {alert.status !== 'dismissed'
+      <div className="actions">
+        {!STATIC && <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>}
+        <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
+        {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
-          : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>}
-      </div>}
+          : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}
+      </div>
+      {slidesOpen && <SlidesOverlay alertId={alert.id} title={alert.title} onClose={() => setSlidesOpen(false)} />}
     </section>
   )
 }

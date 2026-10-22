@@ -131,3 +131,12 @@
 - Answers use markdown: bold dates with *italic* titles nested inside. The card renders those without raw HTML.
 - The dev worktree has no `.env`: pass `PERPLEXITY_API_KEY` (and `LISTENING_DB`) as env vars to the test server,
   read from the main `.env` without printing them.
+
+## Slides / canvas checks
+
+- Headless Edge can't click, so to screenshot the slides overlay, bundle a scratch entry that mounts it with
+  `dashboard/node_modules/.bin/esbuild ... --define:import.meta.env={"VITE_STATIC":"0"}` (without it `api.ts`
+  throws and the page is blank) and drop it in `dashboard/dist/` (gitignored; the API serves any file there).
+- Headless Edge with a reused `--user-data-dir` caches JS: add `?v=<timestamp>` to script URLs between rebuilds.
+- Canvas text fitting: check every word fits the line *before* wrapping at a size, or the largest size wins by
+  splitting "weekend" into "weeken / d".

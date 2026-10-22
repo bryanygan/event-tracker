@@ -118,3 +118,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/web-context`: `tracker/context.py`, `web_context` table, `POST /api/alerts/{id}/context`,
   `/api/context/usage`, pipeline auto step, card section + queue hint, tabs in the URL hash (`#alerts`).
   Real-data check on the DB copy: 1 manual + 3 auto lookups ($0.0063 total), cache reuse confirmed.
+
+### P1-11 slides (2026-10-22, build agent C, `feature/slides`)
+- `tracker/slides.py` + `slide_decks` table + `/api/alerts/{id}/slides` (GET/PUT/DELETE, POST rebuild);
+  `slides.json` in the static snapshot; canvas renderer + full-screen overlay opened from a "Slides" button.
+- Checked on a copy of the real DB: all 7 formats build; rendered presale, weekend (8 shows) and team-week
+  decks; stress test (95-char name, unbreakable word, 7 sale lines, photo); date-correction rebuild kept the
+  artist edit and photo; static snapshot renders read-only at 500px.

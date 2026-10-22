@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import angles, config, context, db, drafts, llm, opportunities, posts, publish
+from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, slides
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -161,6 +161,46 @@ def queue(c=Depends(get_db)):
         "weights": config.OPPORTUNITY_WEIGHTS,
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
     }
+
+
+@app.get("/api/alerts/{alert_id}/slides")
+def get_slides(alert_id: int, c=Depends(get_db)):
+    """The idea's 9:16 slide manifest (built from facts, plus any saved edits)."""
+    found = slides.deck(c, alert_id)
+    if found is None:
+        raise HTTPException(404)
+    return found
+
+
+class SlidesSave(BaseModel):
+    overrides: dict
+
+
+@app.put("/api/alerts/{alert_id}/slides")
+def save_slides(alert_id: int, body: SlidesSave, c=Depends(get_db)):
+    try:
+        return slides.save(c, alert_id, body.overrides)
+    except KeyError:
+        raise HTTPException(404)
+    except slides.SlidesError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/alerts/{alert_id}/slides/rebuild")
+def rebuild_slides(alert_id: int, c=Depends(get_db)):
+    """Rebuild from the current facts, keeping edits whose underlying fact didn't change."""
+    try:
+        return slides.rebuild(c, alert_id)
+    except KeyError:
+        raise HTTPException(404)
+
+
+@app.delete("/api/alerts/{alert_id}/slides")
+def reset_slides(alert_id: int, c=Depends(get_db)):
+    found = slides.reset(c, alert_id)
+    if found is None:
+        raise HTTPException(404)
+    return found
 
 
 @app.post("/api/alerts/{alert_id}/context")

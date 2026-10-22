@@ -32,6 +32,9 @@ CONTEXT_CACHE_DAYS = 7      # reuse one lookup per artist this long
 CONTEXT_DAILY_CAP = 10      # all lookups per ET day, failures included (~$0.0016 each)
 CONTEXT_AUTO_PER_DAY = 5    # of which the pipeline may use this many, on "strong" ideas only
 
+# 9:16 slides (tracker/slides.py): the small line at the top of every slide. Editable per deck too.
+SLIDES_BRAND = os.getenv("SLIDES_BRAND", "PHILLY EVENTS").strip()
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 # Bind to localhost only: the dashboard is for you, not the network.
