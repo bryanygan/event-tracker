@@ -15,7 +15,7 @@ from contextlib import closing
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, context, db, detectors, drafts, publish, store
+from . import config, context, db, detectors, drafts, genres, publish, store
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import venue_calendars
@@ -96,6 +96,13 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         counts = store.upsert_events(conn, run_id, events + calendar, baseline=baseline,
                                      baseline_prefixes=first_seen, protected_prefixes=failed)
         log.info("Changes: %s", counts or "none")
+
+        if not from_cache:  # genres for venue-calendar acts, from Ticketmaster's attraction search (capped)
+            try:
+                genres.fill_from_ticketmaster(conn, client)
+            except Exception as exc:  # never fail the run over a nice-to-have
+                log.warning("Genre lookups failed: %s", exc)
+            calls = client.calls
 
         try:
             deezer.enrich_headliners(conn)

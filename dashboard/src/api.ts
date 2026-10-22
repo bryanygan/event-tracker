@@ -128,6 +128,9 @@ export type EventRow = {
   venue_name: string | null
   genre: string | null
   subgenre: string | null
+  // listing = the show's own listing; artist = Ticketmaster's genre for the headliner;
+  // tm_search = venue-calendar act matched by name on Ticketmaster (inferred). See tracker/genres.py.
+  genre_source?: 'listing' | 'artist' | 'tm_search' | null
   price_min: number | null
   price_max: number | null
   onsale_start: string | null

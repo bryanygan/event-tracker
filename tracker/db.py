@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS attractions (
     last_area_show_acts INTEGER,    -- artists with setlists at that venue that day (5+ = festival/radio show)
     history_checked_back_to TEXT,   -- oldest setlist we looked at (how far back "no show found" goes)
     history_checked_at TEXT,
+    genre_source TEXT,              -- NULL = Ticketmaster's classification; 'tm_search' = matched by name (genres.py)
+    genre_checked_at TEXT,          -- last Ticketmaster name lookup for a venue-calendar act
     first_seen TEXT NOT NULL
 );
 
@@ -231,7 +233,8 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
-                    "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
+                    "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",
+                    "genre_source": "TEXT", "genre_checked_at": "TEXT"},  # genres.py: NULL source = Ticketmaster's own
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},

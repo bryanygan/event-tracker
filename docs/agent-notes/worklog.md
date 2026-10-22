@@ -118,3 +118,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/web-context`: `tracker/context.py`, `web_context` table, `POST /api/alerts/{id}/context`,
   `/api/context/usage`, pipeline auto step, card section + queue hint, tabs in the URL hash (`#alerts`).
   Real-data check on the DB copy: 1 manual + 3 auto lookups ($0.0063 total), cache reuse confirmed.
+
+### P1-08 + P1-10 (2026-10-22, agent A, `feature/roundups-genres`)
+- `tracker/genres.py`: read-time genre fill + capped TM attraction name lookup. Real-DB copy: +59 TM events get
+  the artist's genre; 40 real TM calls matched 18 venue-calendar acts (spot-checked: High On Fire = Metal,
+  Mark Guiliana = Jazz, June McDoom = Folk, YHWH Nailgun = Alternative, MAX STYLER = Dance/Electronic).
+- Picks + lane weekend cut + "picks" angle. On the copy: a Metal stacked month appears (5 shows, thanks to filled
+  genres), Hip-Hop goes to 11, and "Your lane this weekend: Pop, EDM & Hip-Hop (8 shows)" is raised.
+  Heads-up: on the first real run the filled genres change 5 existing roundups' shows, so their drafts show
+  "facts changed" (a real change, not a bug).
