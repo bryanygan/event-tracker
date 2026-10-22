@@ -118,6 +118,17 @@ table.metrics { font-size: 0.85rem; margin-top: 8px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 input.grow { flex: 1; }
 
+.queue-counts { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 14px; }
+.stat.hot strong { color: #d97706; }
+.queue-title { font-size: 1.1rem; margin: 8px 0 4px; }
+.pill.band.strong { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.pill.band.medium { color: var(--accent); border-color: var(--accent); }
+.reasons { margin: 6px 0; padding-left: 20px; }
+.note { margin: 6px 0; }
+.embedded > .card { border-left-width: 1px; margin: 12px 0 0; }
+.embedded > .card .actions { flex-wrap: wrap; }
+.actions { flex-wrap: wrap; }
+
 @media (max-width: 640px) {
   .stats { gap: 14px; }
   .run-box { align-items: flex-start; }

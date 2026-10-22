@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, detectors, drafts, llm, posts, publish
+from . import config, db, drafts, llm, opportunities, posts, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -99,16 +99,6 @@ def source_problems(c) -> list[dict]:
             for r in rows if r["source"] in names and (not r["ok"] or not r["count"])]
 
 
-def _draft_row(r, alert_facts: dict) -> dict:
-    d = dict(r)
-    d["onscreen"] = json.loads(d["onscreen"] or "[]")
-    d["warnings"] = json.loads(d["warnings"] or "[]")
-    # What a later run changed in the alert since this draft was written (empty = the draft is current)
-    written_from = d.pop("facts")
-    d["facts_changes"] = detectors.facts_diff(json.loads(written_from), alert_facts) if written_from else []
-    return d
-
-
 @app.get("/api/alerts")
 def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
@@ -120,23 +110,54 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
         a["posts"] = posted.get(a["id"], [])
-        a["drafts"] = [_draft_row(d, a["facts"]) for d in c.execute(
+        a["drafts"] = [drafts.draft_row(d, a["facts"]) for d in c.execute(
             "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
     return alerts
 
 
 class AlertUpdate(BaseModel):
-    status: str
+    status: str | None = None
+    shortlisted: bool | None = None
+    snoozed_until: str | None = None  # UTC ISO; send null to un-snooze
+    note: str | None = None
 
 
 @app.patch("/api/alerts/{alert_id}")
 def update_alert(alert_id: int, body: AlertUpdate, c=Depends(get_db)):
-    if body.status not in ("new", "drafted", "dismissed"):
+    fields = body.model_dump(exclude_unset=True)
+    if "status" in fields and fields["status"] not in ("new", "drafted", "dismissed"):
         raise HTTPException(400, "bad status")
-    if not c.execute("UPDATE alerts SET status=? WHERE id=?", (body.status, alert_id)).rowcount:
+    if fields.get("snoozed_until"):
+        fields["snoozed_until"] = _post_call(posts._utc, fields["snoozed_until"])
+    if "shortlisted" in fields:
+        fields["shortlisted"] = int(bool(fields["shortlisted"]))
+    if not c.execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
         raise HTTPException(404)
-    c.commit()
+    if fields:
+        c.execute(f"UPDATE alerts SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?", [*fields.values(), alert_id])
+        c.commit()
     return {"ok": True}
+
+
+@app.get("/api/queue")
+def queue(c=Depends(get_db)):
+    """Video ideas ranked by the experimental opportunity score (tracker/opportunities.py)."""
+    items = opportunities.queue(c)
+    now = datetime.now(timezone.utc)
+    soon = (now + timedelta(hours=48)).isoformat()
+    active = [i for i in items if i["stage"] in opportunities.ACTIVE_STAGES]
+    return {
+        "items": items,
+        "counts": {
+            "new": sum(i["stage"] in ("new", "shortlisted") for i in active),
+            "time_sensitive": sum(bool(i["post_by"]) and i["post_by"] <= soon for i in active),
+            "to_review": sum(i["stage"] in ("review", "needs_refresh") for i in active),
+            "ready_to_film": sum(i["stage"] == "approved" for i in active),
+            "needs_refresh": sum(i["stage"] == "needs_refresh" for i in active),
+        },
+        "weights": config.OPPORTUNITY_WEIGHTS,
+        "rules_version": config.OPPORTUNITY_RULES_VERSION,
+    }
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)

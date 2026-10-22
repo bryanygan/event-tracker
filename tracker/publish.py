@@ -102,6 +102,7 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
         "genres": api.genres(c=conn),
         "runs": api.runs(limit=20, c=conn),
         "posts": api.list_posts(c=conn),
+        "queue": api.queue(c=conn),
         "analytics": {g: api.analytics(group_by=g, c=conn) for g in ("format", "video_style")},
     }
     for name, payload in files.items():

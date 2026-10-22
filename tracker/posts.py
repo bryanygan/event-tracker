@@ -83,6 +83,8 @@ def create_post(conn, *, alert_id: int | None = None, draft_id: int | None = Non
         fields.setdefault("title", alert["title"])
         fields.setdefault("format", facts.get("format") or alert["kind"])
         snapshot = alert["facts"]
+        from .opportunities import snapshot as queue_snapshot  # local import: opportunities reads posts too
+        fields["opportunity_snapshot"] = json.dumps(queue_snapshot(conn, alert_id))
     fields = _check_fields({"title": fields.get("title", ""), **fields})
     cols = ["alert_id", "draft_id", "facts_snapshot", "created_at", *fields]
     cur = conn.execute(f"INSERT INTO posts ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
@@ -163,6 +165,7 @@ def list_posts(conn, now: datetime | None = None) -> list[dict]:
         metrics[r["post_id"]].append(dict(r))
     for p in posts:
         p["facts_snapshot"] = json.loads(p["facts_snapshot"]) if p["facts_snapshot"] else None
+        p["opportunity_snapshot"] = json.loads(p["opportunity_snapshot"]) if p["opportunity_snapshot"] else None
         p["metrics"] = metrics[p["id"]]
         for m in p["metrics"]:
             m["age_hours"] = round(_age_hours(p["posted_at"], m["observed_at"]), 1)

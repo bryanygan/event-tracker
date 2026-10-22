@@ -118,7 +118,13 @@ CREATE TABLE IF NOT EXISTS alerts (
     facts TEXT NOT NULL,            -- JSON: the only facts the LLM may use
     created_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'new',  -- new, drafted, dismissed
-    updated_at TEXT                 -- last time a run changed its facts (NULL = never changed)
+    updated_at TEXT,                -- last time a run changed its facts (NULL = never changed)
+    event_ids TEXT,                 -- JSON list of the events this video idea is about
+    post_by TEXT,                   -- UTC ISO: the video is most useful if it's up by then (NULL = news, see opportunities.py)
+    expires_at TEXT,                -- UTC ISO: after this the idea is stale
+    shortlisted INTEGER NOT NULL DEFAULT 0,  -- you starred it in the queue
+    snoozed_until TEXT,             -- UTC ISO: hidden from the queue until then ("Later")
+    note TEXT                       -- your note on the idea
 );
 
 -- Earlier versions of an alert's facts, kept whenever a run refreshes them (see detectors.save_alerts).
@@ -163,6 +169,7 @@ CREATE TABLE IF NOT EXISTS posts (
     length_seconds INTEGER,
     notes TEXT,
     facts_snapshot TEXT,            -- JSON: the alert's facts when you posted (what we knew then, no hindsight)
+    opportunity_snapshot TEXT,      -- JSON: the queue's score and reasons when you posted (opportunities.snapshot)
     created_at TEXT NOT NULL
 );
 
@@ -205,8 +212,10 @@ _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
-    "alerts": {"updated_at": "TEXT"},
+    "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
+               "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
     "drafts": {"facts": "TEXT"},
+    "posts": {"opportunity_snapshot": "TEXT"},
 }
 # Run once, right after the column is added to an existing database.
 _BACKFILL = {

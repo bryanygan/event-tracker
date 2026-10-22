@@ -1,7 +1,8 @@
 """Detectors: plain rules over the database that decide what's worth a video.
 
 Each detector returns alert dicts:
-    {"key": dedupe key, "kind": ..., "title": ..., "score": ..., "facts": {...}}
+    {"key": dedupe key, "kind": ..., "title": ..., "score": ..., "facts": {...},
+     "event_ids": [...], "post_by": UTC ISO or None, "expires_at": UTC ISO or None}
 `facts` is everything the LLM is allowed to say, already formatted for humans
 (e.g. "Sat, Nov 8 · 8:00 PM"), so the model never has to do date math.
 """
@@ -45,6 +46,17 @@ def fmt_utc_local(iso: str) -> str:
 
 def parse_utc(iso: str) -> datetime:
     return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+
+def utc_iso(iso: str) -> str:
+    """'2026-10-22T14:00:00Z' -> '2026-10-22T14:00:00+00:00' (the format stored everywhere else)."""
+    return parse_utc(iso).astimezone(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def et_iso(d: date | str, hour: int, minute: int = 0) -> str:
+    """A Philly wall-clock time on day `d`, as UTC ISO. Used for when a video should be up by."""
+    d = date.fromisoformat(d) if isinstance(d, str) else d
+    return datetime(d.year, d.month, d.day, hour, minute, tzinfo=TZ).astimezone(timezone.utc).isoformat()
 
 
 def fmt_price(lo, hi) -> str | None:
@@ -174,6 +186,8 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
                 "history": history,
                 "your_plays": my_plays,
             },
+            "event_ids": [e["id"] for e in events],
+            "expires_at": et_iso(events[-1]["local_date"], 23, 59),
         })
     return alerts
 
@@ -245,6 +259,9 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
                 "history": history,
                 "your_plays": my_plays,
             },
+            "event_ids": [e["id"] for e in evs],
+            "post_by": utc_iso(first_start),               # the reminder is only useful before it opens
+            "expires_at": utc_iso(max(st for _, st in windows)),
         })
     return alerts
 
@@ -294,6 +311,9 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
             "weekend": f"{fmt_date(fri.isoformat())} – {fmt_date(sun.isoformat())}",
             "shows": [event_facts(e) for e in picks],
         },
+        "event_ids": [e["id"] for e in picks],
+        "post_by": et_iso(fri, 17),                        # people plan their weekend before Friday evening
+        "expires_at": et_iso(fri + timedelta(days=1), 18),
     }]
 
 
@@ -335,6 +355,9 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "notable_show_count": len(unique),
                 "shows": [event_facts(e) for e in top],
             },
+            "event_ids": [e["id"] for e in top],
+            "post_by": et_iso(f"{ym}-01", 0),              # before the month starts
+            "expires_at": et_iso(f"{ym}-15", 23, 59),      # matches "past mid-month is too late" above
         })
     return alerts
 
@@ -363,6 +386,8 @@ def detect_status_changes(conn: sqlite3.Connection, run_id: int, today: str) -> 
                 "previous_value": c["old_value"],
                 "show": event_facts(e),
             },
+            "event_ids": [e["id"]],
+            "expires_at": et_iso(e["local_date"], 23, 59),
         })
     return alerts
 
@@ -390,6 +415,9 @@ def detect_team_week(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "week": f"{fmt_date(monday.isoformat())} – {fmt_date(sunday.isoformat())}",
                 "shows": [event_facts(e) for e in games],
             },
+            "event_ids": [e["id"] for e in games],
+            "post_by": et_iso(games[0]["local_date"], 12),
+            "expires_at": et_iso(games[-1]["local_date"], 23, 59),
         })
     return alerts
 
@@ -415,6 +443,9 @@ def detect_big_games(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "opponent": e["opponent"],
                 "show": event_facts(e),
             },
+            "event_ids": [e["id"]],
+            "post_by": et_iso(e["local_date"], 12),
+            "expires_at": et_iso(e["local_date"], 23, 59),
         })
     return alerts
 
@@ -454,13 +485,18 @@ def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
     """
     created, refreshed = [], 0
     for a in alerts:
+        meta = (json.dumps(a["event_ids"]) if a.get("event_ids") else None, a.get("post_by"), a.get("expires_at"))
         old = conn.execute("SELECT * FROM alerts WHERE key=?", (a["key"],)).fetchone()
         if old is None:
             cur = conn.execute(
-                "INSERT INTO alerts (key, kind, title, score, facts, created_at) VALUES (?,?,?,?,?,?)",
-                (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso()))
+                """INSERT INTO alerts (key, kind, title, score, facts, created_at, event_ids, post_by, expires_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso(), *meta))
             created.append(cur.lastrowid)
             continue
+        # Links and timing aren't facts the video states: keep them current (alerts from before they existed get them here)
+        if meta != (old["event_ids"], old["post_by"], old["expires_at"]):
+            conn.execute("UPDATE alerts SET event_ids=?, post_by=?, expires_at=? WHERE id=?", (*meta, old["id"]))
         posted = conn.execute("SELECT 1 FROM posts WHERE alert_id=? LIMIT 1", (old["id"],)).fetchone()
         if old["status"] == "dismissed" or posted or _stable(json.loads(old["facts"])) == _stable(a["facts"]):
             continue

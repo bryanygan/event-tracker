@@ -3,7 +3,7 @@ import { api, STATIC, type Alert, type Draft, type Job, type ShowFacts } from '.
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 
-const KIND_LABEL: Record<Alert['kind'], string> = {
+export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
   presale_soon: 'Presale / on-sale',
   weekend: 'This weekend',
@@ -59,7 +59,7 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
   )
 }
 
-function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
+export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
   alert: Alert; busy: boolean; onRegenerate: () => void
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {

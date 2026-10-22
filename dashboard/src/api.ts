@@ -126,6 +126,44 @@ export type EventRow = {
   first_seen: string
 }
 
+export type Stage = 'new' | 'shortlisted' | 'review' | 'needs_refresh' | 'approved' | 'filmed' | 'posted' |
+  'measured' | 'snoozed' | 'expired' | 'dismissed'
+
+export type QueueItem = {
+  alert_id: number
+  kind: Alert['kind']
+  title: string
+  notability: number
+  created_at: string
+  updated_at: string | null
+  shortlisted: boolean
+  snoozed_until: string | null
+  note: string | null
+  your_plays: number
+  links: { label: string; url: string }[]
+  draft: Pick<Draft, 'id' | 'status' | 'hook' | 'warnings' | 'facts_changes'> | null
+  posts: { id: number; url: string | null; posted_at: string }[]
+  score: number | null // experimental opportunity score, 0-100
+  band: 'strong' | 'medium' | 'low' | null
+  coverage: number // share of the score's weight that had data
+  components: { key: string; label: string; weight: number; value: number | null; why: string }[]
+  reasons: string[]
+  caveats: string[]
+  post_by: string | null
+  expires_at: string | null
+  stage: Stage
+  rules_version: string
+}
+
+export type Queue = {
+  items: QueueItem[]
+  counts: { new: number; time_sensitive: number; to_review: number; ready_to_film: number; needs_refresh: number }
+  weights: Record<string, number>
+  rules_version: string
+}
+
+export type AlertPatch = Partial<{ status: Alert['status']; shortlisted: boolean; snoozed_until: string | null; note: string | null }>
+
 export type Run = {
   id: number
   started_at: string
@@ -194,6 +232,8 @@ const staticApi = {
   runs: () => snapshot<Run[]>('runs'),
   triggerRun: readOnly,
   posts: () => snapshot<Post[]>('posts'),
+  queue: () => snapshot<Queue>('queue'),
+  updateAlert: readOnly,
   analytics: (groupBy: Analytics['group_by']) =>
     snapshot<Record<string, Analytics>>('analytics').then((all) => all[groupBy]),
   createPost: readOnly,
@@ -219,6 +259,9 @@ const liveApi = {
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
   posts: () => req<Post[]>('/api/posts'),
+  queue: () => req<Queue>('/api/queue'),
+  updateAlert: (id: number, fields: AlertPatch) =>
+    req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   analytics: (groupBy: Analytics['group_by']) => req<Analytics>(`/api/analytics?group_by=${groupBy}`),
   createPost: (fields: PostInput) => req<{ id: number }>('/api/posts', { method: 'POST', body: JSON.stringify(fields) }),
   updatePost: (id: number, fields: PostInput) =>
