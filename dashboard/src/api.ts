@@ -24,6 +24,7 @@ export type Draft = {
   hashtags: string
   onscreen: string[]
   warnings: string[]
+  facts_changes: string[] // what a later run changed in the alert since this draft was written
   created_at: string
   status: 'pending' | 'approved' | 'filmed' | 'rejected'
   notes: string | null
@@ -37,8 +38,69 @@ export type Alert = {
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
   created_at: string
+  updated_at: string | null // last time a run refreshed the facts
   status: 'new' | 'drafted' | 'dismissed'
   drafts: Draft[]
+  posts: { id: number; draft_id: number | null; url: string | null; posted_at: string }[]
+}
+
+export const VIDEO_STYLES = ['voiceover', 'slideshow', 'footage', 'face-to-camera', 'other'] as const
+export type VideoStyle = (typeof VIDEO_STYLES)[number]
+export const COUNT_METRICS = ['views', 'likes', 'comments', 'shares', 'saves', 'followers_gained'] as const
+
+export type Metrics = {
+  id: number
+  post_id: number
+  observed_at: string
+  age_hours: number
+  views: number | null
+  likes: number | null
+  comments: number | null
+  shares: number | null
+  saves: number | null
+  followers_gained: number | null
+  avg_watch_seconds: number | null
+  completion_rate: number | null
+  notes: string | null
+}
+export type MetricsInput = Partial<Omit<Metrics, 'id' | 'post_id' | 'age_hours'>>
+
+export type Checkpoint = '24h' | '7d'
+
+export type Post = {
+  id: number
+  alert_id: number | null
+  draft_id: number | null
+  url: string | null
+  title: string
+  posted_at: string
+  format: string | null
+  video_style: VideoStyle | null
+  hook: string | null
+  length_seconds: number | null
+  notes: string | null
+  age_hours: number
+  metrics: Metrics[]
+  checkpoints: Record<Checkpoint, number | null> // id of the snapshot used for each comparison age
+  due: Checkpoint[]
+}
+export type PostInput = Partial<Pick<Post, 'alert_id' | 'draft_id' | 'url' | 'title' | 'posted_at' | 'format' |
+  'video_style' | 'hook' | 'length_seconds' | 'notes'>>
+
+export type Analytics = {
+  group_by: 'format' | 'video_style'
+  min_posts: number
+  checkpoints: Record<Checkpoint, { target_hours: number; window_hours: [number, number] }>
+  groups: {
+    group: string
+    posts: number
+    checkpoints: Record<Checkpoint, {
+      n: number
+      enough: boolean
+      median_views: number | null
+      per_1k_views: Record<'likes' | 'comments' | 'shares' | 'saves' | 'followers_gained', number | null>
+    }>
+  }[]
 }
 
 export type EventRow = {
@@ -64,6 +126,44 @@ export type EventRow = {
   first_seen: string
 }
 
+export type Stage = 'new' | 'shortlisted' | 'review' | 'needs_refresh' | 'approved' | 'filmed' | 'posted' |
+  'measured' | 'snoozed' | 'expired' | 'dismissed'
+
+export type QueueItem = {
+  alert_id: number
+  kind: Alert['kind']
+  title: string
+  notability: number
+  created_at: string
+  updated_at: string | null
+  shortlisted: boolean
+  snoozed_until: string | null
+  note: string | null
+  your_plays: number
+  links: { label: string; url: string }[]
+  draft: Pick<Draft, 'id' | 'status' | 'hook' | 'warnings' | 'facts_changes'> | null
+  posts: { id: number; url: string | null; posted_at: string }[]
+  score: number | null // experimental opportunity score, 0-100
+  band: 'strong' | 'medium' | 'low' | null
+  coverage: number // share of the score's weight that had data
+  components: { key: string; label: string; weight: number; value: number | null; why: string }[]
+  reasons: string[]
+  caveats: string[]
+  post_by: string | null
+  expires_at: string | null
+  stage: Stage
+  rules_version: string
+}
+
+export type Queue = {
+  items: QueueItem[]
+  counts: { new: number; time_sensitive: number; to_review: number; ready_to_film: number; needs_refresh: number }
+  weights: Record<string, number>
+  rules_version: string
+}
+
+export type AlertPatch = Partial<{ status: Alert['status']; shortlisted: boolean; snoozed_until: string | null; note: string | null }>
+
 export type Run = {
   id: number
   started_at: string
@@ -84,6 +184,8 @@ export type Summary = {
   generated_at?: string // static snapshots only
   publish?: { at: string; ok: boolean; message: string; url?: string } | null
   source_problems?: { source: string; error: string }[]
+  posts_this_week: number
+  metrics_due: number
 }
 
 export type Job = { name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean }
@@ -129,6 +231,16 @@ const staticApi = {
   genres: () => snapshot<string[]>('genres'),
   runs: () => snapshot<Run[]>('runs'),
   triggerRun: readOnly,
+  posts: () => snapshot<Post[]>('posts'),
+  queue: () => snapshot<Queue>('queue'),
+  updateAlert: readOnly,
+  analytics: (groupBy: Analytics['group_by']) =>
+    snapshot<Record<string, Analytics>>('analytics').then((all) => all[groupBy]),
+  createPost: readOnly,
+  updatePost: readOnly,
+  deletePost: readOnly,
+  addMetrics: readOnly,
+  deleteMetrics: readOnly,
 }
 
 const liveApi = {
@@ -146,6 +258,18 @@ const liveApi = {
   runs: () => req<Run[]>('/api/runs'),
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
+  posts: () => req<Post[]>('/api/posts'),
+  queue: () => req<Queue>('/api/queue'),
+  updateAlert: (id: number, fields: AlertPatch) =>
+    req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  analytics: (groupBy: Analytics['group_by']) => req<Analytics>(`/api/analytics?group_by=${groupBy}`),
+  createPost: (fields: PostInput) => req<{ id: number }>('/api/posts', { method: 'POST', body: JSON.stringify(fields) }),
+  updatePost: (id: number, fields: PostInput) =>
+    req(`/api/posts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  deletePost: (id: number) => req(`/api/posts/${id}`, { method: 'DELETE' }),
+  addMetrics: (postId: number, fields: MetricsInput) =>
+    req<{ id: number }>(`/api/posts/${postId}/metrics`, { method: 'POST', body: JSON.stringify(fields) }),
+  deleteMetrics: (id: number) => req(`/api/metrics/${id}`, { method: 'DELETE' }),
 }
 
 export const api: typeof liveApi = STATIC ? { ...staticApi, publish: readOnly } : liveApi

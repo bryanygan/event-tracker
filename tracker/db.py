@@ -117,7 +117,24 @@ CREATE TABLE IF NOT EXISTS alerts (
     score REAL DEFAULT 0,
     facts TEXT NOT NULL,            -- JSON: the only facts the LLM may use
     created_at TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'new'  -- new, drafted, dismissed
+    status TEXT NOT NULL DEFAULT 'new',  -- new, drafted, dismissed
+    updated_at TEXT,                -- last time a run changed its facts (NULL = never changed)
+    event_ids TEXT,                 -- JSON list of the events this video idea is about
+    post_by TEXT,                   -- UTC ISO: the video is most useful if it's up by then (NULL = news, see opportunities.py)
+    expires_at TEXT,                -- UTC ISO: after this the idea is stale
+    shortlisted INTEGER NOT NULL DEFAULT 0,  -- you starred it in the queue
+    snoozed_until TEXT,             -- UTC ISO: hidden from the queue until then ("Later")
+    note TEXT                       -- your note on the idea
+);
+
+-- Earlier versions of an alert's facts, kept whenever a run refreshes them (see detectors.save_alerts).
+CREATE TABLE IF NOT EXISTS alert_history (
+    id INTEGER PRIMARY KEY,
+    alert_id INTEGER NOT NULL REFERENCES alerts(id),
+    title TEXT NOT NULL,
+    score REAL,
+    facts TEXT NOT NULL,
+    replaced_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS drafts (
@@ -133,8 +150,46 @@ CREATE TABLE IF NOT EXISTS drafts (
     warnings TEXT,                  -- JSON list: things in the LLM text not found in the facts
     created_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, filmed, rejected
+    notes TEXT,
+    facts TEXT                      -- JSON: the alert's facts this draft was written from
+);
+
+-- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
+CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY,
+    alert_id INTEGER REFERENCES alerts(id),   -- NULL for videos that didn't come from an alert
+    draft_id INTEGER REFERENCES drafts(id),
+    platform TEXT NOT NULL DEFAULT 'tiktok',
+    url TEXT,
+    title TEXT NOT NULL,
+    posted_at TEXT NOT NULL,        -- UTC ISO
+    format TEXT,                    -- presale, weekend, stacked_month... (the alert's format, or chosen by hand)
+    video_style TEXT,               -- voiceover, slideshow, footage, face-to-camera, other
+    hook TEXT,                      -- the hook you actually used
+    length_seconds INTEGER,
+    notes TEXT,
+    facts_snapshot TEXT,            -- JSON: the alert's facts when you posted (what we knew then, no hindsight)
+    opportunity_snapshot TEXT,      -- JSON: the queue's score and reasons when you posted (opportunities.snapshot)
+    created_at TEXT NOT NULL
+);
+
+-- Numbers copied from TikTok analytics at some moment. NULL = not recorded (never "zero").
+CREATE TABLE IF NOT EXISTS post_metrics (
+    id INTEGER PRIMARY KEY,
+    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    observed_at TEXT NOT NULL,      -- UTC ISO; compared with posted_at to get the post's age
+    views INTEGER,
+    likes INTEGER,
+    comments INTEGER,
+    shares INTEGER,
+    saves INTEGER,
+    followers_gained INTEGER,
+    avg_watch_seconds REAL,
+    completion_rate REAL,           -- percent watched to the end, 0-100
+    source TEXT NOT NULL DEFAULT 'manual',
     notes TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_post_metrics_post ON post_metrics(post_id);
 """
 
 
@@ -160,6 +215,16 @@ _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
+    "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
+               "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
+    "drafts": {"facts": "TEXT"},
+    "posts": {"opportunity_snapshot": "TEXT"},
+}
+# Run once, right after the column is added to an existing database.
+_BACKFILL = {
+    # Drafts written before this column existed were written from the alert's facts as they are now
+    # (alert facts never changed before refreshing existed).
+    ("drafts", "facts"): "UPDATE drafts SET facts = (SELECT facts FROM alerts WHERE alerts.id = drafts.alert_id)",
 }
 
 
@@ -169,4 +234,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         for col, typ in cols.items():
             if col not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                if (table, col) in _BACKFILL:
+                    conn.execute(_BACKFILL[(table, col)])
     conn.commit()

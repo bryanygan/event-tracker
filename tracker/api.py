@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from contextlib import closing
@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, drafts, llm, publish
+from . import config, db, drafts, llm, opportunities, posts, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ def job_status():
 def summary(c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()
     last = c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).replace(microsecond=0).isoformat()  # same format as posted_at
     return {
         "upcoming_events": c.execute("SELECT COUNT(*) FROM events WHERE active=1 AND local_date>=?",
                                      (today,)).fetchone()[0],
@@ -84,6 +85,8 @@ def summary(c=Depends(get_db)):
         # None = Pages not configured (UI hides the publish button); {} = configured, never published
         "publish": (publish.last_status() or {}) if publish.configured() else None,
         "source_problems": source_problems(c),
+        "posts_this_week": c.execute("SELECT COUNT(*) FROM posts WHERE posted_at >= ?", (week_ago,)).fetchone()[0],
+        "metrics_due": sum(1 for p in posts.list_posts(c) if p["due"]),
     }
 
 
@@ -96,13 +99,6 @@ def source_problems(c) -> list[dict]:
             for r in rows if r["source"] in names and (not r["ok"] or not r["count"])]
 
 
-def _draft_row(r) -> dict:
-    d = dict(r)
-    d["onscreen"] = json.loads(d["onscreen"] or "[]")
-    d["warnings"] = json.loads(d["warnings"] or "[]")
-    return d
-
-
 @app.get("/api/alerts")
 def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
@@ -110,25 +106,58 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
         raise HTTPException(400, "status must be open, dismissed or all")
     alerts = [dict(r) for r in c.execute(
         f"SELECT * FROM alerts a WHERE {where} ORDER BY a.created_at DESC, a.score DESC LIMIT ?", (limit,))]
+    posted = posts.posts_by_alert(c)
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
-        a["drafts"] = [_draft_row(d) for d in c.execute(
+        a["posts"] = posted.get(a["id"], [])
+        a["drafts"] = [drafts.draft_row(d, a["facts"]) for d in c.execute(
             "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
     return alerts
 
 
 class AlertUpdate(BaseModel):
-    status: str
+    status: str | None = None
+    shortlisted: bool | None = None
+    snoozed_until: str | None = None  # UTC ISO; send null to un-snooze
+    note: str | None = None
 
 
 @app.patch("/api/alerts/{alert_id}")
 def update_alert(alert_id: int, body: AlertUpdate, c=Depends(get_db)):
-    if body.status not in ("new", "drafted", "dismissed"):
+    fields = body.model_dump(exclude_unset=True)
+    if "status" in fields and fields["status"] not in ("new", "drafted", "dismissed"):
         raise HTTPException(400, "bad status")
-    if not c.execute("UPDATE alerts SET status=? WHERE id=?", (body.status, alert_id)).rowcount:
+    if fields.get("snoozed_until"):
+        fields["snoozed_until"] = _post_call(posts._utc, fields["snoozed_until"])
+    if "shortlisted" in fields:
+        fields["shortlisted"] = int(bool(fields["shortlisted"]))
+    if not c.execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
         raise HTTPException(404)
-    c.commit()
+    if fields:
+        c.execute(f"UPDATE alerts SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?", [*fields.values(), alert_id])
+        c.commit()
     return {"ok": True}
+
+
+@app.get("/api/queue")
+def queue(c=Depends(get_db)):
+    """Video ideas ranked by the experimental opportunity score (tracker/opportunities.py)."""
+    items = opportunities.queue(c)
+    now = datetime.now(timezone.utc)
+    soon = (now + timedelta(hours=48)).isoformat()
+    active = [i for i in items if i["stage"] in opportunities.ACTIVE_STAGES]
+    return {
+        "items": items,
+        "counts": {
+            "new": sum(i["stage"] in ("new", "shortlisted") for i in active),
+            "time_sensitive": sum(bool(i["post_by"]) and i["post_by"] <= soon for i in active),
+            "to_review": sum(i["stage"] in ("review", "needs_refresh") for i in active),
+            "ready_to_film": sum(i["stage"] == "approved" for i in active),
+            "needs_refresh": sum(i["stage"] == "needs_refresh" for i in active),
+        },
+        "weights": config.OPPORTUNITY_WEIGHTS,
+        "rules_version": config.OPPORTUNITY_RULES_VERSION,
+    }
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)
@@ -164,6 +193,84 @@ def update_draft(draft_id: int, body: DraftUpdate, c=Depends(get_db)):
         raise HTTPException(404)
     c.commit()
     return {"ok": True}
+
+
+# ---------- posted videos + their numbers (all typed in by you; see tracker/posts.py) ----------
+
+class PostFields(BaseModel):
+    url: str | None = None
+    title: str | None = None
+    posted_at: str | None = None    # ISO with timezone; the browser sends UTC
+    format: str | None = None
+    video_style: str | None = None
+    hook: str | None = None
+    length_seconds: int | None = None
+    notes: str | None = None
+
+
+class PostCreate(PostFields):
+    alert_id: int | None = None
+    draft_id: int | None = None
+
+
+class MetricsCreate(BaseModel):
+    observed_at: str | None = None  # default: now
+    views: int | None = None
+    likes: int | None = None
+    comments: int | None = None
+    shares: int | None = None
+    saves: int | None = None
+    followers_gained: int | None = None
+    avg_watch_seconds: float | None = None
+    completion_rate: float | None = None
+    notes: str | None = None
+
+
+def _post_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except posts.PostError as exc:
+        raise HTTPException(400, str(exc))
+    except LookupError:
+        raise HTTPException(404)
+
+
+@app.get("/api/posts")
+def list_posts(c=Depends(get_db)):
+    return posts.list_posts(c)
+
+
+@app.post("/api/posts", status_code=201)
+def create_post(body: PostCreate, c=Depends(get_db)):
+    return {"id": _post_call(posts.create_post, c, **body.model_dump(exclude_none=True))}
+
+
+@app.patch("/api/posts/{post_id}")
+def update_post(post_id: int, body: PostFields, c=Depends(get_db)):
+    _post_call(posts.update_post, c, post_id, **body.model_dump(exclude_unset=True))  # explicit null clears a field
+    return {"ok": True}
+
+
+@app.delete("/api/posts/{post_id}")
+def delete_post(post_id: int, c=Depends(get_db)):
+    _post_call(posts.delete_post, c, post_id)
+    return {"ok": True}
+
+
+@app.post("/api/posts/{post_id}/metrics", status_code=201)
+def add_metrics(post_id: int, body: MetricsCreate, c=Depends(get_db)):
+    return {"id": _post_call(posts.add_metrics, c, post_id, **body.model_dump(exclude_none=True))}
+
+
+@app.delete("/api/metrics/{metrics_id}")
+def delete_metrics(metrics_id: int, c=Depends(get_db)):
+    _post_call(posts.delete_metrics, c, metrics_id)
+    return {"ok": True}
+
+
+@app.get("/api/analytics")
+def analytics(group_by: str = "format", c=Depends(get_db)):
+    return _post_call(posts.analytics, c, group_by)
 
 
 @app.get("/api/events")

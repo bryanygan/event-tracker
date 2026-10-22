@@ -5,12 +5,22 @@ from __future__ import annotations
 import json
 import logging
 
-from . import llm, templates
+from . import detectors, llm, templates
 from .store import now_iso
 
 log = logging.getLogger(__name__)
 
 MAX_DRAFTS_PER_RUN = 8  # ~1 min each on the N95; keeps a run under ~10 minutes
+
+
+def draft_row(r, alert_facts: dict) -> dict:
+    """A drafts row for the dashboard: JSON fields parsed, plus what changed in the alert since it was written."""
+    d = dict(r)
+    d["onscreen"] = json.loads(d["onscreen"] or "[]")
+    d["warnings"] = json.loads(d["warnings"] or "[]")
+    written_from = d.pop("facts")
+    d["facts_changes"] = detectors.facts_diff(json.loads(written_from), alert_facts) if written_from else []
+    return d
 
 
 def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
@@ -40,10 +50,10 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
         warnings.append(f"Verify: last Philly show {facts['history']['last_philly_show']} "
                         f"({facts['history']['last_philly_venue']}) is from setlist.fm, which is crowd-sourced")
     cur = conn.execute(
-        """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at, facts)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (alert_id, facts.get("format", alert["kind"]), out["model"], out["hook"], out["script"], out["caption"],
-         " ".join(out["hashtags"]), json.dumps(llm.onscreen_lines(facts)), json.dumps(warnings), now_iso()))
+         " ".join(out["hashtags"]), json.dumps(llm.onscreen_lines(facts)), json.dumps(warnings), now_iso(), alert["facts"]))
     conn.execute("UPDATE alerts SET status='drafted' WHERE id=? AND status='new'", (alert_id,))
     conn.commit()
     if warnings:

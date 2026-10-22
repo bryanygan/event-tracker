@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type Draft, type Job, type ShowFacts } from '../api'
+import { fmtWhen } from '../App'
+import { PostForm } from './PostsView'
 
-const KIND_LABEL: Record<Alert['kind'], string> = {
+export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
   presale_soon: 'Presale / on-sale',
   weekend: 'This weekend',
@@ -57,7 +59,7 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
   )
 }
 
-function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
+export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
   alert: Alert; busy: boolean; onRegenerate: () => void
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
@@ -73,8 +75,14 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
         {Number(alert.facts.your_plays) > 0 && (
           <span className="pill new" title="your plays in the last 2 years">🎧 {String(alert.facts.your_plays)} plays</span>
         )}
+        {alert.posts.map((p) => (
+          <span key={p.id} className="pill new" title={`logged as posted ${fmtWhen(p.posted_at)}`}>
+            {p.url ? <a href={p.url} target="_blank" rel="noreferrer">Posted ✓</a> : 'Posted ✓'}
+          </span>
+        ))}
         <span className="muted small" title="notability score">★ {Math.round(alert.score)}</span>
       </div>
+      {alert.updated_at && <p className="muted small">Facts refreshed {fmtWhen(alert.updated_at)} (new shows, cancellations or sale changes).</p>}
 
       <details className="facts">
         <summary>Facts ({shows.length} show{shows.length === 1 ? '' : 's'}) — the only things the draft is allowed to say</summary>
@@ -94,13 +102,13 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
         <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
       </details>
 
-      {latest ? <DraftView draft={latest} onChange={onDraftChange} /> : <p className="muted">No draft yet.</p>}
+      {latest ? <DraftView draft={latest} alertId={alert.id} onChange={onDraftChange} /> : <p className="muted">No draft yet.</p>}
       {older.length > 0 && (
         <button className="link" onClick={() => setShowOlder(!showOlder)}>
           {showOlder ? 'Hide' : 'Show'} {older.length} older draft{older.length > 1 ? 's' : ''}
         </button>
       )}
-      {showOlder && older.map((d) => <DraftView key={d.id} draft={d} onChange={onDraftChange} />)}
+      {showOlder && older.map((d) => <DraftView key={d.id} draft={d} alertId={alert.id} onChange={onDraftChange} />)}
 
       {!STATIC && <div className="actions">
         <button onClick={onRegenerate} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
@@ -112,8 +120,9 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
   )
 }
 
-function DraftView({ draft, onChange }: { draft: Draft; onChange: () => void }) {
+function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number; onChange: () => void }) {
   const [editing, setEditing] = useState(false)
+  const [logging, setLogging] = useState(false)
   const [fields, setFields] = useState({ hook: draft.hook, script: draft.script, caption: draft.caption, hashtags: draft.hashtags })
 
   const save = async () => { await api.updateDraft(draft.id, fields); setEditing(false); onChange() }
@@ -133,6 +142,12 @@ function DraftView({ draft, onChange }: { draft: Draft; onChange: () => void }) 
 
   return (
     <div className={`draft status-${draft.status}`}>
+      {draft.facts_changes.length > 0 && (
+        <div className="warn">
+          ↻ The facts changed since this draft was written. Edit it or write a new draft:
+          <ul>{draft.facts_changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        </div>
+      )}
       {draft.warnings.length > 0 && (
         <div className="warn">⚠ Check before filming: {draft.warnings.join(' · ')}</div>
       )}
@@ -157,8 +172,11 @@ function DraftView({ draft, onChange }: { draft: Draft; onChange: () => void }) 
           <select value={draft.status} onChange={(e) => setStatus(e.target.value as Draft['status'])}>
             {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          {!logging && <button className="ghost" onClick={() => setLogging(true)}>Log as posted</button>}
         </>}
       </div>
+      {logging && <PostForm alertId={alertId} draftId={draft.id} hook={fields.hook}
+                            onDone={() => { setLogging(false); onChange() }} onCancel={() => setLogging(false)} />}
     </div>
   )
 }

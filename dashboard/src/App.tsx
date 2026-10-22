@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, STATIC, type Job, type Summary } from './api'
 import AlertsView from './views/AlertsView'
 import EventsView from './views/EventsView'
+import PostsView from './views/PostsView'
+import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 
-type Tab = 'alerts' | 'events' | 'runs'
+type Tab = 'queue' | 'alerts' | 'posts' | 'events' | 'runs'
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('alerts')
+  const [tab, setTab] = useState<Tab>('queue')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const [refreshKey, setRefreshKey] = useState(0) // bump to make views reload
@@ -65,6 +67,7 @@ export default function App() {
           <Stat label="upcoming events" value={summary?.upcoming_events} />
           <Stat label="open alerts" value={summary?.open_alerts} />
           <Stat label="drafts to review" value={summary?.pending_drafts} />
+          <Stat label="posted this week" value={summary?.posts_this_week} />
         </div>
         {STATIC ? (
           <div className="run-box">
@@ -122,15 +125,18 @@ export default function App() {
       {error && <div className="banner error">{error}</div>}
 
       <nav>
-        {(['alerts', 'events', 'runs'] as Tab[]).map((t) => (
+        {(['queue', 'alerts', 'posts', 'events', 'runs'] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-            {{ alerts: 'Alerts & drafts', events: 'Events', runs: 'Runs' }[t]}
+            {{ queue: 'What to post', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
+            {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}
           </button>
         ))}
       </nav>
 
       <main>
+        {tab === 'queue' && <QueueView refreshKey={refreshKey} busy={!!job?.running} summary={summary} onJob={setJob} onChange={refresh} />}
         {tab === 'alerts' && <AlertsView refreshKey={refreshKey} busy={!!job?.running} onJob={setJob} onChange={refresh} />}
+        {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'events' && <EventsView refreshKey={refreshKey} />}
         {tab === 'runs' && <RunsView refreshKey={refreshKey} />}
       </main>

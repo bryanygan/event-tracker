@@ -1,13 +1,15 @@
 """Detectors: plain rules over the database that decide what's worth a video.
 
 Each detector returns alert dicts:
-    {"key": dedupe key, "kind": ..., "title": ..., "score": ..., "facts": {...}}
+    {"key": dedupe key, "kind": ..., "title": ..., "score": ..., "facts": {...},
+     "event_ids": [...], "post_by": UTC ISO or None, "expires_at": UTC ISO or None}
 `facts` is everything the LLM is allowed to say, already formatted for humans
 (e.g. "Sat, Nov 8 · 8:00 PM"), so the model never has to do date math.
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from collections import defaultdict
@@ -19,6 +21,7 @@ from .scoring import is_game, upcoming_events
 from .store import now_iso
 
 TZ = ZoneInfo(config.TIMEZONE)
+log = logging.getLogger(__name__)
 
 
 # ---------- formatting helpers (facts are pre-formatted so the LLM can copy them) ----------
@@ -43,6 +46,17 @@ def fmt_utc_local(iso: str) -> str:
 
 def parse_utc(iso: str) -> datetime:
     return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+
+def utc_iso(iso: str) -> str:
+    """'2026-10-22T14:00:00Z' -> '2026-10-22T14:00:00+00:00' (the format stored everywhere else)."""
+    return parse_utc(iso).astimezone(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def et_iso(d: date | str, hour: int, minute: int = 0) -> str:
+    """A Philly wall-clock time on day `d`, as UTC ISO. Used for when a video should be up by."""
+    d = date.fromisoformat(d) if isinstance(d, str) else d
+    return datetime(d.year, d.month, d.day, hour, minute, tzinfo=TZ).astimezone(timezone.utc).isoformat()
 
 
 def fmt_price(lo, hi) -> str | None:
@@ -172,6 +186,8 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
                 "history": history,
                 "your_plays": my_plays,
             },
+            "event_ids": [e["id"] for e in events],
+            "expires_at": et_iso(events[-1]["local_date"], 23, 59),
         })
     return alerts
 
@@ -243,6 +259,9 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
                 "history": history,
                 "your_plays": my_plays,
             },
+            "event_ids": [e["id"] for e in evs],
+            "post_by": utc_iso(first_start),               # the reminder is only useful before it opens
+            "expires_at": utc_iso(max(st for _, st in windows)),
         })
     return alerts
 
@@ -292,6 +311,9 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
             "weekend": f"{fmt_date(fri.isoformat())} – {fmt_date(sun.isoformat())}",
             "shows": [event_facts(e) for e in picks],
         },
+        "event_ids": [e["id"] for e in picks],
+        "post_by": et_iso(fri, 17),                        # people plan their weekend before Friday evening
+        "expires_at": et_iso(fri + timedelta(days=1), 18),
     }]
 
 
@@ -333,6 +355,9 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "notable_show_count": len(unique),
                 "shows": [event_facts(e) for e in top],
             },
+            "event_ids": [e["id"] for e in top],
+            "post_by": et_iso(f"{ym}-01", 0),              # before the month starts
+            "expires_at": et_iso(f"{ym}-15", 23, 59),      # matches "past mid-month is too late" above
         })
     return alerts
 
@@ -361,6 +386,8 @@ def detect_status_changes(conn: sqlite3.Connection, run_id: int, today: str) -> 
                 "previous_value": c["old_value"],
                 "show": event_facts(e),
             },
+            "event_ids": [e["id"]],
+            "expires_at": et_iso(e["local_date"], 23, 59),
         })
     return alerts
 
@@ -388,6 +415,9 @@ def detect_team_week(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "week": f"{fmt_date(monday.isoformat())} – {fmt_date(sunday.isoformat())}",
                 "shows": [event_facts(e) for e in games],
             },
+            "event_ids": [e["id"] for e in games],
+            "post_by": et_iso(games[0]["local_date"], 12),
+            "expires_at": et_iso(games[-1]["local_date"], 23, 59),
         })
     return alerts
 
@@ -413,6 +443,9 @@ def detect_big_games(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "opponent": e["opponent"],
                 "show": event_facts(e),
             },
+            "event_ids": [e["id"]],
+            "post_by": et_iso(e["local_date"], 12),
+            "expires_at": et_iso(e["local_date"], 23, 59),
         })
     return alerts
 
@@ -433,15 +466,89 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
     return alerts
 
 
+# Facts that change on every run without anything real happening; ignored when deciding whether an alert changed.
+VOLATILE_FACTS = {"hours_until_open", "your_plays"}
+
+
+def _stable(facts: dict) -> dict:
+    # None and missing mean the same (alerts raised before a fact existed don't have the key at all)
+    return {k: v for k, v in facts.items() if k not in VOLATILE_FACTS and v is not None}
+
+
 def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
-    """Insert alerts, skipping ones we've already raised. Returns ids of newly created alerts."""
-    created = []
+    """Insert new alerts; refresh the facts of ones already raised. Returns ids of newly created alerts.
+
+    A weekend roundup raised on Wednesday is re-detected on Thursday and Friday; if a show was added or
+    cancelled meanwhile, its facts, title and score are updated (the old version goes to alert_history).
+    Drafts are never touched: each keeps the facts it was written from, and the dashboard shows what
+    changed since (facts_diff). Dismissed alerts and alerts you've logged a post for are left as they were.
+    """
+    created, refreshed = [], 0
     for a in alerts:
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO alerts (key, kind, title, score, facts, created_at) VALUES (?,?,?,?,?,?)",
-            (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso()),
-        )
-        if cur.rowcount:
+        meta = (json.dumps(a["event_ids"]) if a.get("event_ids") else None, a.get("post_by"), a.get("expires_at"))
+        old = conn.execute("SELECT * FROM alerts WHERE key=?", (a["key"],)).fetchone()
+        if old is None:
+            cur = conn.execute(
+                """INSERT INTO alerts (key, kind, title, score, facts, created_at, event_ids, post_by, expires_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso(), *meta))
             created.append(cur.lastrowid)
+            continue
+        # Links and timing aren't facts the video states: keep them current (alerts from before they existed get them here)
+        if meta != (old["event_ids"], old["post_by"], old["expires_at"]):
+            conn.execute("UPDATE alerts SET event_ids=?, post_by=?, expires_at=? WHERE id=?", (*meta, old["id"]))
+        posted = conn.execute("SELECT 1 FROM posts WHERE alert_id=? LIMIT 1", (old["id"],)).fetchone()
+        if old["status"] == "dismissed" or posted or _stable(json.loads(old["facts"])) == _stable(a["facts"]):
+            continue
+        conn.execute("INSERT INTO alert_history (alert_id, title, score, facts, replaced_at) VALUES (?,?,?,?,?)",
+                     (old["id"], old["title"], old["score"], old["facts"], now_iso()))
+        conn.execute("UPDATE alerts SET title=?, score=?, facts=?, updated_at=? WHERE id=?",
+                     (a["title"], a["score"], json.dumps(a["facts"]), now_iso(), old["id"]))
+        refreshed += 1
     conn.commit()
+    if refreshed:
+        log.info("Refreshed facts on %d existing alerts", refreshed)
     return created
+
+
+def _show_label(s: dict) -> str:
+    return f"{s.get('artist') or s.get('event_name')} ({s.get('date')})"
+
+
+def _show_key(s: dict) -> tuple:
+    return (s.get("artist") or s.get("event_name"), s.get("date"), s.get("venue"))
+
+
+SHOW_FIELDS = ("time", "status", "price", "venue", "support")  # per-show facts worth reporting when they change
+
+
+def facts_diff(old: dict, new: dict) -> list[str]:
+    """What changed between two versions of an alert's facts, as short lines for the dashboard
+    ("Added: Nova Vale (Sat, Oct 24)", "Removed: ...", "sale_opens: A → B"). Empty if nothing material."""
+    out = []
+    old_shows = old.get("shows") or ([old["show"]] if old.get("show") else [])
+    new_shows = new.get("shows") or ([new["show"]] if new.get("show") else [])
+    before = {_show_key(s): s for s in old_shows}
+    after = {_show_key(s): s for s in new_shows}
+    out += [f"Added: {_show_label(s)}" for k, s in after.items() if k not in before]
+    out += [f"Removed: {_show_label(s)}" for k, s in before.items() if k not in after]
+    for k in before.keys() & after.keys():
+        for f in SHOW_FIELDS:
+            if before[k].get(f) != after[k].get(f):
+                out.append(f"{_show_label(after[k])}: {f} {before[k].get(f) or '—'} → {after[k].get(f) or '—'}")
+    for key in ("all_sales", "presales"):
+        was = {(w["name"], w.get("opens") or w.get("starts")) for w in old.get(key) or []}
+        now = {(w["name"], w.get("opens") or w.get("starts")) for w in new.get(key) or []}
+        out += [f"New sale: {n}, {t}" for n, t in sorted(now - was)]
+        out += [f"Sale no longer listed: {n}, {t}" for n, t in sorted(was - now)]
+    was_last, now_last = ((f.get("history") or {}).get("last_philly_show") for f in (old, new))
+    if was_last != now_last:
+        out.append(f"Last Philly show (setlist.fm): {was_last or '—'} → {now_last or '—'}")
+    skip = VOLATILE_FACTS | {"shows", "show", "all_sales", "presales", "history"}
+    for k in sorted((old.keys() | new.keys()) - skip):
+        if old.get(k) != new.get(k):
+            if isinstance(old.get(k), (dict, list)) or isinstance(new.get(k), (dict, list)):
+                out.append(f"{k} changed")
+            else:
+                out.append(f"{k}: {old.get(k) if old.get(k) is not None else '—'} → {new.get(k) if new.get(k) is not None else '—'}")
+    return out

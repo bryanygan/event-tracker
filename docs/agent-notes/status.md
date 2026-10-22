@@ -71,6 +71,23 @@ pipeline is polished and has run for a while without hiccups.
 Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).
 Proposed approach: measure which notable venues are missing, then read those venues' own calendars, deduped against TM.
 
+## Creator roadmap progress (see creator-roadmap.md §15)
+
+| Item | State |
+|---|---|
+| P0-01/02 opportunity data + explainable score | Built on `feature/content-queue` (alerts = opportunities; see decisions.md) |
+| P0-03 creator-first queue | Built: "What to post" tab (shortlist / later / note / dismiss, inline draft) |
+| P0-04 posts + manual metrics | Built on `feature/post-tracking` |
+| P0-05 format analytics | Built (basic): same-age medians, per-1k rates, sample-size flag |
+| P0-06 three hooks/angles per idea | Not started. Next candidate |
+| P0-07 stale roundup refresh | Built on `feature/alert-refresh` |
+| P1-08 3–5 pick / genre-cut roundups | Not started |
+| P1-09 manual trend notes | Not started (would fill the "search demand" component) |
+| P1-10..13, P2 | Not started. Midday pass and mobile editing need user decisions |
+
+Branches stack: `feature/post-tracking` → `feature/alert-refresh` → `feature/content-queue`.
+`fix/db-thread` is independent (from `main`) and also cherry-picked into the stack. **Awaiting merge approval.**
+
 ## Open questions for the user
 
 - Is Deezer's ranking good enough, or would they get a Last.fm key (listeners + tags) as a second signal?

@@ -53,6 +53,32 @@ COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the g
 MULTI_ACT_MIN = 5                  # acts on one bill for the last show to count as a festival/radio show
 COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
 
+# --- Content queue (tracker/opportunities.py) ---
+# EXPERIMENTAL weights for "is this a good video right now?", separate from event notability (scoring.py).
+# Guesses from the creator roadmap, not measured: revisit once logged posts have numbers. Bump the version
+# whenever you change a weight or a rule, so a post's saved score says which rules produced it.
+OPPORTUNITY_RULES_VERSION = "2026-10-21.1"
+OPPORTUNITY_WEIGHTS = {
+    "audience": 0.25,    # how many people care (notability, incl. your-taste boost)
+    "timing": 0.25,      # fresh news / deadline coming up
+    "story": 0.20,       # comeback, big name in a small room, a genuinely packed month
+    "local": 0.15,       # Philly + in your lane
+    "search": 0.10,      # search demand / content gap: no data source yet, so always unknown for now
+    "ready": 0.05,       # facts complete, draft written and clean
+}
+NEWS_FRESH_HOURS = 24      # announcements: post within a day...
+NEWS_EXPIRES_DAYS = 7      # ...and after a week it's not news anymore
+RECENT_POST_DAYS = 14      # warn when you already posted about the same artist this recently
+# Opportunity score bands on the cards. Set from the first real queue (2026-10-21): at 70/50, 14 of 21 ideas
+# were "strong" because every presale alert is by construction <72h out and maxes the timing component.
+QUEUE_STRONG, QUEUE_MEDIUM = 80, 65
+REASON_MIN = 75            # a component counts as a reason on the card at this value or above
+
+# --- Posted videos (tracker/posts.py) ---
+# A group (a format, a video style) needs this many posts with numbers at the same age before the
+# dashboard compares it with others. Below that it's shown as "too few to compare".
+ANALYTICS_MIN_POSTS = 3
+
 # --- Your niche (tracker/listening.py) ---
 # The user covers mostly rap, hyperpop, pop, R&B, EDM, bedroom/indie pop, but is open to anything notable.
 # Plays are counted over the last LISTENING_WINDOW_DAYS. Bonuses add to the normal 0-100 score.

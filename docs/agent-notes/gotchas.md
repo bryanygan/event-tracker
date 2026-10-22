@@ -37,6 +37,13 @@
   Ollama (orphans appear when the pipeline itself is killed mid-run). **When checking for leftovers, match
   `ollama|llama-server`**, and check free RAM (`Win32_OperatingSystem.FreePhysicalMemory`).
 
+- **FastAPI may tear down a sync dependency on a different thread** than the one that ran its setup, and sqlite3
+  refused `close()` there: random 500s when the browser loads several endpoints at once. Tests didn't catch it
+  (TestClient requests are sequential). Fixed with `check_same_thread=False` in `db.connect` (2026-10-21).
+- **Headless Edge lays pages out at least ~492px wide** (`--window-size=412,...` still gives `innerWidth=492`) and
+  crops the screenshot, so phone-width screenshots look cut off on the right. Not a page bug. Screenshots:
+  `msedge --headless=new --user-data-dir=<scratch> --window-size=1200,2400 --virtual-time-budget=8000 --screenshot=<png> <url>`.
+
 ## Data assumptions that were wrong
 
 - Assumed Spotify would give popularity/genres. It doesn't anymore (see decisions.md). Check API responses
@@ -73,6 +80,8 @@
 - The model said tickets "are live now" before the sale opened, and told people to find codes for a general
   on-sale. Neither is caught automatically; the presale guide now addresses both explicitly. **Read presale
   captions before posting.**
+- Alert facts gained keys over time (`history` arrived with setlist.fm). Comparing old vs new facts naively
+  flagged 6 presale alerts as "changed" when only `history: None` had appeared. Treat None and missing alike.
 - It guessed artist pronouns; the system prompt now says to use the name or "they".
 
 ## Feeds and dates
