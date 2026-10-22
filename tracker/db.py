@@ -151,7 +151,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     created_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, filmed, rejected
     notes TEXT,
-    facts TEXT                      -- JSON: the alert's facts this draft was written from
+    facts TEXT,                     -- JSON: the alert's facts this draft was written from
+    angle TEXT                      -- angles.py key the draft was written from (NULL = default)
 );
 
 -- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
@@ -217,7 +218,7 @@ _ADDED_COLUMNS = {
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
-    "drafts": {"facts": "TEXT"},
+    "drafts": {"facts": "TEXT", "angle": "TEXT"},
     "posts": {"opportunity_snapshot": "TEXT"},
 }
 # Run once, right after the column is added to an existing database.

@@ -51,7 +51,7 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
       {shown.length === 0 && <p className="muted">Nothing here yet. Alerts show up after a pipeline run finds something.</p>}
       {shown.map((a) => (
         <AlertCard key={a.id} alert={a} busy={busy}
-          onRegenerate={async () => onJob(await api.regenerate(a.id))}
+          onRegenerate={async (angle) => onJob(await api.regenerate(a.id, angle))}
           onStatus={async (s) => { await api.setAlertStatus(a.id, s); load(); onChange() }}
           onDraftChange={() => { load(); onChange() }} />
       ))}
@@ -60,7 +60,7 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
 }
 
 export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
-  alert: Alert; busy: boolean; onRegenerate: () => void
+  alert: Alert; busy: boolean; onRegenerate: (angle?: string) => void
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
   const [showOlder, setShowOlder] = useState(false)
@@ -102,6 +102,25 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
         <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
       </details>
 
+      {alert.angles.length > 0 && (
+        <details className="angles" open={!latest}>
+          <summary>Angles ({alert.angles.length}): pick one to draft from</summary>
+          {alert.angles.map((a) => (
+            <div key={a.key} className="angle">
+              <div>
+                <span className="pill">{a.label}</span> <strong>“{a.hook}”</strong>
+                <div className="muted small">{a.pitch} · {a.style} · CTA: {a.cta}</div>
+              </div>
+              {!STATIC && <button className="ghost" disabled={busy} onClick={() => onRegenerate(a.key)}
+                                  title={['presale', 'status_change', 'team_week', 'big_game'].includes(String(alert.facts.format))
+                                    ? 'templated format: drafted instantly, no model' : 'the model writes the script around this hook (~1 min)'}>
+                Draft this
+              </button>}
+            </div>
+          ))}
+        </details>
+      )}
+
       {latest ? <DraftView draft={latest} alertId={alert.id} onChange={onDraftChange} /> : <p className="muted">No draft yet.</p>}
       {older.length > 0 && (
         <button className="link" onClick={() => setShowOlder(!showOlder)}>
@@ -111,7 +130,7 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       {showOlder && older.map((d) => <DraftView key={d.id} draft={d} alertId={alert.id} onChange={onDraftChange} />)}
 
       {!STATIC && <div className="actions">
-        <button onClick={onRegenerate} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
+        <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
         {alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>}
@@ -163,7 +182,7 @@ function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number
       {block('Caption', 'caption', 3)}
       {block('Hashtags', 'hashtags', 1)}
       <div className="draft-foot">
-        <span className="muted small">#{draft.id} · {draft.model} · {new Date(draft.created_at).toLocaleString()}</span>
+        <span className="muted small">#{draft.id} · {draft.model}{draft.angle ? ` · ${draft.angle} angle` : ''} · {new Date(draft.created_at).toLocaleString()}</span>
         <CopyButton label="Copy caption + tags" text={`${fields.caption}\n\n${fields.hashtags}`} />
         {STATIC ? <span className="pill">{STATUS_LABEL[draft.status]}</span> : <>
           {editing

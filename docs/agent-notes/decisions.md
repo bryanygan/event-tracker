@@ -186,3 +186,10 @@ shows `facts_diff` against the current facts. Re-drafting is the user's call (LL
 **Posts and metrics are typed in by hand.** No TikTok API or scraping. Comparisons use the snapshot nearest
 24h (18–36h) / 7d (5–10d), medians, per-1k-view rates, and mark groups under `ANALYTICS_MIN_POSTS` (3) as too
 few. Unrecorded metrics are NULL, never 0.
+
+**Angles are deterministic (P0-06).** `tracker/angles.py` builds 2–4 framings per idea (news / fan / utility, plus
+comeback when setlist.fm supports it) with hook, brief, video style and CTA, from facts only. All hooks pass
+`check_facts` (tested against every real alert). Picking an angle on a templated format makes a complete draft
+with no model call; on LLM formats the hook is fixed and the angle goes into the prompt. Hooks avoid claims the
+facts can't time-check: "How to get X tickets", not "X tickets go on sale Friday" (facts have no year, so a past
+on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to the creator.

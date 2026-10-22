@@ -287,7 +287,7 @@ HOOK_ONLY_SCHEMA = {
 
 
 def generate(facts: dict, model: str | None = None, script: str | None = None,
-             caption: str | None = None) -> dict:
+             caption: str | None = None, angle: dict | None = None) -> dict:
     """Call Ollama once and return the parsed draft dict. Raises on failure.
 
     With a templated `script` and `caption` (presale/status formats), the model only writes the
@@ -295,6 +295,9 @@ def generate(facts: dict, model: str | None = None, script: str | None = None,
     """
     model = model or config.OLLAMA_MODEL
     prompt = build_prompt(facts)
+    if angle:  # the creator picked a framing; the hook is fixed and the model writes around it
+        prompt += (f"\n\nANGLE: {angle['label']}. {angle['pitch']}\nThe hook is already chosen: \"{angle['hook']}\". "
+                   f"Start the script right after it (don't repeat it). End the caption with: {angle['cta']}")
     if script:
         prompt += ("\n\nThe voiceover script is ALREADY WRITTEN (below). Do not rewrite it. Write only a hook "
                    "(the first line on screen, leading into this script) and hashtags.\n"
@@ -319,7 +322,7 @@ def generate(facts: dict, model: str | None = None, script: str | None = None,
     caption_tags = re.findall(r"(?<!\w)#\w+", out["caption"])
     tags = clean_hashtags(list(out.get("hashtags", [])) + caption_tags, facts)
     return {
-        "hook": spoken(out["hook"]),
+        "hook": angle["hook"] if angle else spoken(out["hook"]),
         "script": script or spoken(out["script"]),
         "caption": caption or re.sub(r"[ \t]*(?<!\w)#\w+", "", out["caption"]).strip(),
         "hashtags": tags[:8],
