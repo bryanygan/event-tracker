@@ -65,6 +65,10 @@ class TicketmasterClient:
         self.calls = 0
         self._last_call = 0.0
 
+    def _redact(self, message: str) -> str:
+        message = re.sub(r"apikey=[^&\s'\"]+", "apikey=***", message)
+        return message.replace(self.api_key, "***") if self.api_key else message
+
     def _get(self, params: dict, url: str = BASE_URL) -> dict:
         if self.calls >= self.budget:
             raise BudgetExceeded(f"Hit self-imposed budget of {self.budget} calls")
@@ -74,11 +78,16 @@ class TicketmasterClient:
                 time.sleep(wait)
             self._last_call = time.monotonic()
             self.calls += 1
-            resp = self.session.get(url, params={**params, "apikey": self.api_key}, timeout=30)
-            if resp.status_code == 429:  # rate limited: back off and retry
-                time.sleep(2 ** attempt)
-                continue
-            resp.raise_for_status()
+            try:
+                resp = self.session.get(url, params={**params, "apikey": self.api_key}, timeout=30)
+                if resp.status_code == 429:  # rate limited: back off and retry
+                    time.sleep(2 ** attempt)
+                    continue
+                resp.raise_for_status()
+            except requests.RequestException as exc:
+                # requests puts the full URL (key included) in its messages, and those end up in the
+                # log, runs.error, the Runs tab and the snapshot: re-raise without it.
+                raise type(exc)(self._redact(str(exc))) from None
             return resp.json()
         raise RuntimeError("Ticketmaster kept returning 429 (rate limited)")
 

@@ -14,9 +14,10 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from contextlib import closing
+from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -26,6 +27,32 @@ from .scoring import upcoming_events
 log = logging.getLogger(__name__)
 app = FastAPI(title="Philly Events Tracker")
 DIST = config.ROOT / "dashboard" / "dist"
+
+# This API is only for the dashboard on this PC. Without these checks any website open in your browser could
+# POST to it (run the pipeline, publish, spend web lookups) or, via DNS rebinding, read it.
+# "testserver" is FastAPI's TestClient; it isn't a resolvable public name.
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "testserver"}
+MAX_BODY_BYTES = 12_000_000
+
+
+def _hostname(value: str) -> str:
+    return urlsplit(value if "//" in value else f"//{value}").hostname or ""
+
+
+@app.middleware("http")
+async def local_only(request: Request, call_next):
+    if _hostname(request.headers.get("host", "")) not in LOCAL_HOSTS:
+        return JSONResponse({"detail": "unknown host"}, status_code=403)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if (origin and _hostname(origin) not in LOCAL_HOSTS) or request.headers.get("sec-fetch-site") == "cross-site":
+            return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
+        # Every write the dashboard makes is a small JSON body (slides with photos are the biggest). No length
+        # header means no body (e.g. DELETE), unless it's chunked, which the dashboard never sends.
+        size = request.headers.get("content-length", "0")
+        if "transfer-encoding" in request.headers or not size.isdigit() or int(size) > MAX_BODY_BYTES:
+            return JSONResponse({"detail": "request body too large"}, status_code=413)
+    return await call_next(request)
 
 # One background job at a time (a pipeline run or a draft regeneration), so the
 # N95 never runs two LLM generations at once.

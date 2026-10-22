@@ -93,7 +93,8 @@ RECENT_POST_DAYS = 14      # warn when you already posted about the same artist 
 # were "strong" because every presale alert is by construction <72h out and maxes the timing component.
 QUEUE_STRONG, QUEUE_MEDIUM = 80, 65
 REASON_MIN = 75            # a component counts as a reason on the card at this value or above
-TREND_NOTE_DAYS = 7        # a trend note stops counting this long after you saw it (unless you set expires_at)
+TREND_NOTES_MAX = 500      # refuse new notes past this (each is matched against every idea on every queue load)
+TREND_NOTE_DAYS = 7       # a trend note stops counting this long after you saw it (unless you set expires_at)
 
 # --- Posted videos (tracker/posts.py) ---
 # A group (a format, a video style) needs this many posts with numbers at the same age before the

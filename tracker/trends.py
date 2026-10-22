@@ -112,6 +112,8 @@ def _row(r, now: datetime) -> dict:
 def create_note(conn, now: datetime | None = None, **fields) -> int:
     now = now or datetime.now(timezone.utc)
     f = validate(fields)
+    if conn.execute("SELECT COUNT(*) FROM trend_notes").fetchone()[0] >= config.TREND_NOTES_MAX:
+        raise TrendError(f"too many trend notes ({config.TREND_NOTES_MAX}); delete old ones first")
     f.setdefault("observed_at", now.replace(microsecond=0).isoformat())
     if not f.get("expires_at"):
         f["expires_at"] = (datetime.fromisoformat(f["observed_at"]) + timedelta(days=config.TREND_NOTE_DAYS)).isoformat()
