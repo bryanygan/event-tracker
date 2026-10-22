@@ -135,6 +135,18 @@ input.grow { flex: 1; }
 .embedded > .card { border-left-width: 1px; margin: 12px 0 0; }
 .embedded > .card .actions { flex-wrap: wrap; }
 .actions { flex-wrap: wrap; }
+.trend-panel { margin: 0 0 14px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.trend-panel > summary { cursor: pointer; }
+.trend-row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.trend-row.thin { opacity: 0.55; }
+.trend-main { min-width: 0; overflow-wrap: anywhere; }
+.trend-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.trend-form .form-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.trend-form input.grow { flex: 1 1 200px; min-width: 0; }
+.trend-form input.days { width: 4em; }
+.trend-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.pill.trend { white-space: normal; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; color: var(--text); }
+@media (max-width: 640px) { .trend-panel > summary .muted { display: none; } }
 
 @media (max-width: 640px) {
   .stats { gap: 14px; flex-wrap: wrap; }

@@ -207,6 +207,23 @@ CREATE TABLE IF NOT EXISTS web_context (
     created_at TEXT NOT NULL        -- UTC ISO
 );
 CREATE INDEX IF NOT EXISTS idx_web_context_subject ON web_context(subject, created_at);
+
+-- Trends you noticed, typed in by hand (tracker/trends.py). Evidence for the queue's "search" component.
+CREATE TABLE IF NOT EXISTS trend_notes (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,             -- sound, search, hashtag, topic, other
+    text TEXT NOT NULL,             -- what you saw, e.g. a search term or the sound's name
+    terms TEXT NOT NULL,            -- JSON list: artists, genres, venues or keywords it should match
+    scope TEXT NOT NULL,            -- philly, national, unknown
+    confidence TEXT NOT NULL,       -- low, medium, high
+    momentum TEXT,                  -- rising, stable, uncertain (your read; never computed)
+    source_url TEXT,
+    notes TEXT,
+    observed_at TEXT NOT NULL,      -- UTC ISO: when you saw it
+    expires_at TEXT NOT NULL,       -- UTC ISO: stops counting after this
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
 """
 
 

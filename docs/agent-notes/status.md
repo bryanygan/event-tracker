@@ -83,7 +83,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P0-07 stale roundup refresh | Merged |
 | Web context (not in roadmap) | Merged 2026-10-22: Perplexity lookups on cards, capped and cached |
 | P1-08 3–5 pick / genre-cut roundups | Not started |
-| P1-09 manual trend notes | Not started (would fill the "search demand" component) |
+| P1-09 manual trend notes | Built on `feature/trend-notes`: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
 | P1-10..13, P2 | Not started. Midday pass and mobile editing need user decisions |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.

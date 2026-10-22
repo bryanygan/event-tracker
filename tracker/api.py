@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import angles, config, context, db, drafts, llm, opportunities, posts, publish
+from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, trends
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -296,6 +296,50 @@ def delete_metrics(metrics_id: int, c=Depends(get_db)):
 @app.get("/api/analytics")
 def analytics(group_by: str = "format", c=Depends(get_db)):
     return _post_call(posts.analytics, c, group_by)
+
+
+class TrendFields(BaseModel):
+    kind: str | None = None
+    text: str | None = None
+    terms: list[str] | None = None
+    scope: str | None = None
+    confidence: str | None = None
+    momentum: str | None = None
+    source_url: str | None = None
+    notes: str | None = None
+    observed_at: str | None = None  # ISO with timezone; default now
+    expires_at: str | None = None   # default observed_at + TREND_NOTE_DAYS
+
+
+def _trend_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except trends.TrendError as exc:
+        raise HTTPException(400, str(exc))
+    except LookupError:
+        raise HTTPException(404)
+
+
+@app.get("/api/trends")
+def list_trends(c=Depends(get_db)):
+    return trends.list_notes(c)
+
+
+@app.post("/api/trends", status_code=201)
+def create_trend(body: TrendFields, c=Depends(get_db)):
+    return {"id": _trend_call(trends.create_note, c, **body.model_dump(exclude_none=True))}
+
+
+@app.patch("/api/trends/{note_id}")
+def update_trend(note_id: int, body: TrendFields, c=Depends(get_db)):
+    _trend_call(trends.update_note, c, note_id, **body.model_dump(exclude_unset=True))
+    return {"ok": True}
+
+
+@app.delete("/api/trends/{note_id}")
+def delete_trend(note_id: int, c=Depends(get_db)):
+    _trend_call(trends.delete_note, c, note_id)
+    return {"ok": True}
 
 
 @app.get("/api/events")

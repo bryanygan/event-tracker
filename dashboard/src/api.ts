@@ -167,6 +167,30 @@ export type QueueItem = {
   expires_at: string | null
   stage: Stage
   rules_version: string
+  trend_notes: TrendMatch[] // your trend notes that match this idea, expired ones included (marked)
+}
+
+// Trends you noticed, typed in by hand (tracker/trends.py). Evidence, never facts for drafts.
+export const TREND_KINDS = ['search', 'sound', 'hashtag', 'topic', 'other'] as const
+export const TREND_SCOPES = ['philly', 'national', 'unknown'] as const
+export const TREND_CONFIDENCE = ['low', 'medium', 'high'] as const
+export type TrendNote = {
+  id: number
+  kind: (typeof TREND_KINDS)[number]
+  text: string
+  terms: string[]
+  scope: (typeof TREND_SCOPES)[number]
+  confidence: (typeof TREND_CONFIDENCE)[number]
+  momentum: 'rising' | 'stable' | 'uncertain' | null
+  source_url: string | null
+  notes: string | null
+  observed_at: string
+  expires_at: string
+  expired: boolean
+}
+export type TrendInput = Partial<Omit<TrendNote, 'id' | 'expired'>>
+export type TrendMatch = Pick<TrendNote, 'id' | 'kind' | 'text' | 'scope' | 'confidence' | 'observed_at' | 'expires_at' | 'expired'> & {
+  matched_term: string; match: 'exact' | 'title'; value: number
 }
 
 export type Queue = {
@@ -256,6 +280,10 @@ const staticApi = {
   deletePost: readOnly,
   addMetrics: readOnly,
   deleteMetrics: readOnly,
+  trends: () => snapshot<TrendNote[]>('trends').catch(() => [] as TrendNote[]), // older snapshots have no file
+  createTrend: readOnly,
+  updateTrend: readOnly,
+  deleteTrend: readOnly,
 }
 
 const liveApi = {
@@ -288,6 +316,11 @@ const liveApi = {
   addMetrics: (postId: number, fields: MetricsInput) =>
     req<{ id: number }>(`/api/posts/${postId}/metrics`, { method: 'POST', body: JSON.stringify(fields) }),
   deleteMetrics: (id: number) => req(`/api/metrics/${id}`, { method: 'DELETE' }),
+  trends: () => req<TrendNote[]>('/api/trends'),
+  createTrend: (fields: TrendInput) => req<{ id: number }>('/api/trends', { method: 'POST', body: JSON.stringify(fields) }),
+  updateTrend: (id: number, fields: TrendInput) =>
+    req(`/api/trends/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  deleteTrend: (id: number) => req(`/api/trends/${id}`, { method: 'DELETE' }),
 }
 
 export const api: typeof liveApi = STATIC ? { ...staticApi, publish: readOnly } : liveApi

@@ -118,3 +118,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/web-context`: `tracker/context.py`, `web_context` table, `POST /api/alerts/{id}/context`,
   `/api/context/usage`, pipeline auto step, card section + queue hint, tabs in the URL hash (`#alerts`).
   Real-data check on the DB copy: 1 manual + 3 auto lookups ($0.0063 total), cache reuse confirmed.
+
+### P1-09 trend notes (2026-10-22, agent B on `feature/trend-notes`)
+- `tracker/trends.py`, `trend_notes` table, `/api/trends` CRUD, queue "search" component, snapshot `trends.json`,
+  `TrendNotes.tsx` panel + card pills. 20 new tests (165 total). Real-data check on a DB copy (port 8768):
+  a national artist note, a Philly genre note and an expired note matched the right 7 ideas; the other 14 kept
+  "search" unknown. Screenshots at desktop and ~420px width.
