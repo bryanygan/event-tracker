@@ -59,7 +59,7 @@ button.link { background: none; border: 0; color: var(--accent); padding: 4px 0;
 select, input, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
 textarea { width: 100%; resize: vertical; }
 
-nav { display: flex; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
 button.tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
 .toolbar input { min-width: 220px; }
@@ -130,6 +130,8 @@ input.grow { flex: 1; }
 .actions { flex-wrap: wrap; }
 
 @media (max-width: 640px) {
-  .stats { gap: 14px; }
+  .stats { gap: 14px; flex-wrap: wrap; }
+  .queue-counts { gap: 14px; }
+  .toolbar input { min-width: 0; }
   .run-box { align-items: flex-start; }
 }
