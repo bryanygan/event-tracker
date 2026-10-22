@@ -12,6 +12,7 @@ README is [../../README.md](../../README.md).
 | [environment.md](environment.md) | The machine, what else runs on it, external APIs and what they actually return. |
 | [worklog.md](worklog.md) | Chronological log of sessions: what was done, in order. |
 | [venue-coverage.md](venue-coverage.md) | Which Philly venues Ticketmaster misses, what they sell through, how to read them. |
+| [creator-roadmap.md](creator-roadmap.md) | The creator-strategy review (2026-10-21): proposed features and backlog. A proposal, not current state; `status.md` tracks what's done. |
 
 ## Keeping these useful
 
