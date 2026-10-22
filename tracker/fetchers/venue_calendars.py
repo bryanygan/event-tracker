@@ -16,7 +16,7 @@ import json
 import logging
 import re
 import urllib.robotparser
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -82,23 +82,117 @@ def jsonld_events(page: str) -> list[dict]:
     return found
 
 
+# ---------- HTML parsers for venues without JSON-LD ----------
+# Each returns JSON-LD-shaped dicts (name, startDate, url, offers, performer) so `normalize` handles every
+# source the same way. startDate is naive local time (these sites show Philly times).
+
+def _text(fragment: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", fragment or ""))).strip()
+
+
+def _clock(s: str) -> str | None:
+    """'7 pm' / '7:30 PM' / '19:30' -> '19:30'."""
+    m = re.search(r"(\d{1,2})(?::(\d\d))?\s*([ap])\.?m", s or "", re.I)
+    if m:
+        h = int(m.group(1)) % 12 + (12 if m.group(3).lower() == "p" else 0)
+        return f"{h:02d}:{m.group(2) or '00'}"
+    m = re.search(r"\b(\d{1,2}):(\d\d)\b", s or "")
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
+
+
+def _date_from_weekday(label: str, today: date) -> date | None:
+    """'Thu, Oct 22' has no year; the weekday pins it (Oct 22 is a Thursday in 2026, not 2027)."""
+    m = re.match(r"\s*(\w{3})\w*,?\s+(\w{3})\w*\.?\s+(\d{1,2})", label or "")
+    if not m:
+        return None
+    for year in (today.year, today.year + 1):
+        try:
+            d = datetime.strptime(f"{m.group(2)} {m.group(3)} {year}", "%b %d %Y").date()
+        except ValueError:
+            continue
+        if d.strftime("%a").lower() == m.group(1).lower()[:3] and d >= today - timedelta(days=1):
+            return d
+    return None
+
+
+def parse_rhp(page: str, today: date | None = None) -> list[dict]:
+    """The 'rhp' WordPress events plugin (Johnny Brenda's, Kung Fu Necktie)."""
+    today = today or date.today()
+    items = []
+    for block in page.split("rhp-event__single-event--list")[1:]:  # list layout only (grid repeats featured shows)
+        title = re.search(r'rhp-event__title--list[^>]*>(.*?)</h\d>', block, re.S)
+        day = re.search(r'singleEventDate[^>]*>([^<]+)<', block)
+        if not title or not day:
+            continue
+        d = _date_from_weekday(day.group(1), today)
+        if not d:
+            continue
+        times = re.search(r'rhp-event__time-text--list[^>]*>([^<]+)<', block)
+        show = times and (re.search(r"show:?\s*([^/]+)", times.group(1), re.I) or re.search(r"(.+)", times.group(1)))
+        clock = _clock(show.group(1)) if show else None
+        price = re.search(r'rhp-event__cost-text--list[^>]*>\s*\$?([\d.]+)', block)
+        link = re.search(r'href="(https://www\.etix\.com/ticket/[^"]+)"', block)
+        cta = re.search(r'class="rhp-event-cta ([\w-]+)', block)
+        name = _text(title.group(1))
+        lineup = [p.strip() for p in re.split(r"\s+[~/]\s+", name) if p.strip()]  # "A ~ B ~ C" bills
+        items.append({
+            "@type": "Event", "name": name,
+            "startDate": f"{d.isoformat()}T{clock}:00" if clock else d.isoformat(),
+            "url": link and link.group(1),
+            "offers": {"url": link and link.group(1), "price": price and price.group(1),
+                       "availability": "SoldOut" if cta and "sold" in cta.group(1) else "InStock"},
+            "performer": [{"name": p} for p in lineup] if len(lineup) > 1 else "Organization",
+        })
+    return items
+
+
+def parse_philamoca(page: str, today: date | None = None) -> list[dict]:
+    """PhilaMOCA's own markup: <a class="event event--…"> blocks with <time datetime> dates."""
+    items = []
+    for m in re.finditer(r'<a class="event event--([\w-]+)" href="([^"]+)">(.*?)</a>\s*<!-- end \.event', page, re.S):
+        state, url, block = m.groups()
+        d = re.search(r'class="event__date" datetime="(\d{4}-\d\d-\d\d)"', block)
+        title = re.search(r'class="event__title">(.*?)</span>', block, re.S)
+        if not d or not title:
+            continue
+        label = re.search(r'class="event__label">(.*?)</span>', block, re.S)
+        show = re.search(r'Show<span>:</span></span>\s*<time[^>]*datetime="(\d\d:\d\d)"', block) or \
+            re.search(r'event__details-value" datetime="(\d\d:\d\d)"', block)
+        price = re.search(r'Tickets<span>:</span></span>\s*<span class="event__detail-value">\s*\$?([\d.]+)', block)
+        items.append({
+            "@type": "Event",
+            "name": _text(title.group(1)),
+            "label": _text(label.group(1)) if label else None,  # "Philly Premiere" etc.; checked by the junk filter
+            "startDate": f"{d.group(1)}T{show.group(1)}:00" if show else d.group(1),
+            "url": url,
+            "offers": {"url": url, "price": price and price.group(1),
+                       "availability": "SoldOut" if "sold" in state else "InStock"},
+            "eventStatus": "EventCancelled" if "cancel" in state else None,
+            "performer": "Organization",
+        })
+    return items
+
+
+PARSERS = {"jsonld": lambda page, today=None: jsonld_events(page), "rhp": parse_rhp, "philamoca": parse_philamoca}
+
+
 def fetch_venue(venue: dict, session: requests.Session | None = None) -> list[dict]:
     """Normalized upcoming shows for one configured venue. Raises SourceError on any failure."""
     session = session or requests.Session()
     if not _robots_allows(venue["url"], session):
         raise SourceError("robots.txt disallows reading this page")
     try:
-        r = session.get(venue["url"], headers={"User-Agent": UA}, timeout=30)
+        r = session.get(venue["url"], headers={"User-Agent": UA}, timeout=45)  # PhilaMOCA can be slow
         r.raise_for_status()
     except requests.RequestException as exc:
         raise SourceError(f"fetch failed: {exc}") from exc
-    raw = jsonld_events(r.text)
+    raw = PARSERS[venue.get("parser", "jsonld")](r.text)
     if not raw:
-        raise SourceError("no schema.org events found on the page (site changed?)")
+        raise SourceError("no events found on the page (site changed?)")
     shows = {}
     for item in raw:
         ev = normalize(item, venue)
-        if ev and not is_junk(ev["name"]):
+        if ev and not is_junk(ev["name"]) and not is_junk(item.get("label") or ""):
             shows[ev["id"]] = ev
     return list(shows.values())
 
@@ -139,9 +233,11 @@ def _stable_id(venue_key: str, item: dict, local_date: str, name: str) -> str:
     offers = item.get("offers")
     offers = offers[0] if isinstance(offers, list) and offers else offers
     url = item.get("url") or (offers or {}).get("url") or ""
-    m = re.search(r"tixr\.com/.*-(\d+)(?:[/?#]|$)", url) or re.search(r"dice\.fm/event/([A-Za-z0-9]+)", url)
-    if m:
-        return f"cal:{venue_key}:{'tixr' if 'tixr' in url else 'dice'}-{m.group(1)}"
+    for site, pattern in (("tixr", r"tixr\.com/.*-(\d+)(?:[/?#]|$)"), ("dice", r"dice\.fm/event/([A-Za-z0-9]+)"),
+                          ("etix", r"etix\.com/ticket/p/(\d+)")):
+        m = re.search(pattern, url)
+        if m:
+            return f"cal:{venue_key}:{site}-{m.group(1)}"
     digest = hashlib.sha1(f"{local_date}|{name.casefold()}".encode()).hexdigest()[:10]
     return f"cal:{venue_key}:{digest}"
 

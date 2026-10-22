@@ -5,6 +5,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
   const [q, setQ] = useState('')
   const [genre, setGenre] = useState('')
   const [days, setDays] = useState(30)
+  const [mine, setMine] = useState(false)
   const [genres, setGenres] = useState<string[]>([])
   const [events, setEvents] = useState<EventRow[] | null>(null)
 
@@ -15,6 +16,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
   }, [q, genre, days, refreshKey])
 
   const newCutoff = Date.now() - 3 * 24 * 3600 * 1000
+  const shown = (events ?? []).filter((e) => !mine || e.my_plays > 0)
   return (
     <>
       <div className="toolbar">
@@ -26,15 +28,16 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
         <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {[7, 14, 30, 60, 120, 240].map((d) => <option key={d} value={d}>Next {d} days</option>)}
         </select>
-        <span className="muted small">{events?.length ?? 0} events</span>
+        <label className="small"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> 🎧 artists I listen to</label>
+        <span className="muted small">{shown.length} events</span>
       </div>
       <div className="table-wrap">
         <table className="events">
           <thead>
-            <tr><th>Date</th><th>Artist</th><th>Venue</th><th>Genre</th><th>Price</th><th title="Deezer fans">Fans</th><th title="notability score">★</th><th>Status</th></tr>
+            <tr><th>Date</th><th>Artist</th><th>Venue</th><th>Genre</th><th>Price</th><th title="Deezer fans">Fans</th><th title="your plays, last 2 years">🎧</th><th title="notability score">★</th><th>Status</th></tr>
           </thead>
           <tbody>
-            {events?.map((e) => (
+            {shown.map((e) => (
               <tr key={e.id}>
                 <td className="nowrap">{fmtDate(e.local_date)}{e.local_time ? ` ${fmtTime(e.local_time)}` : ''}</td>
                 <td>
@@ -46,6 +49,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
                 <td>{e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}</td>
                 <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
                 <td className="nowrap">{e.fans != null ? fmtFans(e.fans) : ''}</td>
+                <td className="nowrap" title={e.niche ? 'in your genre lane' : ''}>{e.my_plays ? e.my_plays : e.niche ? '·' : ''}</td>
                 <td>{Math.round(e.score)}</td>
                 <td>{e.status !== 'onsale' ? <span className="pill">{e.status}</span> : ''}</td>
               </tr>

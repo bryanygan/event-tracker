@@ -70,6 +70,9 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
       <div className="card-head">
         <span className="pill">{KIND_LABEL[alert.kind]}</span>
         <h2>{alert.title}</h2>
+        {Number(alert.facts.your_plays) > 0 && (
+          <span className="pill new" title="your plays in the last 2 years">🎧 {String(alert.facts.your_plays)} plays</span>
+        )}
         <span className="muted small" title="notability score">★ {Math.round(alert.score)}</span>
       </div>
 
@@ -88,7 +91,7 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
             ))}
           </tbody>
         </table>
-        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => k !== 'shows' && k !== 'show')), null, 2)}</pre>
+        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
       </details>
 
       {latest ? <DraftView draft={latest} onChange={onDraftChange} /> : <p className="muted">No draft yet.</p>}

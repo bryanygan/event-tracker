@@ -86,6 +86,14 @@ genre and no presales, so they mainly feed weekend roundups, new-show alerts (on
 The user said small-venue shows rarely get TikTok traction but are worth having for niche/notable artists,
 so they score through the normal formula (small venue tier + Deezer) and rarely alert.
 
+**Niche boost from the user's own listening** (2026-10-21). The user covers rap, hyperpop, pop, R&B, EDM,
+bedroom/indie pop (open to anything notable) and asked to use their ttspotslideshow history. `tracker/listening.py`
+reads its `plays.db` read-only (`LISTENING_DB` in .env): plays in the last 2 years → +20/+12/+6 at 200/50/10
+plays, +5 for the genre lane (TM genre or the slideshow's `artist_genres.primary_bucket`, which also gives
+venue-calendar shows a genre). 25+ plays = "in your rotation": new-show and presale alerts bypass the score bars
+and get a 🎧 title prefix. **Privacy (public repo):** no listening data in code, notes or tests (fake DB in tests);
+`your_plays` lives in alert facts for the dashboard but `_prompt_facts` strips it, so drafts never mention it.
+
 ## Detectors
 
 **Presale alerts: one per artist** (2026-10-21). Real shows have 4–5 windows (Citi, Live Nation, venue,

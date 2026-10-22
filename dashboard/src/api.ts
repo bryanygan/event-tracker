@@ -59,6 +59,8 @@ export type EventRow = {
   score: number
   popularity: number | null
   fans: number | null
+  my_plays: number
+  niche: boolean
   first_seen: string
 }
 

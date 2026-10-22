@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from datetime import date
 
-from . import config
+from . import config, listening
 
 WEIGHTS = {"popularity": 0.5, "venue": 0.3, "tour": 0.2}
 
@@ -70,12 +70,21 @@ def game_score(opponent: str | None, local_date: str) -> float:
 def upcoming_events(conn, today: str) -> list[dict]:
     """Upcoming events as dicts with a computed `score`, highest first."""
     rows = [dict(r) for r in conn.execute(EVENT_VIEW_SQL + " ORDER BY e.local_date", (today,))]
+    taste = listening.load()
     for r in rows:
         r["headliner"] = r["headliner"] or r["name"]
         if is_game(r):
             r["opponent"] = (r["support"] or "").split(", ")[0] or None  # home team first, opponent second
             r["score"] = game_score(r["opponent"], r["local_date"])
-        else:
-            r["score"] = score(r["popularity"], r["venue_tier"], r["tm_upcoming_total"])
+            r["my_plays"], r["niche"], r["taste_bonus"] = 0, False, 0
+            continue
+        base = score(r["popularity"], r["venue_tier"], r["tm_upcoming_total"])
+        # Your taste: plays of the headliner or anyone on the bill, plus your genre lane. The genre bucket also
+        # fills in for venue-calendar shows, which come without a genre.
+        r["my_plays"] = taste.plays_for(r["headliner"], *(r["support"] or "").split(", "))
+        r["my_bucket"] = taste.bucket_for(r["headliner"])
+        r["niche"] = listening.in_niche(r["genre"], r["subgenre"], r["my_bucket"])
+        r["taste_bonus"] = listening.plays_bonus(r["my_plays"]) + (config.NICHE_GENRE_BONUS if r["niche"] else 0)
+        r["score"] = min(100.0, round(base + r["taste_bonus"], 1))
     rows.sort(key=lambda r: r["score"], reverse=True)
     return rows

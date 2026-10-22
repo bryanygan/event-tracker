@@ -109,6 +109,10 @@ def history_facts(e: dict, today: str) -> dict | None:
     }
 
 
+def rotation_prefix(my_plays: int) -> str:
+    return "🎧 " if my_plays >= config.ROTATION_MIN_PLAYS else ""
+
+
 def comeback_prefix(history: dict | None) -> str:
     if history and history["is_comeback"]:
         return f"Back after {history['years_since_last_philly_show']} years: "
@@ -144,8 +148,9 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
                WHERE ea.attraction_id=? AND ea.position=0 AND e.id NOT IN (%s) LIMIT 1"""
             % ",".join("?" * len(events)), [artist_id, *[e["id"] for e in events]]).fetchone()
         best = max(e["score"] for e in events)
-        if best < config.NEW_TOUR_MIN_SCORE:
-            continue
+        my_plays = max(e.get("my_plays") or 0 for e in events)
+        if best < config.NEW_TOUR_MIN_SCORE and my_plays < config.ROTATION_MIN_PLAYS:
+            continue  # artists in your rotation alert regardless of how big they are
         events.sort(key=lambda e: e["local_date"])
         head = events[0]
         presales = _presales_for(conn, [e["id"] for e in events])
@@ -153,7 +158,7 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
         alerts.append({
             "key": f"new:{artist_id}:{head['local_date']}",
             "kind": "new_tour",
-            "title": f"{comeback_prefix(history)}{'Added date' if prior else 'New Philly show'}: {head['headliner']}"
+            "title": f"{rotation_prefix(my_plays)}{comeback_prefix(history)}{'Added date' if prior else 'New Philly show'}: {head['headliner']}"
                      f" — {fmt_date(head['local_date'])} at {head['venue_name']}",
             "score": best + (0 if prior else 10) + comeback_bonus(history),
             "facts": {
@@ -165,6 +170,7 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
                 "public_onsale": fmt_utc_local(head["onsale_start"]) if head["onsale_start"] else None,
                 "presales": presales,
                 "history": history,
+                "your_plays": my_plays,
             },
         })
     return alerts
@@ -212,7 +218,8 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
     for artist_key, group in by_artist.items():
         evs = sorted(group["events"].values(), key=lambda e: e["local_date"])
         best = max(e["score"] for e in evs)
-        if not group["triggered"] or best < config.PRESALE_MIN_SCORE:
+        my_plays = max(e.get("my_plays") or 0 for e in evs)
+        if not group["triggered"] or (best < config.PRESALE_MIN_SCORE and my_plays < config.ROTATION_MIN_PLAYS):
             continue
         # Earliest first; at the same time, presales before the general on-sale.
         windows = sorted(group["windows"], key=lambda w: (w[1], w[0] == "General public on-sale", w[0]))
@@ -222,7 +229,7 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
         alerts.append({
             "key": f"sale:{artist_key}:{head['local_date']}",
             "kind": "presale_soon",
-            "title": f"{comeback_prefix(history)}Tickets for {head['headliner']} open {fmt_utc_local(first_start)}"
+            "title": f"{rotation_prefix(my_plays)}{comeback_prefix(history)}Tickets for {head['headliner']} open {fmt_utc_local(first_start)}"
                      f" ({first_name})",
             "score": best + comeback_bonus(history),
             "facts": {
@@ -234,6 +241,7 @@ def detect_sales_soon(conn: sqlite3.Connection, now: datetime, today: str) -> li
                 "all_sales": [{"name": n, "opens": fmt_utc_local(st)} for n, st in windows],
                 "shows": [event_facts(e) for e in evs],
                 "history": history,
+                "your_plays": my_plays,
             },
         })
     return alerts

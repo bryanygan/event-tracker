@@ -16,6 +16,9 @@ LOG_DIR = ROOT / "logs"
 # for possible future OAuth-style endpoints but isn't used today.
 TICKETMASTER_API_KEY = (os.getenv("TICKETMASTER_CONSUMER_KEY") or os.getenv("TICKETMASTER_API_KEY", "")).strip()
 SETLISTFM_API_KEY = os.getenv("SETLISTFM_API_KEY", "").strip()  # "first Philly show since ..." history
+# The user's listening history (ttspotslideshow's plays.db), read-only, for the niche boost. Personal data:
+# never copied into the repo; it only affects scores and dashboard badges.
+LISTENING_DB = os.getenv("LISTENING_DB", "").strip()
 
 # Cloudflare Pages read-only snapshot (tracker/publish.py). Leave PAGES_PROJECT empty to disable.
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
@@ -49,6 +52,19 @@ NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notabi
 COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the gap is at least this
 MULTI_ACT_MIN = 5                  # acts on one bill for the last show to count as a festival/radio show
 COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
+
+# --- Your niche (tracker/listening.py) ---
+# The user covers mostly rap, hyperpop, pop, R&B, EDM, bedroom/indie pop, but is open to anything notable.
+# Plays are counted over the last LISTENING_WINDOW_DAYS. Bonuses add to the normal 0-100 score.
+LISTENING_WINDOW_DAYS = 730
+ROTATION_MIN_PLAYS = 25            # "in your rotation": new shows/presales alert even below the score bars
+PLAYS_BONUS = [(200, 20), (50, 12), (10, 6)]  # (min plays, bonus), first match wins
+NICHE_GENRE_BONUS = 5
+# Genre buckets from ttspotslideshow's artist_genres table that count as your lane.
+NICHE_BUCKETS = {"hip-hop", "trap", "rage", "plugg", "melodic-rap", "drill", "pop", "electronic", "r&b", "indie"}
+# Ticketmaster genres / subgenres that count as your lane.
+NICHE_TM_GENRES = {"Hip-Hop/Rap", "R&B", "Dance/Electronic", "Pop"}
+NICHE_TM_SUBGENRES = {"Indie Pop", "Hyperpop", "Bedroom Pop", "Alternative Rap", "Trap", "Urban"}
 
 # --- Sports ---
 # Extra Ticketmaster classifications fetched each run (~1 API call each), and which teams to keep from them.
@@ -120,6 +136,8 @@ VENUE_TIERS = {
     "noto": 25,
     "perelman theater": 25,
     "johnny brenda": 20,
+    "kung fu necktie": 15,
+    "philamoca": 15,
     "milkboy": 15,
     "nikki lopez": 15,
     "hard rock cafe": 15,
@@ -135,12 +153,22 @@ VENUE_CALENDARS = [
     {"key": "ardmore-music-hall", "name": "Ardmore Music Hall", "url": "https://ardmoremusichall.com/", "city": "Ardmore"},
     {"key": "warehouse-on-watts", "name": "Warehouse on Watts", "url": "https://www.wowphilly.com/", "city": "Philadelphia"},
     {"key": "the-ave-live", "name": "The Ave Live", "url": "https://theavelive.com/", "city": "Philadelphia"},
+    # Etix venues: no JSON-LD, so a per-site HTML parser ("parser"). See venue_calendars.PARSERS.
+    {"key": "johnny-brendas", "name": "Johnny Brenda's", "url": "https://johnnybrendas.com/", "city": "Philadelphia",
+     "parser": "rhp"},
+    {"key": "kung-fu-necktie", "name": "Kung Fu Necktie", "url": "https://kungfunecktie.com/", "city": "Philadelphia",
+     "parser": "rhp"},
+    {"key": "philamoca", "name": "PhilaMOCA", "url": "https://www.philamoca.org/", "city": "Philadelphia",
+     "parser": "philamoca"},
 ]
 # Calendar entries that aren't concerts (matched against the cleaned show name).
 VENUE_JUNK_PATTERNS = [
     r"\bclosed\b", r"\bprivate event\b", r"\bbrunch\b", r"\bkids?\b", r"\bchildren'?s\b", r"\btrivia\b",
     r"\bkaraoke\b", r"\bbingo\b", r"\bcomedy\b", r"\bstand-?up\b", r"\bbook signing\b", r"\bflea\b",
     r"\bmarket\b", r"\bart show\b", r"\bworkshop\b", r"\bopen mic\b", r"\bwatch party\b", r"\bpancakes\b",
+    # PhilaMOCA also hosts film nights and wrestling
+    r"\bscreenings?\b", r"\bpremiere\b", r"\bfilms?\b", r"\bdocumentary\b", r"\bmovies?\b", r"\bwrestling\b",
+    r"\bin attendance\b",  # "TROLL 2 w/ George Hardy in attendance!" = a screening with a guest
 ]
 
 # Ticketmaster lists add-ons as "events". Names matching these are skipped.

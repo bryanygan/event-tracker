@@ -63,7 +63,7 @@ def test_fetch_venue_respects_robots_and_reports_empty_pages():
         vc.fetch_venue(VENUE)
     responses.replace(responses.GET, "https://ua.example/robots.txt", status=404)
     responses.get("https://ua.example/", body="<html>redesigned, no data</html>")
-    with pytest.raises(vc.SourceError, match="no schema.org events"):
+    with pytest.raises(vc.SourceError, match="no events found"):
         vc.fetch_venue(VENUE)
     responses.replace(responses.GET, "https://ua.example/", body=page(tixr_item("Band"), tixr_item("Trivia Night", tixr_id="2")))
     assert [e["name"] for e in vc.fetch_venue(VENUE)] == ["Band"]
@@ -119,3 +119,54 @@ def test_replaying_cache_never_touches_venue_sites(tmp_path, monkeypatch, two_ve
     conn = db.connect(tmp_path / "c.db")
     events, first, failed = pipeline.fetch_calendars(conn, 1, [], from_cache=True)
     assert events == [] and failed == ("cal:ua:", "cal:mb:")
+
+
+# Trimmed copies of the real markup (2026-10-21).
+RHP_BLOCK = """<div class="col-12 eventWrapper rhpSingleEvent py-4 px-0 rhp-event__single-event--list">
+<div class="mb-0 eventMonth singleEventDate text-uppercase ">Thu, Oct 22</div>
+<h2 class="font1by25 rhp-event__title--list lineHeight12"><a href="#">Crucial Device ~ Indigo Ranch ~ David E. Williams</a></h2>
+<span class="font0by75 rhp-event__time-text--list"> Doors: 6 pm // Show: 7 pm </span>
+<span class="rhp-event__cost-text--list"> $15.26 </span>
+<span id="ctaspan-1" class="rhp-event-cta on-sale"><a href="https://www.etix.com/ticket/p/73209820/x?partner_id=100">Buy</a></span>
+</div>"""
+PHILAMOCA_BLOCK = """<a class="event event--tickets-available" href="https://www.etix.com/ticket/p/81103812/">
+<div class="event__info"><h3 class="event__heading"><span class="event__title">Paul Collins&#8217; Beat</span></h3>
+<ul class="event__details"><li class="event__detail event__detail--tickets"><div>
+<span class="event__detail-label">Tickets<span>:</span></span> <span class="event__detail-value">$25</span></div></li>
+<li class="event__detail event__detail--time"><div><span class="event__detail-label">Show<span>:</span></span>
+<time class="event__details-value" datetime="20:00">8:00</time></div></li></ul></div>
+<time class="event__date" datetime="2026-10-29"><span class="event__day-of-week">Thu</span></time>
+</a> <!-- end .event-->
+<a class="event event--tickets-available" href="https://www.etix.com/ticket/p/1/">
+<div class="event__info"><h3 class="event__heading"><span class="event__label">Philly Premiere</span><br>
+<span class="event__title">ROZZ WILLIAMS: ROMEO&#8217;S DISTRESS</span></h3></div>
+<time class="event__date" datetime="2026-10-21"></time>
+</a> <!-- end .event-->"""
+
+
+def test_weekday_pins_the_year():
+    from datetime import date
+    assert vc._date_from_weekday("Thu, Oct 22", date(2026, 10, 21)) == date(2026, 10, 22)
+    assert vc._date_from_weekday("Fri, Jan 8", date(2026, 10, 21)) == date(2027, 1, 8)  # Jan 8 2027 is a Friday
+    assert vc._date_from_weekday("Mon, Oct 22", date(2026, 10, 21)) is None             # no year fits
+    assert vc._clock("Doors: 6 pm") == "18:00" and vc._clock("7:30 PM") == "19:30" and vc._clock("19:30") == "19:30"
+
+
+def test_rhp_parser():
+    from datetime import date
+    [item] = vc.parse_rhp("<html>" + RHP_BLOCK + "</html>", today=date(2026, 10, 21))
+    ev = vc.normalize(item, {**VENUE, "key": "kfn", "name": "Kung Fu Necktie"})
+    assert (ev["local_date"], ev["local_time"], ev["price_min"]) == ("2026-10-22", "19:00:00", 15.26)  # show, not doors
+    assert [a["name"] for a in ev["attractions"]] == ["Crucial Device", "Indigo Ranch", "David E. Williams"]
+    assert ev["id"] == "cal:kfn:etix-73209820" and ev["status"] == "onsale"
+
+
+@responses.activate
+def test_philamoca_parser_and_label_junk_filter():
+    venue = {**VENUE, "key": "pm", "name": "PhilaMOCA", "url": "https://pm.example/", "parser": "philamoca"}
+    responses.get("https://pm.example/robots.txt", status=404)
+    responses.get("https://pm.example/", body="<html>" + PHILAMOCA_BLOCK + "</html>")
+    [ev] = vc.fetch_venue(venue)  # the "Philly Premiere" screening is dropped by its label
+    assert (ev["name"], ev["local_date"], ev["local_time"], ev["price_min"]) == \
+        ("Paul Collins’ Beat", "2026-10-29", "20:00:00", 25.0)
+    assert vc.is_junk("Sandy Loaf’s SMOKERS LOUNGE + short films") and vc.is_junk("TROLL 2 w/ George Hardy in attendance!")

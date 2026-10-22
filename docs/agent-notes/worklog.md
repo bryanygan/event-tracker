@@ -95,3 +95,7 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   protection, `source_runs` + dashboard warning, junk filter, status markers (sold out/cancelled), UTC→ET.
   Live run: +177 shows (704 total in the snapshot), no fake "new" flood. First real new-show alert: Lizzy McAlpine
   at Xfinity Mobile Arena. Found and fixed the "tonight's shows marked removed" bug (undid 6 bogus removals).
+- Merged venue calendars. `feature/niche`: listening-history boost (see decisions.md). Live: rotation artists moved
+  up (e.g. a 48 → 73), in-lane stacked-month alerts appeared for Pop and Dance/Electronic.
+- `feature/etix-venues` (stacked on `feature/niche`): rhp + PhilaMOCA HTML parsers, +71 shows, film/wrestling
+  filter. Live run: 8/8 venues read, 781 events, no fake "new", no bogus removals.

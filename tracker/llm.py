@@ -205,7 +205,8 @@ def _prompt_facts(facts: dict) -> dict:
             if old in s:
                 s[new] = s.pop(old)
         return s
-    out = {k: v for k, v in facts.items() if k != "format"}
+    # your_plays is personal and for the dashboard only; the script shouldn't talk about your listening
+    out = {k: v for k, v in facts.items() if k not in ("format", "your_plays")}
     if "shows" in out:
         out["shows"] = [slim(s) for s in out["shows"]]
     if "show" in out:

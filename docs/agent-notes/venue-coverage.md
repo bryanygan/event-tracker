@@ -3,7 +3,10 @@
 **Implemented (2026-10-21):** `tracker/fetchers/venue_calendars.py` reads the JSON-LD venues listed in
 `config.VENUE_CALENDARS`: Underground Arts, MilkBoy, Ardmore Music Hall, Warehouse on Watts (wowphilly.com,
 Tixr), The Ave Live (theavelive.com, DICE). First live run: 215 shows read, 38 already on TM, 177 added.
-Not done yet: the Etix venues (PhilaMOCA, Johnny Brenda's, Kung Fu Necktie) need per-site HTML parsing.
+Etix venues added the same day with HTML parsers (`parser` key in config): Johnny Brenda's and Kung Fu
+Necktie share the "rhp" WordPress events plugin (`parse_rhp`; dates have no year, the weekday pins it);
+PhilaMOCA has its own markup (`parse_philamoca`; lots of film/wrestling nights, filtered by title and
+label). +71 shows. All 8 venues: ~290 calendar shows on top of Ticketmaster.
 User decisions: World Cafe Live is closing (skip); Tower Theater has nothing booked (skip); NOTO is
 notophl.com (no events on the homepage; TM has 8 of its shows).
 

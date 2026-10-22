@@ -24,7 +24,7 @@ commented code over abstraction.
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
-| Tests | `tests/` | 87 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
+| Tests | `tests/` | 96 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
 ## Live on the machine right now
 
@@ -63,7 +63,9 @@ commented code over abstraction.
 pipeline is polished and has run for a while without hiccups.
 
 **Venue calendars** (merged into `main`; see venue-coverage.md). The DB holds
-~177 `cal:` events from 5 venues.
+~290 `cal:` events from 8 venues. `feature/niche` and `feature/etix-venues` (stacked) are pushed,
+not merged, and **`feature/etix-venues` is checked out**: the DB holds Etix-venue shows that `main` doesn't fetch,
+so on `main` the next run would mark them removed. Merge both, then check out `main`.
 
 **Previously: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
 Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).

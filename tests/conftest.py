@@ -12,3 +12,6 @@ def no_real_services(monkeypatch):
     monkeypatch.setattr(config, "PAGES_ALLOW_PUBLIC", False)
     monkeypatch.setattr(config, "SETLISTFM_API_KEY", "")  # and never spend the real setlist.fm quota
     monkeypatch.setattr(config, "VENUE_CALENDARS", [])    # or fetch real venue sites
+    monkeypatch.setattr(config, "LISTENING_DB", "")       # or read the user's real listening history
+    from tracker import listening
+    monkeypatch.setattr(listening, "_cache", {})
