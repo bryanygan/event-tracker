@@ -79,14 +79,21 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P0-03 creator-first queue | Merged: "What to post" tab (shortlist / later / note / dismiss, inline draft) |
 | P0-04 posts + manual metrics | Merged |
 | P0-05 format analytics | Merged (basic): same-age medians, per-1k rates, sample-size flag |
-| P0-06 three hooks/angles per idea | Built on `feature/angles`: `tracker/angles.py`, no-LLM hooks; templated formats draft with no model |
+| P0-06 three hooks/angles per idea | Merged 2026-10-22 (`2435acb`): `tracker/angles.py`, no-LLM hooks; templated formats draft with no model |
 | P0-07 stale roundup refresh | Merged |
 | P1-08 3–5 pick / genre-cut roundups | Not started |
 | P1-09 manual trend notes | Not started (would fill the "search demand" component) |
 | P1-10..13, P2 | Not started. Midday pass and mobile editing need user decisions |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
-`feature/angles` (P0-06) awaits merge approval.
+P0-06 merged 2026-10-22 (user approved); branch deleted.
+
+**Web context lookup (Gemini/Perplexity), 2026-10-22:** user approved a capped, cached lookup. Probe result:
+the user's Gemini key is free tier; `gemini-2.5-flash` is closed to new keys (404) and Gemini 3+ has no
+search grounding on the free tier (429 quota). Needs billing enabled on the key's project (then 5,000
+grounded requests/month free) or Perplexity instead. Not built; waiting on the user. Google's grounding
+terms: show results verbatim with their Search Suggestions, only to the person who asked, so keep them
+out of drafts and out of the public snapshot.
 
 ## Open questions for the user
 
