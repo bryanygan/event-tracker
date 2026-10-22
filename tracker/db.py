@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS runs (
     error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS source_runs (
+    run_id INTEGER REFERENCES runs(id),
+    source TEXT NOT NULL,           -- venue calendar key, e.g. "underground-arts"
+    ok INTEGER NOT NULL,
+    count INTEGER,                  -- shows kept (after dropping Ticketmaster duplicates)
+    error TEXT,
+    PRIMARY KEY (run_id, source)
+);
+
 CREATE TABLE IF NOT EXISTS venues (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

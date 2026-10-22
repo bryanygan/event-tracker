@@ -83,7 +83,17 @@ def summary(c=Depends(get_db)):
         "has_tm_key": bool(config.TICKETMASTER_API_KEY),
         # None = Pages not configured (UI hides the publish button); {} = configured, never published
         "publish": (publish.last_status() or {}) if publish.configured() else None,
+        "source_problems": source_problems(c),
     }
+
+
+def source_problems(c) -> list[dict]:
+    """Venue calendars whose latest read failed or found nothing, so a broken reader doesn't fail silently."""
+    names = {v["key"]: v["name"] for v in config.VENUE_CALENDARS}
+    rows = c.execute("""SELECT s.* FROM source_runs s
+                        WHERE s.run_id = (SELECT MAX(run_id) FROM source_runs s2 WHERE s2.source = s.source)""")
+    return [{"source": names.get(r["source"], r["source"]), "error": r["error"] or "0 shows found"}
+            for r in rows if r["source"] in names and (not r["ok"] or not r["count"])]
 
 
 def _draft_row(r) -> dict:

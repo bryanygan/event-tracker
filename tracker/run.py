@@ -18,6 +18,7 @@ from logging.handlers import RotatingFileHandler
 from . import config, db, detectors, drafts, publish, store
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
+from .fetchers import venue_calendars
 
 log = logging.getLogger("tracker")
 RAW_CACHE = config.CACHE_DIR / "tm_last_pull.json"
@@ -45,6 +46,32 @@ def setup_logging():
     root.handlers.append(console)
 
 
+def fetch_calendars(conn, run_id: int, tm_events: list[dict], from_cache: bool = False):
+    """Venue-calendar shows not already on Ticketmaster. Returns (events, first-seen id prefixes,
+    failed-source id prefixes) for upsert_events. Each source's outcome is recorded in source_runs."""
+    if from_cache:  # replays are for Ticketmaster data; don't hit venue sites, and don't drop their shows
+        return [], (), tuple(f"cal:{v['key']}:" for v in config.VENUE_CALENDARS)
+    venue_ids = {r["name"].casefold(): r["id"] for r in conn.execute("SELECT id, name FROM venues")}
+    out, first_seen, failed = [], [], []
+    for venue in config.VENUE_CALENDARS:
+        prefix = f"cal:{venue['key']}:"
+        venue = {**venue, "venue_id": venue_ids.get(venue["name"].casefold())}  # one venues row per room
+        try:
+            shows = venue_calendars.fetch_venue(venue)
+        except venue_calendars.SourceError as exc:
+            log.warning("Venue calendar %s failed: %s", venue["name"], exc)
+            store.record_source(conn, run_id, venue["key"], ok=False, count=0, error=str(exc))
+            failed.append(prefix)
+            continue
+        kept, dupes = venue_calendars.drop_duplicates(shows, tm_events)
+        if not conn.execute("SELECT 1 FROM events WHERE id LIKE ? LIMIT 1", (prefix + "%",)).fetchone():
+            first_seen.append(prefix)  # first read of this venue: its shows aren't "just announced"
+        store.record_source(conn, run_id, venue["key"], ok=True, count=len(kept))
+        log.info("Venue calendar %s: %d shows, %d already on Ticketmaster", venue["name"], len(shows), dupes)
+        out += kept
+    return out, tuple(first_seen), tuple(failed)
+
+
 def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
     if conn is None:
         with closing(db.connect()) as own:
@@ -65,7 +92,9 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         events = [tm.normalize(r) for r in raw if not tm.is_junk(r)]
         log.info("Fetched %d raw events, %d after filtering (%d API calls)%s",
                  len(raw), len(events), calls, " [baseline run]" if baseline else "")
-        counts = store.upsert_events(conn, run_id, events, baseline=baseline)
+        calendar, first_seen, failed = fetch_calendars(conn, run_id, events, from_cache=from_cache)
+        counts = store.upsert_events(conn, run_id, events + calendar, baseline=baseline,
+                                     baseline_prefixes=first_seen, protected_prefixes=failed)
         log.info("Changes: %s", counts or "none")
 
         try:

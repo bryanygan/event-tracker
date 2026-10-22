@@ -29,6 +29,11 @@ def venue_tier(name: str | None) -> int:
     return config.DEFAULT_VENUE_TIER
 
 
+def record_source(conn, run_id: int, source: str, *, ok: bool, count: int, error: str | None = None):
+    conn.execute("INSERT OR REPLACE INTO source_runs VALUES (?,?,?,?,?)", (run_id, source, int(ok), count, error))
+    conn.commit()
+
+
 def start_run(conn: sqlite3.Connection, source: str) -> int:
     cur = conn.execute("INSERT INTO runs (started_at, source) VALUES (?, ?)", (now_iso(), source))
     conn.commit()
@@ -49,11 +54,14 @@ def is_first_run(conn, source: str) -> bool:
     return row is None
 
 
-def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, baseline: bool) -> dict:
+def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, baseline: bool,
+                  baseline_prefixes: tuple[str, ...] = (), protected_prefixes: tuple[str, ...] = ()) -> dict:
     """Insert/update events and record changes. Returns counts per change kind.
 
     With baseline=True (first ever run) we store everything but log no 'new' changes,
     otherwise every existing show in Philly would look like a fresh announcement.
+    `baseline_prefixes`: the same, for event ids from a source seen for the first time (a new venue calendar).
+    `protected_prefixes`: ids from a source that failed this run; don't mark them "removed".
     """
     ts = now_iso()
     counts: dict[str, int] = {}
@@ -99,7 +107,7 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
                     VALUES (?, {", ".join("?" * len(cols))}, ?, ?, ?, ?, 1)""",
                 [ev["id"], *values, venue_id, ts, ts, ts],
             )
-            if not baseline:
+            if not baseline and not (baseline_prefixes and ev["id"].startswith(baseline_prefixes)):
                 log_change(ev["id"], "new", None, ev["name"])
         else:
             changed = False
@@ -137,10 +145,14 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
     if seen_ids:
         placeholders = ",".join("?" * len(seen_ids))
         gone = conn.execute(
-            f"SELECT id FROM events WHERE active=1 AND local_date >= ? AND id NOT IN ({placeholders})",
+            # local_date > today, not >=: tonight's shows drop out of the feeds once they start (TM only
+            # returns events that haven't started), which isn't a cancellation. Found 2026-10-21 at 8:37 PM.
+            f"SELECT id FROM events WHERE active=1 AND local_date > ? AND id NOT IN ({placeholders})",
             [today, *seen_ids],
         ).fetchall()
         for row in gone:
+            if protected_prefixes and row["id"].startswith(protected_prefixes):
+                continue  # its source failed this run; absence says nothing
             conn.execute("UPDATE events SET active=0, last_changed=? WHERE id=?", (ts, row["id"]))
             log_change(row["id"], "removed")
 

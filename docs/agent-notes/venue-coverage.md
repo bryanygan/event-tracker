@@ -1,5 +1,12 @@
 # Venue coverage beyond Ticketmaster (surveyed 2026-10-21)
 
+**Implemented (2026-10-21):** `tracker/fetchers/venue_calendars.py` reads the JSON-LD venues listed in
+`config.VENUE_CALENDARS`: Underground Arts, MilkBoy, Ardmore Music Hall, Warehouse on Watts (wowphilly.com,
+Tixr), The Ave Live (theavelive.com, DICE). First live run: 215 shows read, 38 already on TM, 177 added.
+Not done yet: the Etix venues (PhilaMOCA, Johnny Brenda's, Kung Fu Necktie) need per-site HTML parsing.
+User decisions: World Cafe Live is closing (skip); Tower Theater has nothing booked (skip); NOTO is
+notophl.com (no events on the homepage; TM has 8 of its shows).
+
 Step 1 of "other ticket sellers": AXS, DICE and Tixr have no public APIs, so the plan is to read venues'
 own calendar pages. This is the measured gap. One request per site, robots.txt checked first (all
 reachable sites allowed our UA). Survey script lived in the session scratchpad; re-create from this table.

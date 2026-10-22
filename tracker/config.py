@@ -111,6 +111,7 @@ VENUE_TIERS = {
     "colonial theatre": 30,
     "the playhouse on rodney square": 30,
     "the ave live": 30,
+    "warehouse on watts": 35,
     "underground arts": 30,
     "miller theater": 30,
     # small rooms
@@ -124,6 +125,23 @@ VENUE_TIERS = {
     "hard rock cafe": 15,
 }
 DEFAULT_VENUE_TIER = 20
+
+# --- Venue calendars (tracker/fetchers/venue_calendars.py) ---
+# Rooms that mostly don't sell through Ticketmaster but publish schema.org Event data on their own sites.
+# `name` should match how Ticketmaster names the venue, so duplicates collapse and VENUE_TIERS applies.
+VENUE_CALENDARS = [
+    {"key": "underground-arts", "name": "Underground Arts", "url": "https://undergroundarts.org/", "city": "Philadelphia"},
+    {"key": "milkboy", "name": "MilkBoy Philadelphia", "url": "https://milkboyphilly.com/", "city": "Philadelphia"},
+    {"key": "ardmore-music-hall", "name": "Ardmore Music Hall", "url": "https://ardmoremusichall.com/", "city": "Ardmore"},
+    {"key": "warehouse-on-watts", "name": "Warehouse on Watts", "url": "https://www.wowphilly.com/", "city": "Philadelphia"},
+    {"key": "the-ave-live", "name": "The Ave Live", "url": "https://theavelive.com/", "city": "Philadelphia"},
+]
+# Calendar entries that aren't concerts (matched against the cleaned show name).
+VENUE_JUNK_PATTERNS = [
+    r"\bclosed\b", r"\bprivate event\b", r"\bbrunch\b", r"\bkids?\b", r"\bchildren'?s\b", r"\btrivia\b",
+    r"\bkaraoke\b", r"\bbingo\b", r"\bcomedy\b", r"\bstand-?up\b", r"\bbook signing\b", r"\bflea\b",
+    r"\bmarket\b", r"\bart show\b", r"\bworkshop\b", r"\bopen mic\b", r"\bwatch party\b", r"\bpancakes\b",
+]
 
 # Ticketmaster lists add-ons as "events". Names matching these are skipped.
 JUNK_EVENT_PATTERNS = [

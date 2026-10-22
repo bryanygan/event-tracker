@@ -89,3 +89,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - User confirmed Calvin Harris's Dec 2018 Philly date was Q102 Jingle Ball (15 acts). Added lineup-size detection
   (setlists at venue+date; ≥5 = multi-act) and "Last time was a 9-act lineup" wording. Backfilled 90 artists
   (279 calls; ~760 setlist.fm calls used today). 9 artists' last Philly show was multi-act.
+- Merged setlist-history to `main`. User put phone alerts on hold until things are polished and stable.
+- Other sellers: researched (no public APIs), surveyed 28 venue sites, wrote `venue-coverage.md`.
+- `feature/venue-calendars`: JSON-LD reader for 5 venues, TM dedupe, per-source baseline, failed-source
+  protection, `source_runs` + dashboard warning, junk filter, status markers (sold out/cancelled), UTC→ET.
+  Live run: +177 shows (704 total in the snapshot), no fake "new" flood. First real new-show alert: Lizzy McAlpine
+  at Xfinity Mobile Arena. Found and fixed the "tonight's shows marked removed" bug (undid 6 bogus removals).
