@@ -154,3 +154,11 @@
   copy, call `detectors.run_all` + `save_alerts` directly (see the QA scripts pattern in worklog).
 - The API refuses any Host that isn't 127.0.0.1/localhost/::1. A test server reached by another name (or a
   TestClient outside pytest) gets 403 "unknown host".
+
+## Phone editing (2026-10-22)
+- The tunnel's public hostname must keep the default Host header (no "HTTP Host Header" override), or every
+  request is "unknown host". Create the Access app (`python -m tracker.remote --setup`) **before** adding the
+  hostname; without it Cloudflare passes requests unauthenticated (we still 403 them, but it's noisy).
+- `tracker.remote --setup` reads the team domain from the Pages site's login redirect, so run it from the main
+  folder (it needs PAGES_PROJECT from `.env`).
+- Tests blank REMOTE_* in conftest; `tests/test_remote.py` signs its own tokens with throwaway RSA keys.

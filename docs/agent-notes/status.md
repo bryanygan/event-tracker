@@ -1,4 +1,4 @@
-# Status (as of 2026-10-21)
+# Status (as of 2026-10-22)
 
 ## What the user wants
 
@@ -23,6 +23,7 @@ commented code over abstraction.
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
+| Phone editing | `tracker/remote.py` | Live dashboard through a Cloudflare Tunnel hostname; requests need a verified Access login (off until configured) |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
 | Tests | `tests/` | 96 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
@@ -86,7 +87,8 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-10 genre completeness | Merged 2026-10-22: `tracker/genres.py` (artist genre fill + capped TM name lookup for venue-calendar acts) |
 | P1-09 manual trend notes | Merged 2026-10-22: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
 | P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
-| P1-12..13, P2 | Not started. Midday pass and mobile editing need user decisions |
+| P2-15 phone editing | Built 2026-10-22 on `feature/remote-editing`: live dashboard via the user's Cloudflare Tunnel + Access JWT check; needs a hostname from the user |
+| P1-12..13, P2-14 | Not started. Midday pass needs a user decision |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
 P0-06 merged 2026-10-22 (user approved); branch deleted.

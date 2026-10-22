@@ -284,3 +284,21 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
   (theme change) isn't a "facts changed" warning.
 - **Trend notes** match spoken genre names (EDM, Hip-Hop, ...) via `detectors.LANE_NAMES`.
 - Phones: the angles list starts collapsed under 640px.
+
+## Phone editing (P2-15, 2026-10-22; `tracker/remote.py`)
+
+User: "I have Cloudflare access set up to where only I can access the website, so it doesn't have to be read only
+anymore." Chosen design: serve the **live** dashboard through the user's existing Cloudflare Tunnel on its own
+hostname, behind its own Access app, instead of syncing edits from the Pages snapshot (one database, no
+conflicts, no lag; every feature works the same on the phone).
+- The API still binds 127.0.0.1. Tunnel requests come from cloudflared on this PC, so they're told apart by
+  **Host**: `REMOTE_HOST` is only served with a `Cf-Access-Jwt-Assertion` that verifies (RS256 only, team keys
+  from `<team>/cdn-cgi/access/certs`, `aud` = this app's tag, `iss` = the team domain, has an email). A hostname
+  added without an Access app, another Access app's login, or a local page faking the Host all get 403.
+- Writes through the tunnel need `Origin: https://REMOTE_HOST`; local writes can't use that origin. Each tunnel
+  write lands in `remote_edits` (email, method, path, status), shown on the Runs tab.
+- Keys are cached for an hour; unknown key ids refetch at most 6 times an hour. Cloudflare down = 403, not 500.
+- Off unless REMOTE_HOST, CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD are all set. The Pages snapshot stays as the
+  read-only fallback and links to the live dashboard when it's on.
+- The user's tunnel is shared with their other services: the user adds the public hostname themselves in the
+  Zero Trust dashboard (our token has no tunnel permission, and we don't edit their other routes).

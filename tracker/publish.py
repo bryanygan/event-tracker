@@ -27,7 +27,7 @@ from pathlib import Path
 
 import requests
 
-from . import api, config, db, slides
+from . import api, config, db, remote, slides
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +95,7 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
     summary = api.summary(c=conn)
     summary["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     summary.pop("publish", None)
+    summary["edit_url"] = f"https://{config.REMOTE_HOST}/" if remote.enabled() else None
     files = {
         "summary": summary,
         "alerts": api.list_alerts(status="open", limit=200, c=conn),

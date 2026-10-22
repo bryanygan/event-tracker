@@ -233,6 +233,13 @@ export type Run = {
   error: string | null
 }
 
+// Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py)
+export type RemoteEdits = {
+  enabled: boolean
+  host: string | null
+  edits: { id: number; at: string; email: string; method: string; path: string; status: number }[]
+}
+
 export type Summary = {
   upcoming_events: number
   open_alerts: number
@@ -241,6 +248,7 @@ export type Summary = {
   model: string
   has_tm_key: boolean
   generated_at?: string // static snapshots only
+  edit_url?: string | null // static snapshots only: the editable dashboard through the tunnel, if set up
   publish?: { at: string; ok: boolean; message: string; url?: string } | null
   source_problems?: { source: string; error: string }[]
   posts_this_week: number
@@ -297,6 +305,7 @@ const staticApi = {
     }),
   genres: () => snapshot<string[]>('genres'),
   runs: () => snapshot<Run[]>('runs'),
+  remoteEdits: () => Promise.resolve<RemoteEdits>({ enabled: false, host: null, edits: [] }),
   triggerRun: readOnly,
   posts: () => snapshot<Post[]>('posts'),
   queue: () => snapshot<Queue>('queue'),
@@ -335,6 +344,7 @@ const liveApi = {
     req<EventRow[]>('/api/events?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v ?? '')]))),
   genres: () => req<string[]>('/api/genres'),
   runs: () => req<Run[]>('/api/runs'),
+  remoteEdits: () => req<RemoteEdits>('/api/remote-edits'),
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
   posts: () => req<Post[]>('/api/posts'),

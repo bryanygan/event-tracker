@@ -41,6 +41,15 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 DASHBOARD_HOST = "127.0.0.1"
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8765"))  # Homebridge UI uses 8581
 
+# Editing from your phone (tracker/remote.py): a Cloudflare Tunnel hostname that points at the dashboard, locked
+# by a Cloudflare Access app. Requests for REMOTE_HOST are only served with a valid Access login for that app.
+# All three empty = phone editing off (the default). Set them with `python -m tracker.remote --setup HOST`.
+REMOTE_HOST = os.getenv("REMOTE_HOST", "").strip().lower()              # e.g. events.example.com
+CF_ACCESS_TEAM_DOMAIN = os.getenv("CF_ACCESS_TEAM_DOMAIN", "").strip().rstrip("/")  # https://<team>.cloudflareaccess.com
+CF_ACCESS_AUD = os.getenv("CF_ACCESS_AUD", "").strip()                  # the Access app's "Application Audience" tag
+# Optional extra check on top of the Access policy: only these emails (comma-separated) may use it.
+REMOTE_EMAILS = {e.strip().lower() for e in os.getenv("REMOTE_EMAILS", "").split(",") if e.strip()}
+
 # --- Search area: City Hall, ~30 mi radius (covers Camden, KoP, Wilmington-ish) ---
 LATLONG = "39.9526,-75.1652"
 RADIUS_MILES = 30

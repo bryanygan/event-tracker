@@ -147,3 +147,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   (see decisions.md "Integration review fixes"). 226 tests. Real-data re-detect on a DB copy: picks only where
   they're a real cut, lane slides headline "Pop, EDM & Hip-Hop this weekend", weekend deck keeps a music theme,
   EDM/Hip-Hop notes match. Phone screenshots at 500px: cards ~1/5 screen with angles collapsed.
+
+### 2026-10-22 midday: run 8 review, phone editing
+- Run 8 (6:30 AM) ok in 569 s: 4 TM calls, 3 new venue-calendar shows, genre step 18 found / 18 none / 4
+  ambiguous, 11 alerts refreshed, 2 new (Metal month, lane cut), 4 auto web lookups ($0.0063), 6 drafts,
+  snapshot published (slides.json 76 KB).
+- Logged the user's Calvin Harris video (post 1, alert 9; no link yet).
+- P2-15 phone editing on `feature/remote-editing` (see decisions.md "Phone editing"). 15 new tests (241).

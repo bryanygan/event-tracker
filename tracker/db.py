@@ -236,6 +236,16 @@ CREATE TABLE IF NOT EXISTS slide_decks (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py), for the record.
+CREATE TABLE IF NOT EXISTS remote_edits (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    email TEXT NOT NULL,            -- the Cloudflare Access login
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL         -- HTTP status the dashboard answered with
+);
 """
 
 

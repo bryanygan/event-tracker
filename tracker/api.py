@@ -20,8 +20,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
-from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, slides, trends
+from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, remote, slides, trends
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -44,18 +45,39 @@ def _hostname(value: str) -> str:
 
 @app.middleware("http")
 async def local_only(request: Request, call_next):
-    if _hostname(request.headers.get("host", "")) not in LOCAL_HOSTS:
+    host = _hostname(request.headers.get("host", ""))
+    # Your phone, through the Cloudflare Tunnel: only with a valid Cloudflare Access login (see tracker/remote.py).
+    phone = remote.enabled() and host == config.REMOTE_HOST
+    if host not in LOCAL_HOSTS and not phone:
         return JSONResponse({"detail": "unknown host"}, status_code=403)
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
+    email = None
+    if phone:
+        try:  # off the event loop: the first request after a key rotation fetches the keys from Cloudflare
+            email = await run_in_threadpool(remote.verify, request.headers.get(remote.HEADER, ""))
+        except remote.RemoteAuthError as exc:
+            log.warning("Refused a request for %s: %s", host, exc)
+            return JSONResponse({"detail": "Cloudflare Access login required"}, status_code=403)
+    write = request.method not in ("GET", "HEAD", "OPTIONS")
+    if write:
         origin = request.headers.get("origin")
-        if (origin and _hostname(origin) not in LOCAL_HOSTS) or request.headers.get("sec-fetch-site") == "cross-site":
+        allowed = {config.REMOTE_HOST} if phone else LOCAL_HOSTS
+        # Through the tunnel the browser always sends Origin on a write; require it there.
+        if (phone and not origin) or (origin and _hostname(origin) not in allowed) \
+                or request.headers.get("sec-fetch-site") == "cross-site":
             return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
         # Every write the dashboard makes is a small JSON body (slides with photos are the biggest). No length
         # header means no body (e.g. DELETE), unless it's chunked, which the dashboard never sends.
         size = request.headers.get("content-length", "0")
         if "transfer-encoding" in request.headers or not size.isdigit() or int(size) > MAX_BODY_BYTES:
             return JSONResponse({"detail": "request body too large"}, status_code=413)
-    return await call_next(request)
+    response = await call_next(request)
+    if phone and write:
+        try:
+            with closing(conn()) as c:
+                remote.record(c, email, request.method, request.url.path, response.status_code)
+        except Exception:  # the edit itself already happened; don't turn it into an error
+            log.exception("Couldn't record a phone edit")
+    return response
 
 # One background job at a time (a pipeline run or a draft regeneration), so the
 # N95 never runs two LLM generations at once.
@@ -443,6 +465,12 @@ def genres(c=Depends(get_db)):
 @app.get("/api/runs")
 def runs(limit: int = 20, c=Depends(get_db)):
     return [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+@app.get("/api/remote-edits")
+def remote_edits(c=Depends(get_db)):
+    """Changes made from your phone through the tunnel (empty when phone editing is off)."""
+    return {"enabled": remote.enabled(), "host": config.REMOTE_HOST or None, "edits": remote.recent(c)}
 
 
 @app.post("/api/publish", status_code=202)

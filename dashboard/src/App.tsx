@@ -111,8 +111,11 @@ export default function App() {
 
       {STATIC && (
         <div className="banner">
-          Read-only copy of the dashboard. Copy buttons work; edits and draft status changes happen on the
-          mini PC at 127.0.0.1:8765 and show up here after the next publish.
+          {summary?.edit_url
+            ? <>Read-only copy, updated after each run. To make changes, open the <a href={summary.edit_url}>live
+              dashboard</a>.</>
+            : <>Read-only copy of the dashboard. Copy buttons work; edits and draft status changes happen on the
+              mini PC at 127.0.0.1:8765 and show up here after the next publish.</>}
         </div>
       )}
       {!STATIC && summary && !summary.has_tm_key && (

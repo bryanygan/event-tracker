@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
-import { api, type Run } from '../api'
+import { api, type RemoteEdits, type Run } from '../api'
 import { fmtWhen } from '../App'
 
 export default function RunsView({ refreshKey }: { refreshKey: number }) {
   const [runs, setRuns] = useState<Run[]>([])
-  useEffect(() => { api.runs().then(setRuns) }, [refreshKey])
+  const [phone, setPhone] = useState<RemoteEdits | null>(null)
+  useEffect(() => {
+    api.runs().then(setRuns)
+    api.remoteEdits().then(setPhone).catch(() => setPhone(null))
+  }, [refreshKey])
   return (
     <div className="table-wrap">
       <table className="events">
@@ -23,6 +27,28 @@ export default function RunsView({ refreshKey }: { refreshKey: number }) {
         </tbody>
       </table>
       <p className="muted small">Full logs: <code>logs\pipeline.log</code></p>
+
+      {phone?.enabled && (
+        <>
+          <h3>Phone edits</h3>
+          <p className="muted small">Changes made through {phone.host} (Cloudflare Access login), newest first.</p>
+          {phone.edits.length === 0 ? <p className="muted small">None yet.</p> : (
+            <table className="events">
+              <thead><tr><th>When</th><th>Who</th><th>Change</th><th>Result</th></tr></thead>
+              <tbody>
+                {phone.edits.map((e) => (
+                  <tr key={e.id}>
+                    <td>{fmtWhen(e.at)}</td>
+                    <td>{e.email}</td>
+                    <td><code>{e.method} {e.path}</code></td>
+                    <td>{e.status < 400 ? 'ok' : <span className="error-text">{e.status}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
     </div>
   )
 }
