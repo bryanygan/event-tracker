@@ -94,6 +94,9 @@
 - **The GitHub repo is public.** wrangler writes `.wrangler/cache/pages.json` (account ID) into the working
   dir; it got committed once (`6927b43`) before `.wrangler/` was gitignored. Check `git status` for stray
   files before every commit, and keep account/infra details out of docs.
+- Same class of slip, 2026-10-21: niche tests used *real* artist names from the user's listening history (with
+  fake counts) and got pushed on a feature branch. Fixed by invented names + squash-merge + branch deletion.
+  Use made-up artist names in any test touching listening data.
 - If `<name>.pages.dev` is taken, Cloudflare silently appends a suffix (e.g. `<name>-2h7.pages.dev`).
   `publish.site_url()` reads the real `subdomain` from the API; never hardcode `<name>.pages.dev`.
 - A new project's hostname doesn't resolve until the first deployment, so the Access guard can't pass before

@@ -63,9 +63,9 @@ commented code over abstraction.
 pipeline is polished and has run for a while without hiccups.
 
 **Venue calendars** (merged into `main`; see venue-coverage.md). The DB holds
-~290 `cal:` events from 8 venues. `feature/niche` and `feature/etix-venues` (stacked) are pushed,
-not merged, and **`feature/etix-venues` is checked out**: the DB holds Etix-venue shows that `main` doesn't fetch,
-so on `main` the next run would mark them removed. Merge both, then check out `main`.
+~290 `cal:` events from 8 venues. Niche boost + Etix venues were squash-merged into `main` as `1fce53c`
+(single squash on purpose: an intermediate commit had real artist names from the user's history in a test).
+`main` is checked out.
 
 **Previously: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
 Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).
