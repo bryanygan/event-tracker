@@ -91,7 +91,12 @@ P0-06 merged 2026-10-22 (user approved); branch deleted.
 **Web context lookup (Gemini/Perplexity), 2026-10-22:** user approved a capped, cached lookup. Probe result:
 the user's Gemini key is free tier; `gemini-2.5-flash` is closed to new keys (404) and Gemini 3+ has no
 search grounding on the free tier (429 quota). Needs billing enabled on the key's project (then 5,000
-grounded requests/month free) or Perplexity instead. Not built; waiting on the user. Google's grounding
+grounded requests/month free) or Perplexity instead. User then enabled billing and asked for a comparison (same dated prompt, 5 queue artists, 10 calls):
+Perplexity (`POST /v1/agent`, preset `fast`, ~$0.0016/call, ~4 s, full URLs + publish dates) had no material
+errors; Gemini 3.8 Flash (Interactions API, ~15 s, redirect links with domain only) invented a CG5 presale date
+and called the on-sale Lizzy McAlpine show sold out. Recommended Perplexity; not built yet. Always put today's
+date in the prompt (Gemini searched "2024" without it). Perplexity answer text is in `output[type=message]`,
+not `output_text` (null on the fast preset). Google's grounding
 terms: show results verbatim with their Search Suggestions, only to the person who asked, so keep them
 out of drafts and out of the public snapshot.
 
