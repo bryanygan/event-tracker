@@ -38,6 +38,8 @@ def parse_iso(value: str) -> datetime:
         raise PostError(f"not a timestamp: {value!r}") from None
     if dt.tzinfo is None:
         raise PostError(f"timestamp needs a timezone: {value!r}")
+    if not 2000 <= dt.year <= 2100:  # also keeps astimezone() away from year-9999 overflow
+        raise PostError(f"timestamp out of range: {value!r}")
     return dt.astimezone(timezone.utc)
 
 

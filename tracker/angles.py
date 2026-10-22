@@ -71,6 +71,15 @@ def angles_for(facts: dict) -> list[dict]:
             out.append(_angle("utility", "How to get tickets", f"How to get {artist} tickets",
                               "What to do and when: on-sale time and presales on screen.", "slideshow",
                               "Save this for on-sale day."))
+    elif fmt == "weekend" and facts.get("lane"):  # the cut for your genres
+        n, lane = len(facts.get("shows", [])), facts["lane"]
+        out += [
+            _angle("news", "Your lane", f"{n} {lane} shows in Philly this weekend",
+                   f"Only {lane}: one line per show, day and venue on screen.", "slideshow", "Save this for the weekend."),
+            _angle("fan", "For the fans", f"{lane} fans, your Philly weekend is set",
+                   f"Talk to the {lane} crowd only. Lead with the biggest name.", "face-to-camera",
+                   "Tag who you're going with."),
+        ]
     elif fmt == "weekend":
         n = len(facts.get("shows", []))
         out += [
@@ -112,7 +121,18 @@ def angles_for(facts: dict) -> list[dict]:
             _angle("fan", "Pick a game", f"Which {artist} game are you going to?",
                    "Ask, list the games, let fans argue in the comments.", "face-to-camera", "Comment your pick."),
         ]
-    elif fmt == "big_game":
+    if fmt in ("weekend", "stacked_month") and facts.get("picks"):
+        k = facts["pick_count"]
+        where = (f"for Philly in {facts['month'].split()[0]}" if fmt == "stacked_month" else "for Philly this weekend")
+        kind = facts.get("genre") or facts.get("lane")
+        hook = f"My {k} {kind + ' ' if kind else ''}picks {where}"
+        if len(hook.split()) > templates.MAX_HOOK_WORDS:  # a four-genre lane label
+            hook = f"My {k} picks {where}"
+        out.append(_angle("picks", f"Top {k}", hook,
+                          f"Only the {k} biggest shows, best first. Shorter and more saveable than the full list.",
+                          "slideshow", "Save this and tell me what I missed."))
+
+    if fmt == "big_game":
         nick = facts["opponent"].split()[-1]
         out += [
             _angle("news", "Big game", f"The {nick} are coming to Philly",
@@ -127,6 +147,15 @@ def angles_for(facts: dict) -> list[dict]:
 
 def find(facts: dict, key: str) -> dict | None:
     return next((a for a in angles_for(facts) if a["key"] == key), None)
+
+
+def scoped_facts(facts: dict, angle: dict | None) -> dict:
+    """The facts a draft from this angle may use. "picks" keeps only the picked shows (best first), so the
+    script, on-screen lines and fact check all stay on them; `picked_from` says how many there were."""
+    if not angle or angle["key"] != "picks" or not facts.get("picks"):
+        return facts
+    out = {k: v for k, v in facts.items() if k not in ("picks", "shows")}
+    return {**out, "shows": facts["picks"], "picked_from": len(facts.get("shows", []))}
 
 
 def template_hashtags(facts: dict) -> list[str]:

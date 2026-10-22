@@ -5,7 +5,7 @@ module adds a separate, explainable **opportunity score** for "is this a good vi
 
     audience  (notability)            timing (fresh news, deadline coming up)
     story     (comeback, big name in a small room, a packed month)
-    local     (Philly, in your lane)  search (no data yet)   ready (facts complete, draft clean)
+    local     (Philly, in your lane)  search (your trend notes, trends.py)   ready (facts complete, draft clean)
 
 Each component is 0-100 with a one-line reason, or None when we have no data. Unknown components are left
 out and their weight is shared among the known ones; `coverage` says how much of the weight was known.
@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, trends
 from .detectors import fmt_date
 from .drafts import draft_row
 from .scoring import upcoming_events
@@ -85,7 +85,8 @@ def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
         "new_tour": (70, "New Philly date (nothing else announced here)") if not facts.get("already_had_philly_dates")
         else (40, "An added date; they already had a Philly show"),
         "presale_soon": (30, "A ticket reminder: useful, not news"),
-        "weekend": (35, "Recurring weekend roundup"),
+        "weekend": (45, f"Weekend cut for your lane ({facts['lane']})") if facts.get("lane")
+        else (35, "Recurring weekend roundup"),
         "stacked_month": (75 if (facts.get("notable_show_count") or 0) >= 8 else 55,
                           f"{facts.get('notable_show_count')} notable {facts.get('genre')} shows in {facts.get('month')}"),
         "status_change": (70 if facts.get("change") in ("cancelled", "postponed") else 55, f"Show {facts.get('change')}"),
@@ -172,18 +173,20 @@ def stage(alert: dict, draft: dict | None, posts: list[dict], expired: bool, now
 
 
 def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[dict],
-             recent_posts: list[dict], now: datetime) -> dict:
+             recent_posts: list[dict], now: datetime, notes: list[dict] = ()) -> dict:
     """Score one idea. `alert` is a DB row as a dict, `events` the upcoming events it links to,
     `draft` its latest draft (with facts_changes/warnings parsed), `posts` posts logged for it and
-    `recent_posts` all posts in the last RECENT_POST_DAYS (for the 'already covered' warning)."""
+    `recent_posts` all posts in the last RECENT_POST_DAYS (for the 'already covered' warning) and `notes`
+    the trend notes (trends.list_notes) to match against it."""
     facts = alert["facts"]
     t = timing(alert, now)
+    search_value, search_why, trend_matches = trends.search_component(list(notes), facts, events, alert.get("title") or "")
     comps = [
         _component("audience", min(100.0, alert["score"]), f"Notability {round(alert['score'])} (artist size, venue, tour, your taste)"),
         _component("timing", t["value"], t["why"]),
         _component("story", *story(alert, facts, events)),
         _component("local", *local(alert, facts, events)),
-        _component("search", None, "Unknown: no search/trend data yet"),
+        _component("search", search_value, search_why),
         _component("ready", *ready(facts, draft)),
     ]
     known = [c for c in comps if c["value"] is not None]
@@ -215,6 +218,7 @@ def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[di
         "post_by": t["post_by"], "expires_at": t["expires_at"],
         "stage": stage(alert, draft, posts, t["expired"] or not events, now),
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
+        "trend_notes": trend_matches,
     }
 
 
@@ -240,6 +244,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
         if _dt(p["posted_at"]) >= cutoff:
             recent.append({**p, "artists": _artists(json.loads(p["facts_snapshot"])) if p["facts_snapshot"] else set()})
 
+    notes = trends.list_notes(conn, now)
     out = []
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
@@ -247,7 +252,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
         draft = draft_row(latest, a["facts"]) if latest else None
         ids = json.loads(a["event_ids"]) if a["event_ids"] else []
         linked = [events[i] for i in ids if i in events] if ids else _match_shows(a["facts"], events.values())
-        opp = evaluate(a, linked, draft, posts_for.get(a["id"], []), recent, now)
+        opp = evaluate(a, linked, draft, posts_for.get(a["id"], []), recent, now, notes)
         shows = a["facts"].get("shows") or ([a["facts"]["show"]] if a["facts"].get("show") else [])
         out.append({
             "alert_id": a["id"], "kind": a["kind"], "title": a["title"], "notability": a["score"],
@@ -270,4 +275,4 @@ def snapshot(conn, alert_id: int) -> dict | None:
     if item is None:
         return None
     return {k: item[k] for k in ("score", "band", "coverage", "components", "reasons", "caveats", "stage",
-                                 "post_by", "rules_version", "notability")}
+                                 "post_by", "rules_version", "notability", "trend_notes")}

@@ -118,3 +118,32 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/web-context`: `tracker/context.py`, `web_context` table, `POST /api/alerts/{id}/context`,
   `/api/context/usage`, pipeline auto step, card section + queue hint, tabs in the URL hash (`#alerts`).
   Real-data check on the DB copy: 1 manual + 3 auto lookups ($0.0063 total), cache reuse confirmed.
+
+### P1-08 + P1-10 (2026-10-22, agent A, `feature/roundups-genres`)
+- `tracker/genres.py`: read-time genre fill + capped TM attraction name lookup. Real-DB copy: +59 TM events get
+  the artist's genre; 40 real TM calls matched 18 venue-calendar acts (spot-checked: High On Fire = Metal,
+  Mark Guiliana = Jazz, June McDoom = Folk, YHWH Nailgun = Alternative, MAX STYLER = Dance/Electronic).
+- Picks + lane weekend cut + "picks" angle. On the copy: a Metal stacked month appears (5 shows, thanks to filled
+  genres), Hip-Hop goes to 11, and "Your lane this weekend: Pop, EDM & Hip-Hop (8 shows)" is raised.
+  Heads-up: on the first real run the filled genres change 5 existing roundups' shows, so their drafts show
+  "facts changed" (a real change, not a bug).
+
+### P1-09 trend notes (2026-10-22, agent B on `feature/trend-notes`)
+- `tracker/trends.py`, `trend_notes` table, `/api/trends` CRUD, queue "search" component, snapshot `trends.json`,
+  `TrendNotes.tsx` panel + card pills. 20 new tests (165 total). Real-data check on a DB copy (port 8768):
+  a national artist note, a Philly genre note and an expired note matched the right 7 ideas; the other 14 kept
+  "search" unknown. Screenshots at desktop and ~420px width.
+
+### P1-11 slides (2026-10-22, build agent C, `feature/slides`)
+- `tracker/slides.py` + `slide_decks` table + `/api/alerts/{id}/slides` (GET/PUT/DELETE, POST rebuild);
+  `slides.json` in the static snapshot; canvas renderer + full-screen overlay opened from a "Slides" button.
+- Checked on a copy of the real DB: all 7 formats build; rendered presale, weekend (8 shows) and team-week
+  decks; stress test (95-char name, unbreakable word, 7 sale lines, photo); date-correction rebuild kept the
+  artist edit and photo; static snapshot renders read-only at 500px.
+
+### P1-08..11 integrated (2026-10-22, early morning)
+- Three build agents in parallel worktrees (`../et-roundups`, `../et-trends`, `../et-slides`), combined on
+  `integration/p1`, then a security review agent and a functional/mobile QA agent. Fixed everything they found
+  (see decisions.md "Integration review fixes"). 226 tests. Real-data re-detect on a DB copy: picks only where
+  they're a real cut, lane slides headline "Pop, EDM & Hip-Hop this weekend", weekend deck keeps a music theme,
+  EDM/Hip-Hop notes match. Phone screenshots at 500px: cards ~1/5 screen with angles collapsed.

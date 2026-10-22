@@ -9,22 +9,53 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from contextlib import closing
+from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import angles, config, context, db, drafts, llm, opportunities, posts, publish
+from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, slides, trends
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
 app = FastAPI(title="Philly Events Tracker")
 DIST = config.ROOT / "dashboard" / "dist"
+
+# This API is only for the dashboard on this PC. Without these checks any website open in your browser could
+# POST to it (run the pipeline, publish, spend web lookups) or, via DNS rebinding, read it.
+# (tests/conftest.py adds "testserver", the name FastAPI's TestClient sends.)
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+MAX_BODY_BYTES = 12_000_000
+
+
+def _hostname(value: str) -> str:
+    try:
+        return urlsplit(value if "//" in value else f"//{value}").hostname or ""
+    except ValueError:  # e.g. "Host: [" -> refused as unknown, not a 500
+        return ""
+
+
+@app.middleware("http")
+async def local_only(request: Request, call_next):
+    if _hostname(request.headers.get("host", "")) not in LOCAL_HOSTS:
+        return JSONResponse({"detail": "unknown host"}, status_code=403)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if (origin and _hostname(origin) not in LOCAL_HOSTS) or request.headers.get("sec-fetch-site") == "cross-site":
+            return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
+        # Every write the dashboard makes is a small JSON body (slides with photos are the biggest). No length
+        # header means no body (e.g. DELETE), unless it's chunked, which the dashboard never sends.
+        size = request.headers.get("content-length", "0")
+        if "transfer-encoding" in request.headers or not size.isdigit() or int(size) > MAX_BODY_BYTES:
+            return JSONResponse({"detail": "request body too large"}, status_code=413)
+    return await call_next(request)
 
 # One background job at a time (a pipeline run or a draft regeneration), so the
 # N95 never runs two LLM generations at once.
@@ -163,6 +194,46 @@ def queue(c=Depends(get_db)):
     }
 
 
+@app.get("/api/alerts/{alert_id}/slides")
+def get_slides(alert_id: int, c=Depends(get_db)):
+    """The idea's 9:16 slide manifest (built from facts, plus any saved edits)."""
+    found = slides.deck(c, alert_id)
+    if found is None:
+        raise HTTPException(404)
+    return found
+
+
+class SlidesSave(BaseModel):
+    overrides: dict
+
+
+@app.put("/api/alerts/{alert_id}/slides")
+def save_slides(alert_id: int, body: SlidesSave, c=Depends(get_db)):
+    try:
+        return slides.save(c, alert_id, body.overrides)
+    except KeyError:
+        raise HTTPException(404)
+    except slides.SlidesError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/alerts/{alert_id}/slides/rebuild")
+def rebuild_slides(alert_id: int, c=Depends(get_db)):
+    """Rebuild from the current facts, keeping edits whose underlying fact didn't change."""
+    try:
+        return slides.rebuild(c, alert_id)
+    except KeyError:
+        raise HTTPException(404)
+
+
+@app.delete("/api/alerts/{alert_id}/slides")
+def reset_slides(alert_id: int, c=Depends(get_db)):
+    found = slides.reset(c, alert_id)
+    if found is None:
+        raise HTTPException(404)
+    return found
+
+
 @app.post("/api/alerts/{alert_id}/context")
 def web_context(alert_id: int, refresh: bool = False, c=Depends(get_db)):
     """Web context for one idea (a few seconds; reuses a fresh lookup for free)."""
@@ -298,6 +369,50 @@ def analytics(group_by: str = "format", c=Depends(get_db)):
     return _post_call(posts.analytics, c, group_by)
 
 
+class TrendFields(BaseModel):
+    kind: str | None = None
+    text: str | None = None
+    terms: list[str] | None = None
+    scope: str | None = None
+    confidence: str | None = None
+    momentum: str | None = None
+    source_url: str | None = None
+    notes: str | None = None
+    observed_at: str | None = None  # ISO with timezone; default now
+    expires_at: str | None = None   # default observed_at + TREND_NOTE_DAYS
+
+
+def _trend_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except trends.TrendError as exc:
+        raise HTTPException(400, str(exc))
+    except LookupError:
+        raise HTTPException(404)
+
+
+@app.get("/api/trends")
+def list_trends(c=Depends(get_db)):
+    return trends.list_notes(c)
+
+
+@app.post("/api/trends", status_code=201)
+def create_trend(body: TrendFields, c=Depends(get_db)):
+    return {"id": _trend_call(trends.create_note, c, **body.model_dump(exclude_none=True))}
+
+
+@app.patch("/api/trends/{note_id}")
+def update_trend(note_id: int, body: TrendFields, c=Depends(get_db)):
+    _trend_call(trends.update_note, c, note_id, **body.model_dump(exclude_unset=True))
+    return {"ok": True}
+
+
+@app.delete("/api/trends/{note_id}")
+def delete_trend(note_id: int, c=Depends(get_db)):
+    _trend_call(trends.delete_note, c, note_id)
+    return {"ok": True}
+
+
 @app.get("/api/events")
 def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
@@ -312,14 +427,17 @@ def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, 
     rows.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     keep = ["id", "name", "headliner", "support", "local_date", "local_time", "status", "venue_name", "genre",
             "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "popularity", "fans", "my_plays", "niche",
-            "first_seen"]
+            "first_seen", "genre_source"]
     return [{k: e.get(k) for k in keep} for e in rows[:limit]]
 
 
 @app.get("/api/genres")
 def genres(c=Depends(get_db)):
-    return [r[0] for r in c.execute(
-        "SELECT genre FROM events WHERE active=1 AND genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC")]
+    """Genres of upcoming events, most common first: the same genres the events list filters on,
+    including ones filled in from the artist (genres.py)."""
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()
+    counts = Counter(e["genre"] for e in upcoming_events(c, today) if e["genre"])
+    return [g for g, _ in counts.most_common()]
 
 
 @app.get("/api/runs")

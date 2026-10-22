@@ -82,9 +82,11 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P0-06 three hooks/angles per idea | Merged 2026-10-22 (`2435acb`): `tracker/angles.py`, no-LLM hooks; templated formats draft with no model |
 | P0-07 stale roundup refresh | Merged |
 | Web context (not in roadmap) | Merged 2026-10-22: Perplexity lookups on cards, capped and cached |
-| P1-08 3–5 pick / genre-cut roundups | Not started |
-| P1-09 manual trend notes | Not started (would fill the "search demand" component) |
-| P1-10..13, P2 | Not started. Midday pass and mobile editing need user decisions |
+| P1-08 3–5 pick / genre-cut roundups | Merged 2026-10-22: `picks` on weekend/stacked-month facts + "picks" angle; "your lane this weekend" cut (`weekend_lane:` key) |
+| P1-10 genre completeness | Merged 2026-10-22: `tracker/genres.py` (artist genre fill + capped TM name lookup for venue-calendar acts) |
+| P1-09 manual trend notes | Merged 2026-10-22: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
+| P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
+| P1-12..13, P2 | Not started. Midday pass and mobile editing need user decisions |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
 P0-06 merged 2026-10-22 (user approved); branch deleted.

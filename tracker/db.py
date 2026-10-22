@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS attractions (
     last_area_show_acts INTEGER,    -- artists with setlists at that venue that day (5+ = festival/radio show)
     history_checked_back_to TEXT,   -- oldest setlist we looked at (how far back "no show found" goes)
     history_checked_at TEXT,
+    genre_source TEXT,              -- NULL = Ticketmaster's classification; 'tm_search' = matched by name (genres.py)
+    genre_checked_at TEXT,          -- last Ticketmaster name lookup for a venue-calendar act
     first_seen TEXT NOT NULL
 );
 
@@ -207,6 +209,33 @@ CREATE TABLE IF NOT EXISTS web_context (
     created_at TEXT NOT NULL        -- UTC ISO
 );
 CREATE INDEX IF NOT EXISTS idx_web_context_subject ON web_context(subject, created_at);
+
+-- Trends you noticed, typed in by hand (tracker/trends.py). Evidence for the queue's "search" component.
+CREATE TABLE IF NOT EXISTS trend_notes (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,             -- sound, search, hashtag, topic, other
+    text TEXT NOT NULL,             -- what you saw, e.g. a search term or the sound's name
+    terms TEXT NOT NULL,            -- JSON list: artists, genres, venues or keywords it should match
+    scope TEXT NOT NULL,            -- philly, national, unknown
+    confidence TEXT NOT NULL,       -- low, medium, high
+    momentum TEXT,                  -- rising, stable, uncertain (your read; never computed)
+    source_url TEXT,
+    notes TEXT,
+    observed_at TEXT NOT NULL,      -- UTC ISO: when you saw it
+    expires_at TEXT NOT NULL,       -- UTC ISO: stops counting after this
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+-- 9:16 slide decks (tracker/slides.py): manifest built from facts + your edits, one deck per alert.
+CREATE TABLE IF NOT EXISTS slide_decks (
+    alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
+    base TEXT NOT NULL,             -- JSON manifest as built from `facts` (no edits)
+    facts TEXT NOT NULL,            -- JSON: the alert's facts the base was built from
+    overrides TEXT NOT NULL,        -- JSON: your edits by slide id (text, hidden, image + credit/rights)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -231,7 +260,8 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
-                    "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
+                    "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",
+                    "genre_source": "TEXT", "genre_checked_at": "TEXT"},  # genres.py: NULL source = Ticketmaster's own
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},

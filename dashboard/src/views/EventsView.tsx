@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api, type EventRow } from '../api'
 
+// Where a genre came from (tracker/genres.py); shown as a tooltip, with ≈ for name-matched guesses
+const GENRE_SOURCE: Record<string, string> = {
+  listing: 'genre from the listing',
+  artist: "Ticketmaster's genre for the artist (the listing had none)",
+  tm_search: 'inferred: this venue-calendar act matched a Ticketmaster artist by exact name',
+}
+
 export default function EventsView({ refreshKey }: { refreshKey: number }) {
   const [q, setQ] = useState('')
   const [genre, setGenre] = useState('')
@@ -46,7 +53,10 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
                   {e.support && <div className="muted small">w/ {e.support}</div>}
                 </td>
                 <td>{e.venue_name}</td>
-                <td>{e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}</td>
+                <td title={GENRE_SOURCE[e.genre_source ?? ''] ?? ''}>
+                  {e.genre_source === 'tm_search' && e.genre ? <span className="muted">≈ </span> : null}
+                  {e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}
+                </td>
                 <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
                 <td className="nowrap">{e.fans != null ? fmtFans(e.fans) : ''}</td>
                 <td className="nowrap" title={e.niche ? 'in your genre lane' : ''}>{e.my_plays ? e.my_plays : e.niche ? '·' : ''}</td>

@@ -207,3 +207,80 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
   uses at most 5 of those, on "strong" single-artist ideas only; replays (`--from-cache`) and tests never call it.
   Measured ~$0.0016 per lookup → worst case ~$0.50/month.
 - Single-artist formats only (presale, new_tour, status_change). Roundups and games have no single subject.
+
+## Genres and roundup cuts (2026-10-22, roadmap P1-08 / P1-10)
+
+- **Genre is filled at read time, never written over the listing** (`genres.fill` in `scoring.upcoming_events`):
+  listing genre → else the headliner attraction's Ticketmaster genre. Every event carries `genre_source`
+  (`listing` / `artist` / `tm_search`); the Events tab marks name-matched guesses with ≈.
+- **Venue-calendar acts:** Ticketmaster attraction search (`/attractions.json`, music) by exact case-insensitive
+  name; accepted only when exactly one attraction has that name (two = a namesake → stays unknown). Names that
+  look like event titles (open mic, "... night", festival...) or are under 3 letters are never looked up.
+  40 lookups per run on the run's own TM client (a run uses ~4 calls of the 1,000 budget), "none"/"ambiguous"
+  cached 30 days. Real data: 18 of 40 found (45%), 4 ambiguous; most small local acts just aren't on TM.
+- **Placeholder labels** (`NON_GENRES`: Undefined, Other, Miscellaneous, Music) are never a genre.
+- **Picks:** weekend and stacked-month facts carry `picks` (best by notability, one per artist, ties by date then
+  name) and `pick_count`. They're `DERIVED_FACTS`: a re-rank alone isn't a change, so adding them to existing alerts
+  didn't mark every draft out of date. Drafting from the "picks" angle scopes the facts to the picks
+  (`angles.scoped_facts`), so the script, on-screen lines and fact check only cover them.
+- **Lane weekend cut** (`weekend_lane:<fri>`, kind `weekend`, facts `lane`): shows whose *genre* is in your lane
+  (not your listening buckets: a guess from history isn't a fact the video can state). Needs 3+ shows; skipped
+  when 80%+ of them are already in the general roundup or a stacked month. Label names every lane genre present
+  (sub-genres fold into Hip-Hop / R&B / EDM / Pop). Story value 45 vs 35 for the general roundup
+  (`OPPORTUNITY_RULES_VERSION` 2026-10-22.A).
+
+## Trend notes (P1-09, 2026-10-22; `tracker/trends.py`)
+
+- **Typed in by hand, never scraped.** Kind (search/sound/hashtag/topic/other), text, match terms, scope
+  (philly/national/unknown), confidence, optional momentum/source link/notes, observed_at, expires_at
+  (default `TREND_NOTE_DAYS` = 7). Validated server-side; source links must be http(s).
+- **Matching is exact, not fuzzy.** A term matches when it equals (casefolded, spaces collapsed) an artist, genre,
+  venue, team or opponent on the idea, or appears as a whole word in the idea's title (counts ×0.8, and the card
+  says which term matched). No similarity matching, so namesakes don't pick up each other's notes by accident.
+- **Search component** = best live match: confidence high/medium/low → 100/75/50, × scope philly 1.0 /
+  national 0.7 / unknown 0.6. The reason text always says "National (not Philly-specific)" or "Scope unknown"
+  for those. Expired notes never count; cards show them only as "+N expired". No match → "search" stays unknown
+  and is left out of the score exactly as before. Rules version bumped to `2026-10-22.B`.
+- Genre-level notes (e.g. "Pop") match every idea in that genre, by design; use artist terms for precise ones.
+- UI: a collapsed "Trend notes (N active)" panel on "What to post" (no new tab, to keep phones uncluttered),
+  pills on matching queue cards. The snapshot exports `trends.json` read-only (it's behind Cloudflare Access).
+
+## 9:16 slides (P1-11, 2026-10-22; `tracker/slides.py`, `dashboard/src/slides/render.ts`)
+
+- **Python decides the words, the browser draws.** The manifest (title, one slide per show up to 8, ticket
+  times for presales/new shows, CTA) is built from facts only, deterministically, and checked by
+  `llm.check_facts` in tests. Drawing is client-side canvas (1080x1920), so the read-only phone snapshot can
+  render and download slides too, and no image library (Pillow) or headless browser is needed on the PC.
+  ttspotslideshow was read for look and feel only (dark gradients, bold white type); no code or runtime link.
+- **Edits are stored, not flattened.** `slide_decks` keeps the base manifest, the facts it came from and your
+  overrides (text per field, skip flag, image). A saved deck keeps showing what you saved and warns when the
+  facts change (only changes that would alter a slide count). "Rebuild" keeps an edit only where the default
+  it replaced is unchanged; an edit on a date that moved is dropped and listed. Show slides are keyed by
+  ticket URL, so a date correction doesn't orphan edits to the artist line.
+- **Rights:** no artist photos, album art or music are fetched or suggested. Images are opt-in uploads only
+  (data: URLs; web links are rejected, which also avoids fetching and keeps the canvas exportable), at most 4
+  per deck, each with a required credit and a rights basis (own / licensed / permission / open licence). The
+  credit is drawn on the slide. setlist.fm is credited on comeback title slides.
+- **Layout:** text stays out of TikTok's caption zone (bottom ~440px) and right-hand buttons; text shrinks
+  before a word is ever split, and a long name with a photo shrinks the photo first. Genre picks the palette.
+- **No zip download:** "Download all" saves the PNGs one by one (no new dependency). Fonts are the system
+  stack, so slides look slightly different on a phone than on the PC.
+- Not enforced: a request-size limit on `PUT /api/alerts/{id}/slides` (images are validated after parsing).
+  The API only listens on 127.0.0.1.
+
+## Integration review fixes (2026-10-22, after the security + QA review agents)
+
+- **Local-only API** (`api.local_only`): non-local Host → 403 (DNS rebinding); writes with a foreign Origin or
+  `Sec-Fetch-Site: cross-site` → 403 (a web page could otherwise POST /api/run, /api/publish or spend lookups);
+  bodies > 12 MB or chunked → 413. `testserver` is only allowed under tests (conftest).
+- Ticketmaster errors are re-raised with the API key redacted (requests puts the URL in its messages, which
+  reach the log, `runs.error`, the Runs tab and the snapshot). Timestamps outside 2000–2100 are refused;
+  trend notes capped at 500; slide images must have real PNG/JPEG/WebP bytes; the snapshot keeps one copy
+  of each slide image.
+- **Picks** never include games and are only offered when they're a real cut (fewer picks than artists);
+  otherwise they'd be the same video as "The list". The lane cut lists each artist once.
+- **Slides:** lane cuts name their genres in the headline; picks are flagged and always get a slide, with
+  "Picks only" / "All shows" in the editor; "court" theme only when most shows are games; a genre fill alone
+  (theme change) isn't a "facts changed" warning.
+- **Trend notes** match spoken genre names (EDM, Hip-Hop, ...) via `detectors.LANE_NAMES`.
+- Phones: the angles list starts collapsed under 640px.

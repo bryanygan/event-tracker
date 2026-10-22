@@ -22,6 +22,7 @@ from .. import config
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
+ATTRACTIONS_URL = "https://app.ticketmaster.com/discovery/v2/attractions.json"
 PAGE_SIZE = 200
 MAX_RESULTS_PER_QUERY = 950  # stay below TM's 1000 deep-paging cap
 
@@ -64,7 +65,11 @@ class TicketmasterClient:
         self.calls = 0
         self._last_call = 0.0
 
-    def _get(self, params: dict) -> dict:
+    def _redact(self, message: str) -> str:
+        message = re.sub(r"apikey=[^&\s'\"]+", "apikey=***", message)
+        return message.replace(self.api_key, "***") if self.api_key else message
+
+    def _get(self, params: dict, url: str = BASE_URL) -> dict:
         if self.calls >= self.budget:
             raise BudgetExceeded(f"Hit self-imposed budget of {self.budget} calls")
         for attempt in range(4):
@@ -73,11 +78,16 @@ class TicketmasterClient:
                 time.sleep(wait)
             self._last_call = time.monotonic()
             self.calls += 1
-            resp = self.session.get(BASE_URL, params={**params, "apikey": self.api_key}, timeout=30)
-            if resp.status_code == 429:  # rate limited: back off and retry
-                time.sleep(2 ** attempt)
-                continue
-            resp.raise_for_status()
+            try:
+                resp = self.session.get(url, params={**params, "apikey": self.api_key}, timeout=30)
+                if resp.status_code == 429:  # rate limited: back off and retry
+                    time.sleep(2 ** attempt)
+                    continue
+                resp.raise_for_status()
+            except requests.RequestException as exc:
+                # requests puts the full URL (key included) in its messages, and those end up in the
+                # log, runs.error, the Runs tab and the snapshot: re-raise without it.
+                raise type(exc)(self._redact(str(exc))) from None
             return resp.json()
         raise RuntimeError("Ticketmaster kept returning 429 (rate limited)")
 
@@ -132,6 +142,31 @@ class TicketmasterClient:
                 found[ev["id"]] = ev
             log.info("TM window %s → %s: %d events", start.date(), end.date(), len(events))
         return list(found.values())
+
+
+    def find_attraction(self, name: str) -> tuple[str, dict | None]:
+        """Ticketmaster's music attraction with exactly this name (case-insensitive).
+
+        Returns ("found", attraction), ("none", None) or ("ambiguous", None). Two exact-name attractions
+        means two different acts share the name, so we can't tell which one is playing: ambiguous."""
+        data = self._get({"keyword": name, "classificationName": "music", "size": 20, "locale": "*"}, ATTRACTIONS_URL)
+        target = (clean_text(name) or "").casefold()
+        exact = [a for a in data.get("_embedded", {}).get("attractions") or []
+                 if (clean_text(a.get("name")) or "").casefold() == target]
+        if not exact:
+            return "none", None
+        if len(exact) > 1:
+            return "ambiguous", None
+        return "found", exact[0]
+
+
+def attraction_genre(a: dict) -> tuple[str | None, str | None]:
+    """(genre, subgenre) from a raw TM attraction, with placeholder labels dropped."""
+    cls = (a.get("classifications") or [{}])[0]
+    def name(key):
+        n = clean_text((cls.get(key) or {}).get("name"))
+        return None if n in (None, *config.NON_GENRES) else n
+    return name("genre"), name("subGenre")
 
 
 def _tm_time(dt: datetime) -> str:

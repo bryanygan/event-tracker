@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type ShowFacts, type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
+import { SlidesOverlay } from './SlidesOverlay'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
@@ -12,6 +13,9 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   team_week: 'Home games this week',
   big_game: 'Big game',
 }
+
+// Phones: start long lists (angles) collapsed so a card stays about one screen tall
+const NARROW = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
 
 const STATUS_LABEL: Record<Draft['status'], string> = {
   pending: 'Pending review',
@@ -136,7 +140,10 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
   const [showOlder, setShowOlder] = useState(false)
+  const [slidesOpen, setSlidesOpen] = useState(false)
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
+  // Roundups: the "my N picks" cut (best by notability), starred in the facts table
+  const picks = ((alert.facts.picks as ShowFacts[] | undefined) ?? []).map((s) => `${s.artist}|${s.date}`)
   const [latest, ...older] = alert.drafts
 
   return (
@@ -163,7 +170,9 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
             {shows.map((s, i) => (
               <tr key={i}>
                 <td>{s.date}{s.time ? ` · ${s.time}` : ''}</td>
-                <td><strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}</td>
+                <td>
+                  {picks.includes(`${s.artist}|${s.date}`) && <span className="pick" title={`one of the top ${picks.length} picks`}>★ </span>}
+                  <strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}</td>
                 <td>{s.venue}</td>
                 <td>{s.price ?? ''}</td>
                 <td>{s.url && <a href={s.url} target="_blank" rel="noreferrer">tickets ↗</a>}</td>
@@ -171,13 +180,13 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
             ))}
           </tbody>
         </table>
-        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
+        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays', 'picks'].includes(k))), null, 2)}</pre>
       </details>
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
 
       {alert.angles.length > 0 && (
-        <details className="angles" open={!latest}>
+        <details className="angles" open={!latest && !NARROW}>
           <summary>Angles ({alert.angles.length}): pick one to draft from</summary>
           {alert.angles.map((a) => (
             <div key={a.key} className="angle">
@@ -203,12 +212,14 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       )}
       {showOlder && older.map((d) => <DraftView key={d.id} draft={d} alertId={alert.id} onChange={onDraftChange} />)}
 
-      {!STATIC && <div className="actions">
-        <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>
-        {alert.status !== 'dismissed'
+      <div className="actions">
+        {!STATIC && <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>}
+        <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
+        {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
-          : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>}
-      </div>}
+          : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}
+      </div>
+      {slidesOpen && <SlidesOverlay alertId={alert.id} title={alert.title} onClose={() => setSlidesOpen(false)} />}
     </section>
   )
 }

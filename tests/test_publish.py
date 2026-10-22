@@ -49,6 +49,9 @@ def test_export_writes_app_data_and_privacy_headers(conn, fake_build, tmp_path):
     assert json.loads((out / "data" / "alerts.json").read_text(encoding="utf-8"))[0]["title"] == "Weekend"
     events = json.loads((out / "data" / "events.json").read_text(encoding="utf-8"))
     assert [e["headliner"] for e in events] == ["Mt. Joy"]
+    decks = json.loads((out / "data" / "slides.json").read_text(encoding="utf-8"))  # read-only slides on the phone
+    alert_id = str(json.loads((out / "data" / "alerts.json").read_text(encoding="utf-8"))[0]["id"])
+    assert decks[alert_id]["manifest"]["slides"][0]["kind"] == "title"
     assert "noindex" in (out / "_headers").read_text() and "Disallow: /" in (out / "robots.txt").read_text()
 
 

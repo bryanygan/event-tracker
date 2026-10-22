@@ -37,6 +37,7 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
     chosen = angles.find(facts, angle) if angle else None
     if angle and chosen is None:
         raise ValueError(f"no angle {angle!r} for this alert")
+    facts = angles.scoped_facts(facts, chosen)  # "picks": the draft only sees (and is checked against) the picks
     # presale/status: Python writes the voiceover and caption; the model only writes hook + hashtags
     script = templates.script_for(facts)
     caption = templates.caption_for(facts) if script else None
