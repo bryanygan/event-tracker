@@ -26,6 +26,16 @@ def test_reads_work_locally_but_not_through_a_foreign_host_name(client):
     assert client.get("/api/trends", headers={"host": "127.0.0.1:8765"}).status_code == 200
     # DNS rebinding: an attacker's domain pointed at 127.0.0.1 still sends its own name as Host
     assert client.get("/api/trends", headers={"host": "evil.example:8765"}).status_code == 403
+    assert client.get("/api/trends", headers={"host": "["}).status_code == 403  # malformed: refused, not a 500
+    assert client.get("/api/trends", headers={"host": "[::1]:8765"}).status_code == 200
+
+
+def test_testserver_is_only_allowed_under_tests():
+    import subprocess
+    import sys
+    out = subprocess.run([sys.executable, "-c", "import tracker.api as a; print(sorted(a.LOCAL_HOSTS))"],
+                         capture_output=True, text=True, cwd=config.ROOT, check=True).stdout
+    assert "testserver" not in out and "127.0.0.1" in out
 
 
 def test_cross_site_writes_are_refused(client):

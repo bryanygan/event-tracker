@@ -17,7 +17,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import config
+from . import config, detectors
 from .posts import PostError, parse_iso
 from .store import now_iso
 
@@ -161,6 +161,10 @@ def idea_terms(facts: dict, events: list[dict]) -> set[str]:
         names += [s.get("artist"), s.get("venue"), s.get("opponent")]
     for e in events:
         names += [e.get("headliner"), e.get("genre"), e.get("venue_name")]
+    # Genres also answer to the names people say ("EDM" for Dance/Electronic, "Hip-Hop" for Hip-Hop/Rap),
+    # the same names a lane cut uses in its title ("Pop, EDM & Hip-Hop").
+    names += [detectors.LANE_NAMES.get(n) for n in names if isinstance(n, str)]
+    names += re.split(r", | & ", facts.get("lane") or "")
     return {_norm(n) for n in names if isinstance(n, str) and n.strip()}
 
 

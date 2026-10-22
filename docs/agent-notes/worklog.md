@@ -140,3 +140,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Checked on a copy of the real DB: all 7 formats build; rendered presale, weekend (8 shows) and team-week
   decks; stress test (95-char name, unbreakable word, 7 sale lines, photo); date-correction rebuild kept the
   artist edit and photo; static snapshot renders read-only at 500px.
+
+### P1-08..11 integrated (2026-10-22, early morning)
+- Three build agents in parallel worktrees (`../et-roundups`, `../et-trends`, `../et-slides`), combined on
+  `integration/p1`, then a security review agent and a functional/mobile QA agent. Fixed everything they found
+  (see decisions.md "Integration review fixes"). 226 tests. Real-data re-detect on a DB copy: picks only where
+  they're a real cut, lane slides headline "Pop, EDM & Hip-Hop this weekend", weekend deck keeps a music theme,
+  EDM/Hip-Hop notes match. Phone screenshots at 500px: cards ~1/5 screen with angles collapsed.

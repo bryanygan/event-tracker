@@ -147,3 +147,10 @@
 - Headless Edge with a reused `--user-data-dir` caches JS: add `?v=<timestamp>` to script URLs between rebuilds.
 - Canvas text fitting: check every word fits the line *before* wrapping at a size, or the largest size wins by
   splitting "weekend" into "weeken / d".
+
+## Integration (2026-10-22)
+
+- `tracker.run --from-cache` still calls Deezer (free) for enrichment. For a no-network re-detect on a DB
+  copy, call `detectors.run_all` + `save_alerts` directly (see the QA scripts pattern in worklog).
+- The API refuses any Host that isn't 127.0.0.1/localhost/::1. A test server reached by another name (or a
+  TestClient outside pytest) gets 403 "unknown host".

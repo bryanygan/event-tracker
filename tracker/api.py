@@ -30,13 +30,16 @@ DIST = config.ROOT / "dashboard" / "dist"
 
 # This API is only for the dashboard on this PC. Without these checks any website open in your browser could
 # POST to it (run the pipeline, publish, spend web lookups) or, via DNS rebinding, read it.
-# "testserver" is FastAPI's TestClient; it isn't a resolvable public name.
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "testserver"}
+# (tests/conftest.py adds "testserver", the name FastAPI's TestClient sends.)
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 MAX_BODY_BYTES = 12_000_000
 
 
 def _hostname(value: str) -> str:
-    return urlsplit(value if "//" in value else f"//{value}").hostname or ""
+    try:
+        return urlsplit(value if "//" in value else f"//{value}").hostname or ""
+    except ValueError:  # e.g. "Host: [" -> refused as unknown, not a 500
+        return ""
 
 
 @app.middleware("http")

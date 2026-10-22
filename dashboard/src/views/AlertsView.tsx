@@ -14,6 +14,9 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   big_game: 'Big game',
 }
 
+// Phones: start long lists (angles) collapsed so a card stays about one screen tall
+const NARROW = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches
+
 const STATUS_LABEL: Record<Draft['status'], string> = {
   pending: 'Pending review',
   approved: 'Approved',
@@ -183,7 +186,7 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
 
       {alert.angles.length > 0 && (
-        <details className="angles" open={!latest}>
+        <details className="angles" open={!latest && !NARROW}>
           <summary>Angles ({alert.angles.length}): pick one to draft from</summary>
           {alert.angles.map((a) => (
             <div key={a.key} className="angle">

@@ -59,6 +59,7 @@ export type SlideImage = { data_url: string; credit: string; rights: string }
 export type Slide = {
   id: string; kind: SlideKind; fields: Record<string, string>
   hidden?: boolean; edited?: string[]; image?: SlideImage
+  pick?: boolean // a roundup's 3-5 picks (tracker/slides.py)
 }
 export type SlideManifest = {
   version: number; format: string | null; theme: string; brand: string

@@ -14,5 +14,6 @@ def no_real_services(monkeypatch):
     monkeypatch.setattr(config, "VENUE_CALENDARS", [])    # or fetch real venue sites
     monkeypatch.setattr(config, "LISTENING_DB", "")       # or read the user's real listening history
     monkeypatch.setattr(config, "PERPLEXITY_API_KEY", "")  # or spend money on web lookups
-    from tracker import listening
+    from tracker import api, listening
     monkeypatch.setattr(listening, "_cache", {})
+    monkeypatch.setattr(api, "LOCAL_HOSTS", api.LOCAL_HOSTS | {"testserver"})  # TestClient's Host header

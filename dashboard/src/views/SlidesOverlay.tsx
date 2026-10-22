@@ -160,6 +160,21 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
     setDirty(true)
   }
 
+  // A roundup's picks are flagged on their show slides: one tap skips (or brings back) the rest
+  const hasPicks = !!manifest?.slides.some((s) => s.pick)
+  const showOnly = (picks: boolean) => {
+    if (!manifest) return
+    setOverrides((o) => {
+      const next = { ...o }
+      for (const s of manifest.slides) {
+        if (s.kind === 'show') next[s.id] = { ...(next[s.id] ?? {}), hidden: picks && !s.pick }
+      }
+      return next
+    })
+    setDirty(true)
+    setNotice(null)
+  }
+
   const run = async (fn: () => Promise<SlideDeck>, after?: (d: SlideDeck) => void) => {
     setBusy(true); setError(null)
     try {
@@ -216,8 +231,16 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
         </div>
       )}
       {notice && <div className="banner">{notice.length === 1 ? notice[0] : <><p>{notice[0]}</p><ul>{notice.slice(1).map((n, i) => <li key={i}>{n}</li>)}</ul></>}</div>}
-      {manifest && manifest.shows_total > manifest.shows_on_slides && (
-        <p className="muted small">{manifest.shows_on_slides} of {manifest.shows_total} shows have a slide. Hide some to make a tighter 3–5 pick.</p>
+      {manifest && (manifest.shows_total > manifest.shows_on_slides || (!STATIC && hasPicks)) && (
+        <p className="muted small slides-picks">
+          {manifest.shows_total > manifest.shows_on_slides && `${manifest.shows_on_slides} of ${manifest.shows_total} shows have a slide. `}
+          {!STATIC && (hasPicks
+            ? <>
+                <button className="ghost" onClick={() => showOnly(true)}>Picks only</button>{' '}
+                <button className="ghost" onClick={() => showOnly(false)}>All shows</button>
+              </>
+            : 'Skip some to make a tighter 3–5 pick.')}
+        </p>
       )}
 
       {manifest && (

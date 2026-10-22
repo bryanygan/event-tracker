@@ -139,3 +139,12 @@ def test_api_crud_and_queue_effect(tmp_path, monkeypatch):
     assert client.delete(f"/api/trends/{nid}").status_code == 200
     assert client.delete(f"/api/trends/{nid}").status_code == 404
     assert client.get("/api/trends").json() == []
+
+
+def test_spoken_genre_names_match_ticketmaster_genres():
+    terms = trends.idea_terms({"format": "stacked_month", "genre": "Dance/Electronic", "shows": []}, [])
+    assert "edm" in terms and "dance/electronic" in terms
+    hiphop = trends.idea_terms({"artist": "Nova Vale", "shows": []}, [{"headliner": "Nova Vale", "genre": "Hip-Hop/Rap"}])
+    assert "hip-hop" in hiphop
+    lane = trends.idea_terms({"format": "weekend", "lane": "Pop, EDM & Hip-Hop", "shows": []}, [])
+    assert {"pop", "edm", "hip-hop"} <= lane

@@ -21,7 +21,7 @@ WEEKEND = {"format": "weekend", "weekend": "Fri, Oct 23 – Sun, Oct 25",
 GAME = {"format": "big_game", "artist": "Sixers", "team": "Philadelphia 76ers", "opponent": "Boston Celtics",
         "show": {"artist": "Sixers vs. Celtics", "date": "Sat, Oct 24", "time": "7:30 PM",
                  "venue": "Xfinity Mobile Arena", "kind": "game", "url": "https://tm.example/g1"}}
-PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG fake bytes").decode()
+PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n then the image").decode()
 
 
 def _text(manifest: dict) -> str:
@@ -156,3 +156,41 @@ def test_volatile_facts_dont_flag_a_saved_deck(client):
     c.commit()
     c.close()
     assert cl.get("/api/alerts/1/slides").json()["facts_changes"] == []
+
+
+def test_lane_cut_names_its_genres_and_picks_get_slides():
+    shows = WEEKEND["shows"]
+    facts = {**WEEKEND, "lane": "Pop & R&B", "picks": [shows[9], shows[0], shows[8]], "pick_count": 3}
+    m = slides.build(facts)
+    assert m["slides"][0]["fields"]["headline"] == "Pop & R&B this weekend"
+    on_slides = {s["fields"]["artist"]: s["pick"] for s in m["slides"] if s["kind"] == "show"}
+    assert len(on_slides) == slides.MAX_SHOWS and on_slides["Act 9"] and on_slides["Act 8"]  # past the cap, still in
+    assert sum(on_slides.values()) == 3 and not on_slides["Act 1"]
+    artists = [s["fields"]["artist"] for s in m["slides"] if s["kind"] == "show"]
+    assert artists == sorted(artists, key=lambda a: int(a.split()[1]))  # still in date (facts) order
+
+
+def test_a_game_or_two_doesnt_make_a_music_roundup_a_court_deck():
+    shows = [{**s, "kind": "game"} if i < 2 else s for i, s in enumerate(WEEKEND["shows"][:6])]
+    assert slides.build({**WEEKEND, "shows": shows})["theme"] == "rose"
+    assert slides.build({**WEEKEND, "shows": [{**s, "kind": "game"} for s in shows]})["theme"] == "court"
+
+
+def test_a_genre_fill_alone_is_not_a_slide_change(tmp_path):
+    c = db.connect(tmp_path / "s.db")
+    facts = {**PRESALE, "shows": [{**SHOW, "genre": None}]}
+    detectors.save_alerts(c, [{"key": "k", "kind": "presale_soon", "title": "t", "score": 50, "facts": facts}])
+    slides.save(c, 1, {"cta": {"headline": "Mine"}})
+    c.execute("UPDATE alerts SET facts=?", (json.dumps({**facts, "shows": [SHOW]}),))  # genre filled -> theme differs
+    assert slides.deck(c, 1)["facts_changes"] == []
+
+
+def test_images_must_really_be_images_and_export_keeps_one_copy(tmp_path):
+    fake = "data:image/png;base64," + base64.b64encode(b"AAAAAAAAAAAAAAAA").decode()
+    with pytest.raises(slides.SlidesError):
+        slides.validate(slides.build(PRESALE), {"title": {"image": {"data_url": fake, "credit": "me", "rights": "own"}}})
+    c = db.connect(tmp_path / "s.db")
+    detectors.save_alerts(c, [{"key": "k", "kind": "presale_soon", "title": "t", "score": 50, "facts": PRESALE}])
+    slides.save(c, 1, {"title": {"image": {"data_url": PNG, "credit": "me", "rights": "own"}}})
+    exported = slides.export_all(c, [1])["1"]
+    assert json.dumps(exported).count(PNG) == 1 and exported["manifest"]["slides"][0]["image"]["data_url"] == PNG

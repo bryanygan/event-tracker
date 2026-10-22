@@ -267,3 +267,20 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
   stack, so slides look slightly different on a phone than on the PC.
 - Not enforced: a request-size limit on `PUT /api/alerts/{id}/slides` (images are validated after parsing).
   The API only listens on 127.0.0.1.
+
+## Integration review fixes (2026-10-22, after the security + QA review agents)
+
+- **Local-only API** (`api.local_only`): non-local Host → 403 (DNS rebinding); writes with a foreign Origin or
+  `Sec-Fetch-Site: cross-site` → 403 (a web page could otherwise POST /api/run, /api/publish or spend lookups);
+  bodies > 12 MB or chunked → 413. `testserver` is only allowed under tests (conftest).
+- Ticketmaster errors are re-raised with the API key redacted (requests puts the URL in its messages, which
+  reach the log, `runs.error`, the Runs tab and the snapshot). Timestamps outside 2000–2100 are refused;
+  trend notes capped at 500; slide images must have real PNG/JPEG/WebP bytes; the snapshot keeps one copy
+  of each slide image.
+- **Picks** never include games and are only offered when they're a real cut (fewer picks than artists);
+  otherwise they'd be the same video as "The list". The lane cut lists each artist once.
+- **Slides:** lane cuts name their genres in the headline; picks are flagged and always get a slide, with
+  "Picks only" / "All shows" in the editor; "court" theme only when most shows are games; a genre fill alone
+  (theme change) isn't a "facts changed" warning.
+- **Trend notes** match spoken genre names (EDM, Hip-Hop, ...) via `detectors.LANE_NAMES`.
+- Phones: the angles list starts collapsed under 640px.

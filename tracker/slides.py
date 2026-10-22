@@ -16,6 +16,7 @@ a rights basis stored in the manifest.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections import Counter
@@ -80,8 +81,9 @@ def _comeback_year(facts: dict):
 
 
 def _theme(facts: dict, shows: list[dict]) -> str:
-    if facts.get("format") in ("team_week", "big_game") or any(s.get("kind") == "game" for s in shows):
-        return "court"
+    games = sum(s.get("kind") == "game" for s in shows)
+    if facts.get("format") in ("team_week", "big_game") or (shows and games * 2 > len(shows)):
+        return "court"  # a music roundup with a game or two keeps its music theme
     if facts.get("genre") in THEMES:
         return THEMES[facts["genre"]]
     genres = Counter(s.get("genre") for s in shows if s.get("genre"))
@@ -100,6 +102,9 @@ def _title(facts: dict, shows: list[dict]) -> dict:
     elif fmt == "new_tour":
         kicker = "NEW PHILLY DATE" if facts.get("already_had_philly_dates") else "JUST ANNOUNCED"
         sub = f"First Philly show since {year}" if year else where
+    elif fmt == "weekend" and facts.get("lane"):  # the your-lane cut: name its genres, not just a count
+        headline = f"{facts['lane']} this weekend"
+        sub = " · ".join(b for b in (f"{n} shows", facts.get("weekend")) if b)
     elif fmt == "weekend":
         headline, sub = f"{n} shows this weekend", facts.get("weekend", "")
     elif fmt == "stacked_month":
@@ -147,6 +152,10 @@ def _sales(facts: dict) -> list[str]:
     return []
 
 
+def _pick_key(s: dict) -> tuple:
+    return (_name(s), s.get("date"), s.get("venue"))
+
+
 def _show_ids(shows: list[dict]) -> list[str]:
     """Stable slide ids: the ticket URL survives a date correction; the name is the fallback."""
     ids, seen = [], Counter()
@@ -161,8 +170,14 @@ def build(facts: dict) -> dict:
     """The default manifest for these facts. Deterministic: same facts, same manifest."""
     shows = _shows(facts)
     slides = [{"id": "title", "kind": "title", "fields": _title(facts, shows)}]
-    for sid, s in list(zip(_show_ids(shows), shows))[:MAX_SHOWS]:
-        slides.append({"id": sid, "kind": "show", "fields": _show(facts, s)})
+    # Roundup picks are flagged so the overlay can show "picks only"; when there are more shows than slides,
+    # the picks always get one (then the rest by date), keeping the facts' date order.
+    picked = {_pick_key(p) for p in facts.get("picks") or []}
+    paired = list(zip(_show_ids(shows), shows))
+    keep = sorted(range(len(paired)), key=lambda i: (_pick_key(paired[i][1]) not in picked, i))[:MAX_SHOWS]
+    for i in sorted(keep):
+        sid, s = paired[i]
+        slides.append({"id": sid, "kind": "show", "fields": _show(facts, s), "pick": _pick_key(s) in picked})
     sales = _sales(facts)
     if sales:
         slides.append({"id": "sales", "kind": "sales", "fields": {"heading": "Ticket times", "lines": "\n".join(sales)}})
@@ -236,11 +251,22 @@ def validate(base: dict, overrides) -> dict:
     return clean
 
 
+def _real_image(kind: str, url: str) -> bool:
+    """The bytes match the label (the dashboard re-encodes uploads; a direct API call might not)."""
+    try:
+        head = base64.b64decode(url.split(",", 1)[1][:24])
+    except ValueError:
+        return False
+    return {"png": head.startswith(b"\x89PNG\r\n\x1a\n"), "jpeg": head.startswith(b"\xff\xd8\xff"),
+            "webp": head[:4] == b"RIFF" and head[8:12] == b"WEBP"}[kind]
+
+
 def _image(sid: str, v) -> dict:
     if not isinstance(v, dict):
         raise SlidesError(f"{sid}.image must be an object")
     url, credit, rights = v.get("data_url"), v.get("credit"), v.get("rights")
-    if not isinstance(url, str) or len(url) > MAX_IMAGE_CHARS or not _DATA_URL.fullmatch(url):
+    if (not isinstance(url, str) or len(url) > MAX_IMAGE_CHARS or not (m := _DATA_URL.fullmatch(url))
+            or not _real_image(m.group(1), url)):
         raise SlidesError(f"{sid}.image: upload a PNG, JPEG or WebP under ~1.5 MB (web links aren't accepted)")
     if not isinstance(credit, str) or not credit.strip() or len(credit) > MAX_CREDIT:
         raise SlidesError(f"{sid}.image: a credit (who took it / where it's from) is required")
@@ -287,6 +313,12 @@ def _label(slide: dict | None, sid: str) -> str:
 
 # ---------- storage ----------
 
+def _visible(manifest: dict) -> list:
+    """The words on the slides. A genre filled in later can change the colour theme, but a saved deck keeps
+    its theme, so that alone isn't a change worth a warning."""
+    return [(s["id"], s["fields"]) for s in manifest["slides"]]
+
+
 def deck(conn, alert_id: int) -> dict | None:
     """What the dashboard shows: the manifest, your overrides, and whether the facts moved since you saved."""
     alert = conn.execute("SELECT facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
@@ -300,7 +332,7 @@ def deck(conn, alert_id: int) -> dict | None:
                 "facts_changes": [], "updated_at": None, "rights": RIGHTS}
     base, overrides, built_from = json.loads(row["base"]), json.loads(row["overrides"]), json.loads(row["facts"])
     changes = []
-    if build(facts) != build(built_from):  # only changes that would change a slide count
+    if _visible(build(facts)) != _visible(build(built_from)):  # only changes that would change a slide's text count
         changes = detectors.facts_diff(built_from, facts) or ["Sale times or other slide text changed"]
     # `base` lets the editor show which fields you changed and reset one; `manifest` is what gets drawn
     return {"alert_id": alert_id, "saved": True, "base": base, "manifest": apply(base, overrides), "overrides": overrides,
@@ -357,5 +389,7 @@ def export_all(conn, alert_ids: list[int]) -> dict:
     for alert_id in alert_ids:
         d = deck(conn, alert_id)
         if d:
+            # images are already in `manifest`; a second copy in `overrides` doubled the snapshot's size
+            d["overrides"] = {sid: {k: v for k, v in o.items() if k != "image"} for sid, o in d["overrides"].items()}
             out[str(alert_id)] = d
     return out

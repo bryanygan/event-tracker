@@ -132,13 +132,15 @@ def test_api_genres_include_filled_ones(conn, tmp_path, monkeypatch):
 # ---------- P1-08: picks and lane cuts ----------
 
 def weekend_raws():
-    """Fri-Sun shows: 3 rock (big), 4 in the lane (hip-hop / R&B), plus one next week."""
+    """Fri-Sun shows: 3 rock (big), 4 in the lane (hip-hop / R&B), 2 small jazz, plus one next week."""
     raws = [tm_event(event_id=f"r{i}", name=f"Rock Band {i}", date="2026-10-24", genre="Rock",
                      venue="Xfinity Mobile Arena", upcoming=200) for i in range(3)]
     raws += [tm_event(event_id=f"h{i}", name=f"Rapper {i}", date="2026-10-23", genre="Hip-Hop/Rap", upcoming=20 + i)
              for i in range(3)]
     raws += [tm_event(event_id="rb", name="Singer RB", date="2026-10-25", genre="R&B", upcoming=10),
              tm_event(event_id="nw", name="Next Week", date="2026-10-31", genre="Pop")]
+    raws += [tm_event(event_id=f"j{i}", name=f"Jazz Trio {i}", date="2026-10-25", genre="Jazz", upcoming=1)
+             for i in range(2)]
     return raws
 
 
@@ -165,10 +167,10 @@ def test_too_few_shows_means_no_picks():
 
 def test_one_pick_per_artist(conn):
     raws = [tm_event(event_id=f"n{i}", name="Nova Vale", date=f"2026-10-2{3 + i}", upcoming=300) for i in range(2)]
-    raws += [tm_event(event_id=f"o{i}", name=f"Other {i}", date="2026-10-24", upcoming=5 + i) for i in range(2)]
+    raws += [tm_event(event_id=f"o{i}", name=f"Other {i}", date="2026-10-24", upcoming=5 + i) for i in range(5)]
     ingest(conn, raws)
     picks = detectors.picks_facts(upcoming_events(conn, TODAY))["picks"]
-    assert [p["artist"] for p in picks] == ["Nova Vale", "Other 1", "Other 0"]
+    assert [p["artist"] for p in picks] == ["Nova Vale", "Other 4", "Other 3", "Other 2", "Other 1"]
     assert picks[0]["date"] == "Fri, Oct 23"  # same score both nights: the earlier one
 
 
@@ -196,7 +198,7 @@ def test_lane_weekend_cut(conn):
     assert f["lane"] == "Hip-Hop & R&B" and len(f["shows"]) == 4
     assert {s["genre"] for s in f["shows"]} == {"Hip-Hop/Rap", "R&B"}
     assert lane["title"].startswith("Your lane this weekend: Hip-Hop & R&B (4 shows")
-    assert f["pick_count"] == 4  # 4 shows: all of them, best first
+    assert "picks" not in f  # 4 shows: the picks would be the whole list again (same video as "The list")
 
 
 def test_lane_cut_skipped_when_the_general_roundup_already_covers_it(conn):
@@ -294,3 +296,25 @@ def test_lane_cut_scores_as_your_lane():
     comps = {c["key"]: c for c in out["components"]}
     assert comps["story"]["value"] == 45 and "your lane" in comps["story"]["why"]
     assert comps["local"]["value"] == 100
+
+
+def test_picks_skip_games_and_never_repeat_the_whole_list(conn):
+    raws = [tm_event(event_id=f"m{i}", name=f"Band {i}", date="2026-10-24", upcoming=10 + i) for i in range(4)]
+    ingest(conn, raws)
+    events = upcoming_events(conn, TODAY)
+    assert detectors.picks_facts(events) == {}  # 4 shows -> 4 picks = the list itself
+    game = {**events[0], "id": "g", "headliner": "Sixers vs. Bucks", "kind": "game", "segment": "Sports",
+            "genre": "Basketball", "score": 999}
+    picks = detectors.picks_facts(events + [game])
+    assert picks and "Sixers vs. Bucks" not in [p["artist"] for p in picks["picks"]]
+
+
+def test_lane_cut_counts_a_two_night_run_once(conn):
+    raws = [tm_event(event_id=f"n{i}", name="Nova Vale", date=f"2026-10-2{3 + i}", genre="Pop", upcoming=50)
+            for i in range(2)]
+    raws += [tm_event(event_id=f"h{i}", name=f"Rapper {i}", date="2026-10-24", genre="Hip-Hop/Rap") for i in range(2)]
+    raws += [tm_event(event_id=f"r{i}", name=f"Rock Band {i}", date="2026-10-24", genre="Rock", upcoming=200)
+             for i in range(3)]
+    ingest(conn, raws)
+    [lane] = detectors.detect_lane_weekend(conn, NOW.date(), [])
+    assert [s["artist"] for s in lane["facts"]["shows"]].count("Nova Vale") == 1 and "(3 shows)" in lane["title"]

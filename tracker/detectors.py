@@ -288,15 +288,20 @@ def ranked(events: list[dict]) -> list[dict]:
 
 
 def picks_facts(events: list[dict]) -> dict:
-    """The "my 3-5 picks" cut of a roundup: its best shows by notability, best first. Empty if too few."""
+    """The "my 3-5 picks" cut of a roundup: its best shows by notability, best first. Empty if too few, or
+    if the picks would just be the whole list again (then it's the same video as "The list" angle)."""
     seen, top = set(), []
-    for e in ranked(events):  # one pick per artist: a two-night run is one pick, at its best-scoring night
+    # one pick per artist (a two-night run is one pick, at its best-scoring night); games aren't concert
+    # picks and their scores aren't on the music scale
+    for e in ranked([e for e in events if not is_game(e)]):
         if e["headliner"] not in seen:
             seen.add(e["headliner"])
             top.append(e)
     if len(top) < config.PICKS_MIN:
         return {}
     top = top[:config.PICKS_MAX]
+    if len(top) >= len({e["headliner"] for e in events}):
+        return {}
     return {"picks": [event_facts(e) for e in top], "pick_count": len(top)}
 
 
@@ -366,7 +371,8 @@ def detect_lane_weekend(conn: sqlite3.Connection, today: date, others: list[dict
     lane = [e for e in upcoming_events(conn, today.isoformat())
             if fri.isoformat() <= e["local_date"] <= sun.isoformat() and e["status"] != "cancelled"
             and not is_game(e) and listening.in_niche(e["genre"], e["subgenre"], None)]
-    lane = ranked(lane)[:config.WEEKEND_TOP_N]
+    seen = set()  # one entry per artist: a two-night run would otherwise take two of the slots
+    lane = [e for e in ranked(lane) if not (e["headliner"] in seen or seen.add(e["headliner"]))][:config.WEEKEND_TOP_N]
     if len(lane) < config.LANE_WEEKEND_MIN:
         return []
     ids = {e["id"] for e in lane}
