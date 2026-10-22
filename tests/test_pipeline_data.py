@@ -201,3 +201,14 @@ def test_stacked_month_skips_current_month_after_the_15th(conn):
     ingest(conn, raws)
     assert detectors.detect_stacked_months(conn, NOW.date()) == []  # Oct 21: October is nearly over
     assert len(detectors.detect_stacked_months(conn, NOW.date().replace(day=10))) == 1
+
+
+def test_tonights_show_dropping_out_of_the_feed_is_not_a_removal(conn):
+    """Regression (2026-10-21 8:37 PM): TM stops returning shows once they start; that's not a cancellation."""
+    from datetime import date
+    tonight = tm_event(event_id="tonight", name="Started Already", date=date.today().isoformat())
+    future = tm_event(event_id="later", name="Later Show", date="2099-01-01")
+    ingest(conn, [tonight, future])
+    _, counts = ingest(conn, [future])  # tonight's show is gone from the feed
+    assert counts == {}
+    assert conn.execute("SELECT active FROM events WHERE id='tonight'").fetchone()[0] == 1

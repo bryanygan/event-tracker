@@ -75,6 +75,17 @@
   captions before posting.**
 - It guessed artist pronouns; the system prompt now says to use the name or "they".
 
+## Feeds and dates
+
+- **Tonight's shows drop out of Ticketmaster once they start** (it only returns events that haven't started).
+  The store used `local_date >= today` for "removed", so every evening run marked tonight's shows removed.
+  Fixed to `local_date > today` (2026-10-21). Any new source with the same behavior is covered by this.
+- Venue JSON-LD start times are UTC (`2027-01-08T00:30Z` = 7:30 PM Jan 7 in Philly). Always convert to
+  `America/New_York` before taking the date.
+- Splitting "A w/ B & C" into acts: split support on commas only; "&"/"and" are inside band names.
+- A heredoc wrote `"\\0"` into store.py as a literal NUL byte ("source code string cannot contain null bytes").
+  Same family as the `\b` trap above: use the Edit tool.
+
 ## Cloudflare
 
 - `wrangler pages project create` exited 0 but **did not create the project** (non-interactive/CI mode printed

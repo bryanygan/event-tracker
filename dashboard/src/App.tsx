@@ -113,6 +113,12 @@ export default function App() {
         <div className="banner">TICKETMASTER_CONSUMER_KEY is missing from <code>.env</code>, so the pipeline can't fetch.</div>
       )}
       {job?.error && !job.running && <div className="banner error">Last job failed: {job.error}</div>}
+      {!!summary?.source_problems?.length && (
+        <div className="banner">
+          Venue calendar problem: {summary.source_problems.map((p) => `${p.source} (${p.error})`).join(' · ')}.
+          Their existing shows are kept; the site may have changed.
+        </div>
+      )}
       {error && <div className="banner error">{error}</div>}
 
       <nav>

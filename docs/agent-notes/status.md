@@ -24,7 +24,7 @@ commented code over abstraction.
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
-| Tests | `tests/` | 77 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
+| Tests | `tests/` | 87 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
 ## Live on the machine right now
 
@@ -62,7 +62,10 @@ commented code over abstraction.
 **On hold by the user (2026-10-21): phone notifications** (ntfy etc.). Don't start until the user says the
 pipeline is polished and has run for a while without hiccups.
 
-**Under discussion: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
+**Venue calendars** (`feature/venue-calendars`, checked out, not merged; see venue-coverage.md). The DB now holds
+177 `cal:` events, so don't run `main` without this branch merged or the next run marks them removed.
+
+**Previously: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
 Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).
 Proposed approach: measure which notable venues are missing, then read those venues' own calendars, deduped against TM.
 

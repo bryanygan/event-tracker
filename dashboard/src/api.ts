@@ -81,6 +81,7 @@ export type Summary = {
   has_tm_key: boolean
   generated_at?: string // static snapshots only
   publish?: { at: string; ok: boolean; message: string; url?: string } | null
+  source_problems?: { source: string; error: string }[]
 }
 
 export type Job = { name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean }
