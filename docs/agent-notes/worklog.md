@@ -99,3 +99,14 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   up (e.g. a 48 → 73), in-lane stacked-month alerts appeared for Pop and Dance/Electronic.
 - `feature/etix-venues` (stacked on `feature/niche`): rhp + PhilaMOCA HTML parsers, +71 shows, film/wrestling
   filter. Live run: 8/8 venues read, 781 events, no fake "new", no bogus removals.
+
+### Creator roadmap, first pass (2026-10-21, late evening)
+- User added `creator-roadmap.md` (committed on `main`). Worked in a git worktree (`../events-tracker-dev`) so
+  `main` stayed checked out for the scheduled tasks; tested against a *copy* of the real DB on port 8766.
+- `feature/post-tracking` (P0-04/05): posts + metric snapshots, same-age comparisons, "Posted" tab, "Log as posted".
+- `feature/alert-refresh` (P0-07, stacked): alerts refresh facts, history kept, drafts show what changed. On real
+  data 5 alerts would refresh (weekend gained Arcángel + 2 Sixers games; Nov Hip-Hop 6 → 9; 3 presales got
+  setlist.fm history).
+- `feature/content-queue` (P0-01/02/03, stacked): opportunity score, "What to post" default tab. Checked with
+  headless-Edge screenshots, which exposed the thread/close 500 (fixed on `fix/db-thread` from `main`, cherry-
+  picked into the stack). None merged yet: waiting for the user.

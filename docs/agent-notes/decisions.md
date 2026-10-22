@@ -160,3 +160,29 @@ is logged on (Interactive), `MultipleInstances IgnoreNew`, `StartWhenAvailable`.
 
 **Per-request DB connections, always closed** (`api.get_db` dependency). Open SQLite handles lock the file on
 Windows, which blocked rebuilding the DB.
+
+## Creator features (2026-10-21, from creator-roadmap.md)
+
+**Alerts are the "content opportunities".** The roadmap proposed a separate `content_opportunities` table. An
+alert already is one video idea (stable key, format, grouped events, facts), so a parallel table would only add
+syncing. Added instead: `alerts.event_ids/post_by/expires_at` (set by detectors from data), user state
+(`shortlisted`, `snoozed_until`, `note`), and `tracker/opportunities.py`, which computes the score, reasons,
+caveats and workflow stage on every request (nothing derived is stored, so it can't go stale). Stage is derived
+from alert/draft/post state; existing alert and draft statuses are unchanged.
+
+**Opportunity score is separate from notability and labelled experimental.** Weights 25/25/20/15/10/5 from the
+roadmap (`config.OPPORTUNITY_WEIGHTS`, versioned by `OPPORTUNITY_RULES_VERSION`). Unknown components are left out
+and their weight redistributed; `coverage` shows how much was known. Search demand has no source, so it's always
+unknown (shown once in the queue header, not on each card). Bands 80/65 were set from the first real queue: at
+70/50, 14 of 21 ideas were "strong" because presale alerts are always <72h out and max the timing component.
+Each logged post saves the evaluation at posting time (`posts.opportunity_snapshot`) for later calibration.
+
+**Alert facts refresh; drafts don't.** `save_alerts` used INSERT OR IGNORE, so a Wednesday weekend roundup never
+saw later changes. Now re-detected alerts update facts/title/score (old version → `alert_history`), except
+dismissed alerts and alerts with a logged post. Each draft stores the facts it was written from; the dashboard
+shows `facts_diff` against the current facts. Re-drafting is the user's call (LLM time). `hours_until_open` and
+`your_plays` are volatile and ignored; None and missing keys count as equal.
+
+**Posts and metrics are typed in by hand.** No TikTok API or scraping. Comparisons use the snapshot nearest
+24h (18–36h) / 7d (5–10d), medians, per-1k-view rates, and mark groups under `ANALYTICS_MIN_POSTS` (3) as too
+few. Unrecorded metrics are NULL, never 0.
