@@ -57,3 +57,14 @@ def test_static_files_served_without_path_escape(client, tmp_path, monkeypatch):
     assert client.get("/favicon.svg").text == "<svg/>"
     assert client.get("/alerts").text == "<html>app</html>"       # SPA fallback
     assert "nope" not in client.get("/..%2Fsecret.txt").text
+
+
+def test_connection_can_be_closed_from_another_thread(tmp_path):
+    """Regression: parallel page-load requests 500'd when FastAPI tore down get_db on another thread."""
+    import threading
+    from tracker import db
+    c = db.connect(tmp_path / "t.db")
+    errors = []
+    t = threading.Thread(target=lambda: errors.append(None) if c.close() is None else None)
+    t.start(); t.join()
+    assert errors == [None]
