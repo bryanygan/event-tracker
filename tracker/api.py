@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -312,14 +313,17 @@ def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, 
     rows.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     keep = ["id", "name", "headliner", "support", "local_date", "local_time", "status", "venue_name", "genre",
             "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "popularity", "fans", "my_plays", "niche",
-            "first_seen"]
+            "first_seen", "genre_source"]
     return [{k: e.get(k) for k in keep} for e in rows[:limit]]
 
 
 @app.get("/api/genres")
 def genres(c=Depends(get_db)):
-    return [r[0] for r in c.execute(
-        "SELECT genre FROM events WHERE active=1 AND genre IS NOT NULL GROUP BY genre ORDER BY COUNT(*) DESC")]
+    """Genres of upcoming events, most common first: the same genres the events list filters on,
+    including ones filled in from the artist (genres.py)."""
+    today = datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()
+    counts = Counter(e["genre"] for e in upcoming_events(c, today) if e["genre"])
+    return [g for g, _ in counts.most_common()]
 
 
 @app.get("/api/runs")

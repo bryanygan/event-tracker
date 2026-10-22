@@ -131,3 +131,10 @@
 - Answers use markdown: bold dates with *italic* titles nested inside. The card renders those without raw HTML.
 - The dev worktree has no `.env`: pass `PERPLEXITY_API_KEY` (and `LISTENING_DB`) as env vars to the test server,
   read from the main `.env` without printing them.
+
+## Genres (2026-10-22)
+
+- Ticketmaster's own listing genre is sometimes wrong (Alter Bridge listed as Dance/Electronic). The fill never
+  overrides a listing genre, so those stay; only missing genres are filled.
+- Tests that re-ingest with `store.upsert_events` must send the whole listing again: shows left out are marked
+  removed (that's the real behavior), which silently drops them from `upcoming_events`.

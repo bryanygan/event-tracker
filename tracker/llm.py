@@ -206,7 +206,8 @@ def _prompt_facts(facts: dict) -> dict:
                 s[new] = s.pop(old)
         return s
     # your_plays is personal and for the dashboard only; the script shouldn't talk about your listening
-    out = {k: v for k, v in facts.items() if k not in ("format", "your_plays")}
+    # picks duplicate shows (a "picks" draft gets them as its shows instead: angles.scoped_facts)
+    out = {k: v for k, v in facts.items() if k not in ("format", "your_plays", "picks", "pick_count")}
     if "shows" in out:
         out["shows"] = [slim(s) for s in out["shows"]]
     if "show" in out:
@@ -221,6 +222,9 @@ def build_prompt(facts: dict) -> str:
         guide = guide.format(**{k: v for k, v in facts.items() if isinstance(v, (str, int))})
     except (KeyError, IndexError):
         pass  # leave placeholders; the facts are still below
+    if facts.get("picked_from"):
+        guide += (f"\nThis is a 'my picks' video: only the {len(facts.get('shows', []))} shows below, best first "
+                  f"(picked from {facts['picked_from']}). Mention no other shows.")
     if fmt == "presale" and facts.get("sale_name") == "General public on-sale":
         guide += "\nThis one is the general on-sale: anyone can buy, no code needed. Don't mention codes."
     return (
@@ -336,8 +340,10 @@ def onscreen_lines(facts: dict) -> list[str]:
     """Text overlays built straight from facts, so dates/venues on screen are always right."""
     lines = []
     fmt = facts.get("format")
+    if facts.get("picked_from"):  # a "my N picks" draft (angles.scoped_facts)
+        lines.append(f"MY {len(facts.get('shows', []))} PICKS")
     if fmt == "weekend":
-        lines.append(f"PHILLY THIS WEEKEND · {facts['weekend']}")
+        lines.append(f"{facts['lane'].upper() + ' · ' if facts.get('lane') else ''}PHILLY THIS WEEKEND · {facts['weekend']}")
     elif fmt == "stacked_month":
         lines.append(f"{facts['month'].upper()} IN PHILLY: {facts['genre'].upper()}")
     elif fmt == "presale":

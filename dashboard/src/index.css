@@ -118,6 +118,7 @@ table.metrics { font-size: 0.85rem; margin-top: 8px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 input.grow { flex: 1; }
 .angles { margin: 10px 0; }
+.pick { color: var(--warn-text); }
 .web-context { margin: 10px 0; }
 .web-context summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
 .web-context ul { margin: 6px 0; padding-left: 20px; }

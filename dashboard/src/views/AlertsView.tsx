@@ -137,6 +137,8 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
 }) {
   const [showOlder, setShowOlder] = useState(false)
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
+  // Roundups: the "my N picks" cut (best by notability), starred in the facts table
+  const picks = ((alert.facts.picks as ShowFacts[] | undefined) ?? []).map((s) => `${s.artist}|${s.date}`)
   const [latest, ...older] = alert.drafts
 
   return (
@@ -163,7 +165,9 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
             {shows.map((s, i) => (
               <tr key={i}>
                 <td>{s.date}{s.time ? ` · ${s.time}` : ''}</td>
-                <td><strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}</td>
+                <td>
+                  {picks.includes(`${s.artist}|${s.date}`) && <span className="pick" title={`one of the top ${picks.length} picks`}>★ </span>}
+                  <strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}</td>
                 <td>{s.venue}</td>
                 <td>{s.price ?? ''}</td>
                 <td>{s.url && <a href={s.url} target="_blank" rel="noreferrer">tickets ↗</a>}</td>
@@ -171,7 +175,7 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
             ))}
           </tbody>
         </table>
-        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
+        <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays', 'picks'].includes(k))), null, 2)}</pre>
       </details>
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}

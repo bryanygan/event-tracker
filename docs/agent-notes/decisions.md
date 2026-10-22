@@ -207,3 +207,24 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
   uses at most 5 of those, on "strong" single-artist ideas only; replays (`--from-cache`) and tests never call it.
   Measured ~$0.0016 per lookup → worst case ~$0.50/month.
 - Single-artist formats only (presale, new_tour, status_change). Roundups and games have no single subject.
+
+## Genres and roundup cuts (2026-10-22, roadmap P1-08 / P1-10)
+
+- **Genre is filled at read time, never written over the listing** (`genres.fill` in `scoring.upcoming_events`):
+  listing genre → else the headliner attraction's Ticketmaster genre. Every event carries `genre_source`
+  (`listing` / `artist` / `tm_search`); the Events tab marks name-matched guesses with ≈.
+- **Venue-calendar acts:** Ticketmaster attraction search (`/attractions.json`, music) by exact case-insensitive
+  name; accepted only when exactly one attraction has that name (two = a namesake → stays unknown). Names that
+  look like event titles (open mic, "... night", festival...) or are under 3 letters are never looked up.
+  40 lookups per run on the run's own TM client (a run uses ~4 calls of the 1,000 budget), "none"/"ambiguous"
+  cached 30 days. Real data: 18 of 40 found (45%), 4 ambiguous; most small local acts just aren't on TM.
+- **Placeholder labels** (`NON_GENRES`: Undefined, Other, Miscellaneous, Music) are never a genre.
+- **Picks:** weekend and stacked-month facts carry `picks` (best by notability, one per artist, ties by date then
+  name) and `pick_count`. They're `DERIVED_FACTS`: a re-rank alone isn't a change, so adding them to existing alerts
+  didn't mark every draft out of date. Drafting from the "picks" angle scopes the facts to the picks
+  (`angles.scoped_facts`), so the script, on-screen lines and fact check only cover them.
+- **Lane weekend cut** (`weekend_lane:<fri>`, kind `weekend`, facts `lane`): shows whose *genre* is in your lane
+  (not your listening buckets: a guess from history isn't a fact the video can state). Needs 3+ shows; skipped
+  when 80%+ of them are already in the general roundup or a stacked month. Label names every lane genre present
+  (sub-genres fold into Hip-Hop / R&B / EDM / Pop). Story value 45 vs 35 for the general roundup
+  (`OPPORTUNITY_RULES_VERSION` 2026-10-22.A).

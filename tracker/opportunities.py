@@ -85,7 +85,8 @@ def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
         "new_tour": (70, "New Philly date (nothing else announced here)") if not facts.get("already_had_philly_dates")
         else (40, "An added date; they already had a Philly show"),
         "presale_soon": (30, "A ticket reminder: useful, not news"),
-        "weekend": (35, "Recurring weekend roundup"),
+        "weekend": (45, f"Weekend cut for your lane ({facts['lane']})") if facts.get("lane")
+        else (35, "Recurring weekend roundup"),
         "stacked_month": (75 if (facts.get("notable_show_count") or 0) >= 8 else 55,
                           f"{facts.get('notable_show_count')} notable {facts.get('genre')} shows in {facts.get('month')}"),
         "status_change": (70 if facts.get("change") in ("cancelled", "postponed") else 55, f"Show {facts.get('change')}"),

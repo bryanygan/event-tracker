@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, listening
 from .scoring import is_game, upcoming_events
 from .store import now_iso
 
@@ -282,6 +282,43 @@ def upcoming_weekend(today: date) -> tuple[date, date]:
     return fri, fri + timedelta(days=2)
 
 
+def ranked(events: list[dict]) -> list[dict]:
+    """Best first by notability; ties broken by date, then name, so the same data always gives the same order."""
+    return sorted(events, key=lambda e: (-e["score"], e["local_date"], e["local_time"] or "", e["headliner"] or ""))
+
+
+def picks_facts(events: list[dict]) -> dict:
+    """The "my 3-5 picks" cut of a roundup: its best shows by notability, best first. Empty if too few."""
+    seen, top = set(), []
+    for e in ranked(events):  # one pick per artist: a two-night run is one pick, at its best-scoring night
+        if e["headliner"] not in seen:
+            seen.add(e["headliner"])
+            top.append(e)
+    if len(top) < config.PICKS_MIN:
+        return {}
+    top = top[:config.PICKS_MAX]
+    return {"picks": [event_facts(e) for e in top], "pick_count": len(top)}
+
+
+# Spoken names for lane genres/subgenres ("Hip-Hop/Rap" reads badly in a hook). Every lane label in
+# NICHE_TM_GENRES / NICHE_TM_SUBGENRES maps to one of four, so a cut's label always covers all its shows.
+LANE_NAMES = {"Hip-Hop/Rap": "Hip-Hop", "Alternative Rap": "Hip-Hop", "Trap": "Hip-Hop",
+              "R&B": "R&B", "Urban": "R&B", "Dance/Electronic": "EDM",
+              "Pop": "Pop", "Indie Pop": "Pop", "Hyperpop": "Pop", "Bedroom Pop": "Pop"}
+
+
+def lane_label(events: list[dict]) -> str:
+    """'Hip-Hop & R&B' / 'Pop, EDM & Hip-Hop': every lane genre among these shows, most common first."""
+    counts: dict[str, int] = defaultdict(int)
+    for e in events:
+        name = next((LANE_NAMES.get(g, g) for g in (e.get("genre"), e.get("subgenre"))
+                     if g in config.NICHE_TM_GENRES or g in config.NICHE_TM_SUBGENRES), None)
+        if name:
+            counts[name] += 1
+    names = sorted(counts, key=lambda g: (-counts[g], g))
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " & " + names[-1]
+
+
 def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
     """Weekend roundup. Created from Wednesday on so the lineup is mostly settled."""
     if today.weekday() < 2:
@@ -300,6 +337,7 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
             break
     if len(picks) < 3:
         return []
+    best = picks_facts(picks)
     picks.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     return [{
         "key": f"weekend:{fri.isoformat()}",
@@ -310,9 +348,52 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
             "format": "weekend",
             "weekend": f"{fmt_date(fri.isoformat())} – {fmt_date(sun.isoformat())}",
             "shows": [event_facts(e) for e in picks],
+            **best,
         },
         "event_ids": [e["id"] for e in picks],
         "post_by": et_iso(fri, 17),                        # people plan their weekend before Friday evening
+        "expires_at": et_iso(fri + timedelta(days=1), 18),
+    }]
+
+
+def detect_lane_weekend(conn: sqlite3.Connection, today: date, others: list[dict]) -> list[dict]:
+    """'Hip-Hop & R&B in Philly this weekend': the weekend cut for your lane (config.NICHE_TM_GENRES /
+    NICHE_TM_SUBGENRES, from the show's genre only: a guess from your listening history isn't a fact the
+    video can state). Skipped when the general roundup or a stacked month already covers these shows."""
+    if today.weekday() < 2:
+        return []
+    fri, sun = upcoming_weekend(today)
+    lane = [e for e in upcoming_events(conn, today.isoformat())
+            if fri.isoformat() <= e["local_date"] <= sun.isoformat() and e["status"] != "cancelled"
+            and not is_game(e) and listening.in_niche(e["genre"], e["subgenre"], None)]
+    lane = ranked(lane)[:config.WEEKEND_TOP_N]
+    if len(lane) < config.LANE_WEEKEND_MIN:
+        return []
+    ids = {e["id"] for e in lane}
+    for other in others:
+        if other["kind"] in ("weekend", "stacked_month"):
+            covered = len(ids & set(other.get("event_ids") or [])) / len(ids)
+            if covered >= config.LANE_WEEKEND_MAX_OVERLAP:
+                log.info("Lane weekend cut skipped: %d%% of its shows are already in %s", covered * 100, other["key"])
+                return []
+    label = lane_label(lane)
+    best = picks_facts(lane)
+    lane.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
+    weekend = f"{fmt_date(fri.isoformat())} – {fmt_date(sun.isoformat())}"
+    return [{
+        "key": f"weekend_lane:{fri.isoformat()}",
+        "kind": "weekend",
+        "title": f"Your lane this weekend: {label} ({len(lane)} shows)",  # short for phones; dates are in the facts
+        "score": round(sum(e["score"] for e in lane) / len(lane), 1),
+        "facts": {
+            "format": "weekend",
+            "weekend": weekend,
+            "lane": label,
+            "shows": [event_facts(e) for e in lane],
+            **best,
+        },
+        "event_ids": [e["id"] for e in lane],
+        "post_by": et_iso(fri, 17),
         "expires_at": et_iso(fri + timedelta(days=1), 18),
     }]
 
@@ -327,7 +408,9 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
         ym = e["local_date"][:7]
         if is_game(e):
             continue  # "stacked month" is a music format
-        if ym in (this_month, next_month) and e["genre"] and e["score"] >= config.STACKED_MONTH_MIN_SCORE:
+        # A placeholder label never makes a "stacked" genre (upcoming_events already drops them; belt and braces)
+        if (ym in (this_month, next_month) and e["genre"] and e["genre"] not in config.NON_GENRES
+                and e["score"] >= config.STACKED_MONTH_MIN_SCORE):
             if e["status"] != "cancelled":
                 buckets[(ym, e["genre"])].append(e)
 
@@ -354,6 +437,7 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
                 "genre": genre,
                 "notable_show_count": len(unique),
                 "shows": [event_facts(e) for e in top],
+                **picks_facts(top),
             },
             "event_ids": [e["id"] for e in top],
             "post_by": et_iso(f"{ym}-01", 0),              # before the month starts
@@ -463,16 +547,24 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
         + detect_team_week(conn, local_today)
         + detect_big_games(conn, local_today)
     )
+    alerts += detect_lane_weekend(conn, local_today, alerts)  # needs the others to avoid repeating them
     return alerts
 
 
 # Facts that change on every run without anything real happening; ignored when deciding whether an alert changed.
 VOLATILE_FACTS = {"hours_until_open", "your_plays"}
+# Facts computed from the shows (a re-ranking alone isn't news). Kept current without counting as a change,
+# so adding them to existing alerts doesn't mark every draft out of date.
+DERIVED_FACTS = {"picks", "pick_count"}
 
 
 def _stable(facts: dict) -> dict:
     # None and missing mean the same (alerts raised before a fact existed don't have the key at all)
-    return {k: v for k, v in facts.items() if k not in VOLATILE_FACTS and v is not None}
+    return {k: v for k, v in facts.items() if k not in VOLATILE_FACTS | DERIVED_FACTS and v is not None}
+
+
+def _derived(facts: dict) -> dict:
+    return {k: facts.get(k) for k in DERIVED_FACTS}
 
 
 def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
@@ -498,7 +590,14 @@ def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
         if meta != (old["event_ids"], old["post_by"], old["expires_at"]):
             conn.execute("UPDATE alerts SET event_ids=?, post_by=?, expires_at=? WHERE id=?", (*meta, old["id"]))
         posted = conn.execute("SELECT 1 FROM posts WHERE alert_id=? LIMIT 1", (old["id"],)).fetchone()
-        if old["status"] == "dismissed" or posted or _stable(json.loads(old["facts"])) == _stable(a["facts"]):
+        old_facts = json.loads(old["facts"])
+        if old["status"] == "dismissed" or posted:
+            continue
+        if _stable(old_facts) == _stable(a["facts"]):
+            if _derived(old_facts) != _derived(a["facts"]):  # e.g. picks for a roundup raised before picks existed
+                conn.execute("UPDATE alerts SET facts=? WHERE id=?",
+                             (json.dumps({**old_facts, **{k: v for k, v in _derived(a["facts"]).items() if v is not None}}),
+                              old["id"]))
             continue
         conn.execute("INSERT INTO alert_history (alert_id, title, score, facts, replaced_at) VALUES (?,?,?,?,?)",
                      (old["id"], old["title"], old["score"], old["facts"], now_iso()))
@@ -544,7 +643,7 @@ def facts_diff(old: dict, new: dict) -> list[str]:
     was_last, now_last = ((f.get("history") or {}).get("last_philly_show") for f in (old, new))
     if was_last != now_last:
         out.append(f"Last Philly show (setlist.fm): {was_last or '—'} → {now_last or '—'}")
-    skip = VOLATILE_FACTS | {"shows", "show", "all_sales", "presales", "history"}
+    skip = VOLATILE_FACTS | DERIVED_FACTS | {"shows", "show", "all_sales", "presales", "history"}
     for k in sorted((old.keys() | new.keys()) - skip):
         if old.get(k) != new.get(k):
             if isinstance(old.get(k), (dict, list)) or isinstance(new.get(k), (dict, list)):

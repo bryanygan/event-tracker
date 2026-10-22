@@ -58,12 +58,26 @@ NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notabi
 COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the gap is at least this
 MULTI_ACT_MIN = 5                  # acts on one bill for the last show to count as a festival/radio show
 COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
+PICKS_MIN, PICKS_MAX = 3, 5        # "my N picks" cut of a weekend / stacked-month roundup (best by notability)
+LANE_WEEKEND_MIN = 3               # shows in your lane needed for a "your lane this weekend" cut
+LANE_WEEKEND_MAX_OVERLAP = 0.8     # skip the lane cut when this share of its shows is already in another roundup
+
+# --- Genres (tracker/genres.py) ---
+# Ticketmaster labels that say nothing about the music. Never used as a genre, never drive a genre roundup.
+NON_GENRES = {"Undefined", "Other", "Miscellaneous", "Music"}
+# Venue-calendar acts have no genre; look them up as Ticketmaster attractions (exact name, unambiguous only).
+GENRE_LOOKUPS_PER_RUN = 40         # TM calls per run (a run itself uses ~4); unfilled acts wait for the next run
+GENRE_RECHECK_DAYS = 30            # retry "not found" / ambiguous names after this long
+# Calendar "headliners" that are really event names: never look these up (a namesake would match).
+GENRE_LOOKUP_SKIP_PATTERNS = [r"\bopen mic\b", r"\bkaraoke\b", r"\btrivia\b", r"\bnight\b", r"\bparty\b",
+                              r"\bshowcase\b", r"\bjam\b", r"\bbingo\b", r"\bbrunch\b", r"\bcomedy\b", r"\bdj set\b",
+                              r"\bdance party\b", r"\bfestival\b", r"\bfest\b", r"\bpresents\b", r"\bmarket\b"]
 
 # --- Content queue (tracker/opportunities.py) ---
 # EXPERIMENTAL weights for "is this a good video right now?", separate from event notability (scoring.py).
 # Guesses from the creator roadmap, not measured: revisit once logged posts have numbers. Bump the version
 # whenever you change a weight or a rule, so a post's saved score says which rules produced it.
-OPPORTUNITY_RULES_VERSION = "2026-10-21.1"
+OPPORTUNITY_RULES_VERSION = "2026-10-22.A"  # .A: lane weekend cut gets its own story value
 OPPORTUNITY_WEIGHTS = {
     "audience": 0.25,    # how many people care (notability, incl. your-taste boost)
     "timing": 0.25,      # fresh news / deadline coming up
