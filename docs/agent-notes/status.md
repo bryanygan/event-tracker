@@ -62,8 +62,8 @@ commented code over abstraction.
 **On hold by the user (2026-10-21): phone notifications** (ntfy etc.). Don't start until the user says the
 pipeline is polished and has run for a while without hiccups.
 
-**Venue calendars** (`feature/venue-calendars`, checked out, not merged; see venue-coverage.md). The DB now holds
-177 `cal:` events, so don't run `main` without this branch merged or the next run marks them removed.
+**Venue calendars** (merged into `main`; see venue-coverage.md). The DB holds
+~177 `cal:` events from 5 venues.
 
 **Previously: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
 Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).
