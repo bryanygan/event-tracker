@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, STATIC, type Alert, type Draft, type Job, type ShowFacts } from '../api'
+import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type ShowFacts, type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 
@@ -59,6 +59,78 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
   )
 }
 
+// "**Oct. 13:** Tour announced.[1]" -> bold dates and [n] links to the cited source, without raw HTML.
+function ContextLine({ line, sources }: { line: string; sources: WebContext['sources'] }) {
+  const parts = line.replace(/^\s*[-*]\s+/, '').split(/(\*\*.+?\*\*|\*[^*\s][^*]*\*|\[\d+\])/g)
+  return (
+    <li>
+      {parts.map((p, i) => {
+        const bold = p.match(/^\*\*(.+)\*\*$/) // may hold an *italic* title: drop those marks
+        if (bold) return <strong key={i}>{bold[1].replace(/\*/g, '')}</strong>
+        const italic = p.match(/^\*([^*]+)\*$/)
+        if (italic) return <em key={i}>{italic[1]}</em>
+        const cite = p.match(/^\[(\d+)\]$/)
+        if (cite) {
+          const s = sources.find((x) => x.id === Number(cite[1]))
+          return s ? <sup key={i}><a href={s.url} target="_blank" rel="noreferrer" title={s.title ?? s.url}>[{cite[1]}]</a></sup> : null
+        }
+        return p
+      })}
+    </li>
+  )
+}
+
+function WebContextView({ alertId, initial }: { alertId: number; initial: WebContext | null }) {
+  const [ctx, setCtx] = useState(initial)
+  const [usage, setUsage] = useState<ContextUsage | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => setCtx(initial), [initial])
+
+  const look = async (refresh: boolean) => {
+    setBusy(true); setError(null)
+    try {
+      const r = await api.lookupContext(alertId, refresh)
+      setCtx(r.context); setUsage(r.usage)
+    } catch (e) {
+      setError(String((e as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const lines = ctx?.answer.split('\n').filter((l) => l.trim()) ?? []
+
+  return (
+    <details className="web-context" open={!!ctx}>
+      <summary>Web context: what's new, from the web{ctx ? ` (looked up ${fmtWhen(ctx.created_at)}${ctx.fresh ? '' : ', over a week old'})` : ''}</summary>
+      {ctx ? (
+        <>
+          <p className="muted small">From Perplexity search. Not checked facts: open the sources before you say any of this on camera.</p>
+          <ul>{lines.map((l, i) => <ContextLine key={i} line={l} sources={ctx.sources} />)}</ul>
+          <ol className="sources small">
+            {ctx.sources.map((s) => (
+              <li key={s.id} value={s.id}>
+                <a href={s.url} target="_blank" rel="noreferrer">{s.title ?? s.url}</a>
+                <span className="muted"> · {new URL(s.url).hostname.replace(/^www\./, '')}{s.date ? ` · ${s.date}` : ''}</span>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : <p className="muted small">No lookup yet.</p>}
+      {!STATIC && (
+        <div className="row">
+          <button className="ghost" disabled={busy} onClick={() => look(!!ctx)}
+                  title="one Perplexity search, about $0.002; reused for 7 days">
+            {busy ? 'Looking up…' : ctx ? 'Look up again' : 'Look up context'}
+          </button>
+          {usage && <span className="muted small">{usage.today} of {usage.cap} lookups used today</span>}
+          {error && <span className="warn small">{error}</span>}
+        </div>
+      )}
+    </details>
+  )
+}
+
 export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
   alert: Alert; busy: boolean; onRegenerate: (angle?: string) => void
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
@@ -101,6 +173,8 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
         </table>
         <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays'].includes(k))), null, 2)}</pre>
       </details>
+
+      {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
 
       {alert.angles.length > 0 && (
         <details className="angles" open={!latest}>

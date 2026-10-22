@@ -7,9 +7,12 @@ import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 
 type Tab = 'queue' | 'alerts' | 'posts' | 'events' | 'runs'
+const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs']
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('queue')
+  // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone
+  const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => `#${t}` === window.location.hash) ?? 'queue')
+  const setTab = (t: Tab) => { setTabState(t); history.replaceState(null, '', t === 'queue' ? location.pathname + location.search : `#${t}`) }
   const [summary, setSummary] = useState<Summary | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const [refreshKey, setRefreshKey] = useState(0) // bump to make views reload
@@ -125,7 +128,7 @@ export default function App() {
       {error && <div className="banner error">{error}</div>}
 
       <nav>
-        {(['queue', 'alerts', 'posts', 'events', 'runs'] as Tab[]).map((t) => (
+        {TABS.map((t) => (
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
             {{ queue: 'What to post', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
             {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}

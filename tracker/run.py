@@ -15,7 +15,7 @@ from contextlib import closing
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, db, detectors, drafts, publish, store
+from . import config, context, db, detectors, drafts, publish, store
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import venue_calendars
@@ -114,6 +114,14 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
         log.exception("Run failed")
         store.finish_run(conn, run_id, fetched=0, api_calls=calls, ok=False, error=str(exc))
         raise
+
+    if not from_cache:  # replays don't spend money; the caps in context.py keep real runs to cents a month
+        try:
+            looked_up = context.auto_lookup(conn)
+            if looked_up:
+                log.info("Looked up web context for %d ideas", looked_up)
+        except Exception as exc:
+            log.warning("Web context lookups failed: %s", exc)
 
     made = []
     if make_drafts:

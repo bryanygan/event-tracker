@@ -121,3 +121,13 @@
 - `tests/factory.tm_event()` builds TM-shaped events; most bugs above came from the factory being cleaner than
   real data. When you find a real-data quirk, add it to a test.
 - `responses` mocks HTTP; nothing in the suite touches the network. `NOW` in tests is Wed 2026-10-21 16:00 UTC.
+
+## Web lookups (Perplexity / Gemini)
+
+- Put today's date in the prompt. Without it Gemini searched for "news 2024".
+- Perplexity `/v1/agent` with `preset: fast`: `output_text` is null. The answer is in `output[type=message]`, and
+  its `[n]` citations point at `output[type=search_results].results[].id`, which are not 1..k (e.g. [2][5][8]).
+- `gemini-2.5-flash` returns 404 for new keys; Gemini 3+ has no search grounding on the free tier (429).
+- Answers use markdown: bold dates with *italic* titles nested inside. The card renders those without raw HTML.
+- The dev worktree has no `.env`: pass `PERPLEXITY_API_KEY` (and `LISTENING_DB`) as env vars to the test server,
+  read from the main `.env` without printing them.

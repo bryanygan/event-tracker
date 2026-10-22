@@ -44,7 +44,16 @@ export type Alert = {
   drafts: Draft[]
   posts: { id: number; draft_id: number | null; url: string | null; posted_at: string }[]
   angles: Angle[]
+  context: WebContext | null // latest web lookup for this artist (tracker/context.py)
+  context_supported: boolean // single-artist ideas only
 }
+
+// Web reading material from Perplexity: never facts, never used in drafts
+export type WebContext = {
+  id: number; answer: string; provider: string; created_at: string; fresh: boolean
+  sources: { id: number; title: string | null; url: string; date: string | null }[]
+}
+export type ContextUsage = { today: number; auto_today: number; cap: number; auto_cap: number; cost_today_usd: number; enabled: boolean }
 
 // Ways to frame the video, built from the facts without the model (tracker/angles.py)
 export type Angle = { key: string; label: string; hook: string; pitch: string; style: string; cta: string }
@@ -225,6 +234,7 @@ const staticApi = {
     snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all)),
   setAlertStatus: readOnly,
   regenerate: readOnly,
+  lookupContext: readOnly,
   updateDraft: readOnly,
   events: ({ q = '', genre = '', days = 60 }: { q?: string; genre?: string; days?: number }) =>
     snapshot<EventRow[]>('events').then((all) => {
@@ -256,6 +266,8 @@ const liveApi = {
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   regenerate: (id: number, angle?: string) =>
     req<Job>(`/api/alerts/${id}/draft${angle ? `?angle=${encodeURIComponent(angle)}` : ''}`, { method: 'POST' }),
+  lookupContext: (id: number, refresh = false) =>
+    req<{ context: WebContext; usage: ContextUsage }>(`/api/alerts/${id}/context${refresh ? '?refresh=true' : ''}`, { method: 'POST' }),
   updateDraft: (id: number, fields: Partial<Pick<Draft, 'status' | 'notes' | 'hook' | 'script' | 'caption' | 'hashtags'>>) =>
     req(`/api/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   events: (params: { q?: string; genre?: string; days?: number }) =>
