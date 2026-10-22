@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import angles, config, db, drafts, llm, opportunities, posts, publish
+from . import angles, config, context, db, drafts, llm, opportunities, posts, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -111,6 +111,8 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
         a["facts"] = json.loads(a["facts"])
         a["posts"] = posted.get(a["id"], [])
         a["angles"] = angles.angles_for(a["facts"])
+        a["context"] = context.cached(c, context.subject(a["facts"]))
+        a["context_supported"] = context.subject(a["facts"]) is not None
         a["drafts"] = [drafts.draft_row(d, a["facts"]) for d in c.execute(
             "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
     return alerts
@@ -159,6 +161,21 @@ def queue(c=Depends(get_db)):
         "weights": config.OPPORTUNITY_WEIGHTS,
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
     }
+
+
+@app.post("/api/alerts/{alert_id}/context")
+def web_context(alert_id: int, refresh: bool = False, c=Depends(get_db)):
+    """Web context for one idea (a few seconds; reuses a fresh lookup for free)."""
+    try:
+        found = context.lookup(c, alert_id, refresh=refresh)
+    except context.ContextError as exc:
+        raise HTTPException(exc.status, str(exc))
+    return {"context": found, "usage": context.usage(c)}
+
+
+@app.get("/api/context/usage")
+def web_context_usage(c=Depends(get_db)):
+    return context.usage(c)
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)

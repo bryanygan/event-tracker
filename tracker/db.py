@@ -191,6 +191,22 @@ CREATE TABLE IF NOT EXISTS post_metrics (
     notes TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_post_metrics_post ON post_metrics(post_id);
+
+-- Web lookups (tracker/context.py): reading material for you, never facts for drafts.
+CREATE TABLE IF NOT EXISTS web_context (
+    id INTEGER PRIMARY KEY,
+    subject TEXT NOT NULL,          -- cache key: casefolded artist name
+    alert_id INTEGER,               -- the idea it was looked up for (no FK: the lookup outlives the alert)
+    provider TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    answer TEXT,
+    sources TEXT,                   -- JSON list of {id, title, url, date}
+    cost_usd REAL,
+    error TEXT,                     -- set when the call failed (still counts against the daily cap)
+    trigger TEXT NOT NULL,          -- manual, auto
+    created_at TEXT NOT NULL        -- UTC ISO
+);
+CREATE INDEX IF NOT EXISTS idx_web_context_subject ON web_context(subject, created_at);
 """
 
 

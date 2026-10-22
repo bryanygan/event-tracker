@@ -115,6 +115,7 @@ function QueueCard({ item, alert, busy, onJob, onChange }: {
       {item.draft?.hook
         ? <p className="hook-used">“{item.draft.hook}”</p>
         : alert?.angles[0] && <p className="hook-used muted" title="suggested angle; open to pick one">“{alert.angles[0].hook}”</p>}
+      {alert?.context?.fresh && <p className="muted small" title="open the card to read it with sources">🌐 Web context: {alert.context.answer.split('\n')[0].replace(/^\s*[-*]\s*/, '').replace(/\*+|\[\d+\]/g, '')}</p>}
       {item.reasons.length > 0 && <ul className="reasons">{item.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
       {item.caveats.length > 0 && <div className="warn"><ul>{item.caveats.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
       {item.posts.map((p) => (

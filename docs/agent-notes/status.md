@@ -81,6 +81,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P0-05 format analytics | Merged (basic): same-age medians, per-1k rates, sample-size flag |
 | P0-06 three hooks/angles per idea | Merged 2026-10-22 (`2435acb`): `tracker/angles.py`, no-LLM hooks; templated formats draft with no model |
 | P0-07 stale roundup refresh | Merged |
+| Web context (not in roadmap) | `feature/web-context`: Perplexity lookups on cards, capped and cached |
 | P1-08 3–5 pick / genre-cut roundups | Not started |
 | P1-09 manual trend notes | Not started (would fill the "search demand" component) |
 | P1-10..13, P2 | Not started. Midday pass and mobile editing need user decisions |
@@ -94,7 +95,7 @@ search grounding on the free tier (429 quota). Needs billing enabled on the key'
 grounded requests/month free) or Perplexity instead. User then enabled billing and asked for a comparison (same dated prompt, 5 queue artists, 10 calls):
 Perplexity (`POST /v1/agent`, preset `fast`, ~$0.0016/call, ~4 s, full URLs + publish dates) had no material
 errors; Gemini 3.8 Flash (Interactions API, ~15 s, redirect links with domain only) invented a CG5 presale date
-and called the on-sale Lizzy McAlpine show sold out. Recommended Perplexity; not built yet. Always put today's
+and called the on-sale Lizzy McAlpine show sold out. User chose Perplexity; built on `feature/web-context` (see decisions.md "Web context"), awaiting merge. Always put today's
 date in the prompt (Gemini searched "2024" without it). Perplexity answer text is in `output[type=message]`,
 not `output_text` (null on the fast preset). Google's grounding
 terms: show results verbatim with their Search Suggestions, only to the person who asked, so keep them

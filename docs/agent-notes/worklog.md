@@ -110,3 +110,11 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/content-queue` (P0-01/02/03, stacked): opportunity score, "What to post" default tab. Checked with
   headless-Edge screenshots, which exposed the thread/close 500 (fixed on `fix/db-thread` from `main`, cherry-
   picked into the stack). None merged yet: waiting for the user.
+
+### Angles merged, web context (2026-10-22, early morning)
+- Merged `feature/angles` (user approved), rebuilt, restarted the dashboard; 21/21 cards show angles.
+- Gemini vs Perplexity: probed Gemini (free tier had no grounding; user enabled billing), then 10-call comparison.
+  Perplexity won on accuracy and sources (details in decisions.md).
+- `feature/web-context`: `tracker/context.py`, `web_context` table, `POST /api/alerts/{id}/context`,
+  `/api/context/usage`, pipeline auto step, card section + queue hint, tabs in the URL hash (`#alerts`).
+  Real-data check on the DB copy: 1 manual + 3 auto lookups ($0.0063 total), cache reuse confirmed.

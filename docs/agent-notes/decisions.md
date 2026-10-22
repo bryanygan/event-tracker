@@ -193,3 +193,17 @@ comeback when setlist.fm supports it) with hook, brief, video style and CTA, fro
 with no model call; on LLM formats the hook is fixed and the angle goes into the prompt. Hooks avoid claims the
 facts can't time-check: "How to get X tickets", not "X tickets go on sale Friday" (facts have no year, so a past
 on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to the creator.
+
+## Web context (2026-10-22, user approved; `tracker/context.py`)
+
+- **Perplexity, not Gemini.** Same dated prompt for 5 queue artists, checked against TM data and the web:
+  Perplexity had no material errors and gives full URLs with publish dates; Gemini 3.8 Flash invented a presale
+  date and called an on-sale show sold out, and its links are opaque redirects. Google's grounding terms also
+  require showing results verbatim with their Search Suggestions, to the asker only. Gemini key kept, unused.
+- **Reading material, never facts.** Answers are shown on the card with sources and a "check before you say it"
+  label. They don't feed scores, angles, drafts or the fact checker. Only public facts go out (artist, show date,
+  venue); never listening data.
+- **Cost caps:** one lookup per artist reused for 7 days; 10 lookups per ET day including failures; the pipeline
+  uses at most 5 of those, on "strong" single-artist ideas only; replays (`--from-cache`) and tests never call it.
+  Measured ~$0.0016 per lookup → worst case ~$0.50/month.
+- Single-artist formats only (presale, new_tour, status_change). Roundups and games have no single subject.

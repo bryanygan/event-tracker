@@ -26,6 +26,12 @@ CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 PAGES_PROJECT = os.getenv("PAGES_PROJECT", "").strip()
 PAGES_ALLOW_PUBLIC = os.getenv("PAGES_ALLOW_PUBLIC", "") == "1"  # skip the Access check (not recommended)
 
+# Web context on idea cards (tracker/context.py). Leave empty to turn lookups off.
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
+CONTEXT_CACHE_DAYS = 7      # reuse one lookup per artist this long
+CONTEXT_DAILY_CAP = 10      # all lookups per ET day, failures included (~$0.0016 each)
+CONTEXT_AUTO_PER_DAY = 5    # of which the pipeline may use this many, on "strong" ideas only
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 # Bind to localhost only: the dashboard is for you, not the network.
