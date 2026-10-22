@@ -117,6 +117,9 @@ table.metrics { font-size: 0.85rem; margin-top: 8px; }
 .post-form input, .post-form select { text-transform: none; letter-spacing: normal; color: var(--text); font-size: 0.95rem; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 input.grow { flex: 1; }
+.angles { margin: 10px 0; }
+.angles summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.angle { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
 
 .queue-counts { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 14px; }
 .stat.hot strong { color: #d97706; }

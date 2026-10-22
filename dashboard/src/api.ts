@@ -25,6 +25,7 @@ export type Draft = {
   onscreen: string[]
   warnings: string[]
   facts_changes: string[] // what a later run changed in the alert since this draft was written
+  angle: string | null // tracker/angles.py key the draft was written from
   created_at: string
   status: 'pending' | 'approved' | 'filmed' | 'rejected'
   notes: string | null
@@ -42,7 +43,11 @@ export type Alert = {
   status: 'new' | 'drafted' | 'dismissed'
   drafts: Draft[]
   posts: { id: number; draft_id: number | null; url: string | null; posted_at: string }[]
+  angles: Angle[]
 }
+
+// Ways to frame the video, built from the facts without the model (tracker/angles.py)
+export type Angle = { key: string; label: string; hook: string; pitch: string; style: string; cta: string }
 
 export const VIDEO_STYLES = ['voiceover', 'slideshow', 'footage', 'face-to-camera', 'other'] as const
 export type VideoStyle = (typeof VIDEO_STYLES)[number]
@@ -249,7 +254,8 @@ const liveApi = {
   alerts: (status: 'open' | 'dismissed' | 'all') => req<Alert[]>(`/api/alerts?status=${status}`),
   setAlertStatus: (id: number, status: Alert['status']) =>
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  regenerate: (id: number) => req<Job>(`/api/alerts/${id}/draft`, { method: 'POST' }),
+  regenerate: (id: number, angle?: string) =>
+    req<Job>(`/api/alerts/${id}/draft${angle ? `?angle=${encodeURIComponent(angle)}` : ''}`, { method: 'POST' }),
   updateDraft: (id: number, fields: Partial<Pick<Draft, 'status' | 'notes' | 'hook' | 'script' | 'caption' | 'hashtags'>>) =>
     req(`/api/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   events: (params: { q?: string; genre?: string; days?: number }) =>

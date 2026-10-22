@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, drafts, llm, opportunities, posts, publish
+from . import angles, config, db, drafts, llm, opportunities, posts, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -110,6 +110,7 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
         a["posts"] = posted.get(a["id"], [])
+        a["angles"] = angles.angles_for(a["facts"])
         a["drafts"] = [drafts.draft_row(d, a["facts"]) for d in c.execute(
             "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
     return alerts
@@ -161,15 +162,22 @@ def queue(c=Depends(get_db)):
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)
-def regenerate(alert_id: int, c=Depends(get_db)):
-    if not c.execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
+def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
+    row = c.execute("SELECT facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
+    if not row:
         raise HTTPException(404)
+    facts = json.loads(row["facts"])
+    if angle and not angles.find(facts, angle):
+        raise HTTPException(400, f"no angle {angle!r} for this alert")
 
     def work():
-        with llm.ollama_session():
-            with closing(conn()) as job_conn:
-                drafts.draft_alert(job_conn, alert_id)
-    return _start_job(f"draft for alert {alert_id}", work)
+        with closing(conn()) as job_conn:
+            if drafts.needs_llm(facts, angle):
+                with llm.ollama_session():
+                    drafts.draft_alert(job_conn, alert_id, angle=angle)
+            else:  # templated format + chosen angle: no model, done in a moment
+                drafts.draft_alert(job_conn, alert_id, angle=angle)
+    return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else ""), work)
 
 
 class DraftUpdate(BaseModel):

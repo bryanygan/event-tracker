@@ -112,7 +112,9 @@ function QueueCard({ item, alert, busy, onJob, onChange }: {
         {item.title}
         {item.your_plays > 0 && <span className="pill new" title="your plays in the last 2 years">🎧 {item.your_plays} plays</span>}
       </h2>
-      {item.draft?.hook && <p className="hook-used">“{item.draft.hook}”</p>}
+      {item.draft?.hook
+        ? <p className="hook-used">“{item.draft.hook}”</p>
+        : alert?.angles[0] && <p className="hook-used muted" title="suggested angle; open to pick one">“{alert.angles[0].hook}”</p>}
       {item.reasons.length > 0 && <ul className="reasons">{item.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>}
       {item.caveats.length > 0 && <div className="warn"><ul>{item.caveats.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
       {item.posts.map((p) => (
@@ -167,7 +169,7 @@ function QueueCard({ item, alert, busy, onJob, onChange }: {
       {open && alert && (
         <div className="embedded">
           <AlertCard alert={alert} busy={busy}
-            onRegenerate={async () => onJob(await api.regenerate(alert.id))}
+            onRegenerate={async (angle) => onJob(await api.regenerate(alert.id, angle))}
             onStatus={async (s) => { await api.setAlertStatus(alert.id, s); onChange() }}
             onDraftChange={onChange} />
         </div>
