@@ -100,6 +100,9 @@ def history_facts(e: dict, today: str) -> dict | None:
         "last_philly_show": f"{d:%b} {d.day}, {d.year}",
         "last_philly_show_year": d.year,
         "last_philly_venue": e.get("last_area_show_venue"),
+        # A Jingle Ball slot isn't "their own show": scripts say "last time was a 9-act lineup".
+        "last_philly_show_lineup_size": e.get("last_area_show_acts"),
+        "last_philly_show_was_multi_act": (e.get("last_area_show_acts") or 0) >= config.MULTI_ACT_MIN,
         "years_since_last_philly_show": years,
         "is_comeback": years >= config.COMEBACK_MIN_YEARS,
         "source": "setlist.fm",

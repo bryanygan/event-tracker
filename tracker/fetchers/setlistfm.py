@@ -109,11 +109,20 @@ class SetlistFmClient:
                 oldest = d if oldest is None else min(oldest, d)
                 venue = s.get("venue") or {}
                 if in_area(venue.get("city", {}).get("coords")):
-                    candidates.append((d, venue.get("name")))
+                    candidates.append((d, venue.get("name"), venue.get("id")))
         if candidates:
-            d, venue = max(candidates)
-            return {"date": d, "venue": venue, "checked_back_to": oldest}
-        return {"date": None, "venue": None, "checked_back_to": oldest}
+            d, venue, venue_id = max(candidates)
+            return {"date": d, "venue": venue, "checked_back_to": oldest, "acts": self.lineup_size(venue_id, d)}
+        return {"date": None, "venue": None, "checked_back_to": oldest, "acts": None}
+
+    def lineup_size(self, venue_id: str | None, d: date) -> int | None:
+        """How many artists have setlists at that venue that day. setlist.fm has no festival flag, but this
+        separates "their own show" (headliner + openers, ~1-4) from radio shows and festivals
+        (Jingle Ball 2018: 9, Made in America 2021: 16)."""
+        if not venue_id:
+            return None
+        body = self._get("/search/setlists", {"venueId": venue_id, "date": d.strftime("%d-%m-%Y")})
+        return (body or {}).get("total")
 
 
 def enrich_history(conn, client: SetlistFmClient | None = None, limit: int = MAX_ARTISTS_PER_RUN,
@@ -135,14 +144,15 @@ def enrich_history(conn, client: SetlistFmClient | None = None, limit: int = MAX
     for row in rows:
         try:
             mbid = row["setlistfm_mbid"] or client.find_mbid(row["name"])
-            found = client.last_area_show(mbid, today) if mbid else {"date": None, "venue": None, "checked_back_to": None}
+            found = (client.last_area_show(mbid, today) if mbid else
+                     {"date": None, "venue": None, "checked_back_to": None, "acts": None})
         except requests.RequestException as exc:
             log.warning("setlist.fm lookup failed for %s: %s (stopping for this run)", row["name"], exc)
             break
         conn.execute(
             """UPDATE attractions SET setlistfm_mbid=?, last_area_show_date=?, last_area_show_venue=?,
-               history_checked_back_to=?, history_checked_at=? WHERE id=?""",
-            (mbid, found["date"] and found["date"].isoformat(), found["venue"],
+               last_area_show_acts=?, history_checked_back_to=?, history_checked_at=? WHERE id=?""",
+            (mbid, found["date"] and found["date"].isoformat(), found["venue"], found["acts"],
              found["checked_back_to"] and found["checked_back_to"].isoformat(), now_iso(), row["id"]))
         done += 1
     conn.commit()

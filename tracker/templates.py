@@ -61,7 +61,10 @@ def presale_script(facts: dict) -> str:
 
     lines = [_pick(_OPENERS, artist)]
     if comeback(facts):
-        lines.append(f"{artist} is playing Philly for the first time since {facts['history']['last_philly_show_year']}.")
+        h = facts["history"]
+        lines.append(f"{artist} is playing Philly for the first time since {h['last_philly_show_year']}.")
+        if h.get("last_philly_show_was_multi_act"):
+            lines.append(f"Last time was a {h['last_philly_show_lineup_size']}-act lineup at {h['last_philly_venue']}.")
     first = True
     general_only = all(n == GENERAL for names in by_time.values() for n in names)
     for opens, names in by_time.items():
@@ -231,7 +234,9 @@ def caption_for(facts: dict) -> str:
         first = sales[0]
         parts = [f"{artist} tickets 🎟️ {pretty_sale_name(first['name'])}: {first['opens']}."]
         if comeback(facts):  # setlist.fm's API terms ask for credit where their data is shown
-            parts.insert(0, f"First Philly show since {facts['history']['last_philly_show_year']} (per setlist.fm)!")
+            h = facts["history"]
+            lineup = f"a {h['last_philly_show_lineup_size']}-act lineup, " if h.get("last_philly_show_was_multi_act") else ""
+            parts.insert(0, f"First Philly show since {h['last_philly_show_year']} ({lineup}per setlist.fm)!")
         general = next((s for s in sales[1:] if s["name"] == GENERAL), None)
         if general:
             parts.append(f"General on-sale: {general['opens']}.")

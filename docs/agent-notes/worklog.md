@@ -86,3 +86,6 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   Switched lookup from "page last 100 setlists" (20/40 found) to artist+city search + recent page (90/100).
   Live: Papa Roach (Met, Aug 2019) and Calvin Harris (Wells Fargo, Dec 2018) presales got the comeback angle;
   refreshed those two alerts' facts and redrafted them (other presale alerts kept their original facts).
+- User confirmed Calvin Harris's Dec 2018 Philly date was Q102 Jingle Ball (15 acts). Added lineup-size detection
+  (setlists at venue+date; ≥5 = multi-act) and "Last time was a 9-act lineup" wording. Backfilled 90 artists
+  (279 calls; ~760 setlist.fm calls used today). 9 artists' last Philly show was multi-act.

@@ -67,7 +67,14 @@ the new way found 90/100). Only a *found* show is used: crowd-sourced data, so "
 "first time ever". `COMEBACK_MIN_YEARS = 3` (2-year gaps made weak hooks: "since 2024"). Comebacks get
 `COMEBACK_BONUS`, a "Back after N years:" title, a script line, an on-screen line, a caption line crediting
 setlist.fm (their API terms ask for credit), and a "Verify" warning on the draft. Up to 100 artists/run,
-cached 30 days, ~2.6 calls/artist (limit 1,440/day).
+cached 30 days, ~3 calls/artist (limit 1,440/day).
+
+**Multi-act last shows are labeled** (2026-10-21, after the user confirmed Calvin Harris's "last Philly show" was
+Q102 Jingle Ball 2018, a 15-act radio show). setlist.fm has no festival flag, so we count setlists at that
+venue+date (`search/setlists?venueId&date`, 1 call): Jingle Ball 9, Made in America 16, a normal concert ~3.
+`MULTI_ACT_MIN = 5`. Such comebacks still count (they haven't played Philly since), but scripts add "Last time
+was a 9-act lineup at <venue>" and captions say "(a 9-act lineup, per setlist.fm)", so viewers don't assume it
+was their own concert.
 
 ## Detectors
 

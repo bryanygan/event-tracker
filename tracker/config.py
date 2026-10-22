@@ -47,6 +47,7 @@ STACKED_MONTH_MIN_SCORE = 50       # an event must score at least this to count 
 WEEKEND_TOP_N = 8                  # events per weekend roundup
 NEW_TOUR_MIN_SCORE = 35            # ignore brand-new listings below this notability
 COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the gap is at least this
+MULTI_ACT_MIN = 5                  # acts on one bill for the last show to count as a festival/radio show
 COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
 
 # --- Sports ---

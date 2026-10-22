@@ -17,7 +17,7 @@ NYC = {"lat": 40.7143, "long": -74.006}          # ~80 mi: doesn't
 
 
 def setlist(d, venue, coords):
-    return {"eventDate": d, "venue": {"name": venue, "city": {"name": "x", "coords": coords}}}
+    return {"eventDate": d, "venue": {"id": f"v-{venue}", "name": venue, "city": {"name": "x", "coords": coords}}}
 
 
 @pytest.fixture
@@ -50,9 +50,11 @@ def test_last_area_show_takes_newest_area_show_from_city_search_or_recent_list(c
     responses.get(f"{sf.BASE}/artist/m/setlists", json={"total": 3, "setlist": [
         setlist("01-08-2026", "MSG", NYC), setlist("20-05-2022", "Keswick Theatre", {"lat": 40.08, "long": -75.15}),
         setlist("01-07-2021", "Somewhere", NYC)]})
+    responses.get(f"{sf.BASE}/search/setlists", json={"total": 2, "setlist": []})  # lineup size that night
     found = client.last_area_show("m", TODAY)
-    assert (found["date"], found["venue"]) == (date(2022, 5, 20), "Keswick Theatre")
-    assert client.calls == 2
+    assert (found["date"], found["venue"], found["acts"]) == (date(2022, 5, 20), "Keswick Theatre", 2)
+    assert client.calls == 3
+    assert responses.calls[2].request.params == {"venueId": "v-Keswick Theatre", "date": "20-05-2022"}
 
 
 @responses.activate
@@ -60,7 +62,9 @@ def test_last_area_show_none_found(client):
     responses.get(f"{sf.BASE}/search/setlists", status=404)  # setlist.fm's "no results"
     responses.get(f"{sf.BASE}/artist/m/setlists", json={"total": 2, "setlist": [
         setlist("01-08-2026", "MSG", NYC), setlist("05-05-2024", "Boston", {"lat": 42.36, "long": -71.06})]})
-    assert client.last_area_show("m", TODAY) == {"date": None, "venue": None, "checked_back_to": date(2024, 5, 5)}
+    assert client.last_area_show("m", TODAY) == {"date": None, "venue": None, "checked_back_to": date(2024, 5, 5),
+                                                 "acts": None}
+    assert client.calls == 2  # no lineup lookup when nothing was found
 
 
 @responses.activate
@@ -72,6 +76,7 @@ def test_enrich_history_stores_results_and_caches(tmp_path, client):
     responses.get(f"{sf.BASE}/search/setlists", json={"total": 1, "setlist": [
         setlist("19-11-2019", "Metropolitan Opera House", PHILLY)]})
     responses.get(f"{sf.BASE}/artist/hz/setlists", json={"total": 0, "setlist": []})
+    responses.get(f"{sf.BASE}/search/setlists", json={"total": 1, "setlist": []})
     assert sf.enrich_history(conn, client, today=TODAY) == 1
     row = conn.execute("SELECT * FROM attractions WHERE name='Hozier'").fetchone()
     assert (row["setlistfm_mbid"], row["last_area_show_date"], row["last_area_show_venue"]) == \
@@ -83,15 +88,15 @@ def test_enrich_history_skipped_without_key(tmp_path):
     assert sf.enrich_history(db.connect(tmp_path / "n.db"), sf.SetlistFmClient(api_key="")) == 0
 
 
-def _presale_alert(conn, last_show=None, venue="Metropolitan Opera House"):
+def _presale_alert(conn, last_show=None, venue="Metropolitan Opera House", acts=1):
     presale = [("Artist Presale", "2026-10-22T14:00:00Z", None)]
     r = store.start_run(conn, "ticketmaster")
     store.upsert_events(conn, r, [tm.normalize(tm_event(event_id="h", name="Hozier", date="2027-03-14",
                                                         venue="Xfinity Mobile Arena", upcoming=70, presales=presale))],
                         baseline=True)
     if last_show:
-        conn.execute("UPDATE attractions SET last_area_show_date=?, last_area_show_venue=? WHERE name='Hozier'",
-                     (last_show, venue))
+        conn.execute("UPDATE attractions SET last_area_show_date=?, last_area_show_venue=?, last_area_show_acts=? "
+                     "WHERE name='Hozier'", (last_show, venue, acts))
     [alert] = detectors.detect_sales_soon(conn, datetime(2026, 10, 21, 16, tzinfo=timezone.utc), "2026-10-21")
     return alert
 
@@ -132,3 +137,12 @@ def test_comeback_fallback_hook_and_no_repeated_name(tmp_path):
     assert templates.fallback_hook(f) == "Hozier's first Philly show since 2019"
     script = templates.script_for(f)
     assert "The Artist Presale opens" in script and script.count("Hozier") == 1
+
+
+def test_multi_act_last_show_is_described_as_a_lineup(tmp_path):
+    f = _presale_alert(db.connect(tmp_path / "m.db"), "2018-12-05", "Wells Fargo Center", acts=9)["facts"]
+    assert f["history"]["last_philly_show_was_multi_act"] is True
+    script = templates.script_for(f)
+    assert "Hozier is playing Philly for the first time since 2018. "            "Last time was a 9-act lineup at Wells Fargo Center." in script
+    assert templates.caption_for(f).startswith("First Philly show since 2018 (a 9-act lineup, per setlist.fm)!")
+    assert llm.check_facts({"script": script, "caption": templates.caption_for(f)}, f) == []
