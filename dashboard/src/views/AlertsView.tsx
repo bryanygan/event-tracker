@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type ShowFacts, type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
@@ -24,9 +24,9 @@ const STATUS_LABEL: Record<Draft['status'], string> = {
   rejected: 'Rejected',
 }
 
-type Props = { refreshKey: number; busy: boolean; onJob: (j: Job) => void; onChange: () => void }
+type Props = { refreshKey: number; busy: boolean; job: Job | null; onJob: (j: Job) => void; onChange: () => void }
 
-export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props) {
+export default function AlertsView({ refreshKey, busy, job, onJob, onChange }: Props) {
   const [filter, setFilter] = useState<'open' | 'dismissed'>('open')
   const [kind, setKind] = useState<Alert['kind'] | ''>('')
   const [alerts, setAlerts] = useState<Alert[] | null>(null)
@@ -54,7 +54,7 @@ export default function AlertsView({ refreshKey, busy, onJob, onChange }: Props)
       </div>
       {shown.length === 0 && <p className="muted">Nothing here yet. Alerts show up after a pipeline run finds something.</p>}
       {shown.map((a) => (
-        <AlertCard key={a.id} alert={a} busy={busy}
+        <AlertCard key={a.id} alert={a} busy={busy} job={job}
           onRegenerate={async (angle) => onJob(await api.regenerate(a.id, angle))}
           onStatus={async (s) => { await api.setAlertStatus(a.id, s); load(); onChange() }}
           onDraftChange={() => { load(); onChange() }} />
@@ -135,11 +135,39 @@ function WebContextView({ alertId, initial }: { alertId: number; initial: WebCon
   )
 }
 
-export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
-  alert: Alert; busy: boolean; onRegenerate: (angle?: string) => void
+export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftChange }: {
+  alert: Alert; busy: boolean; job: Job | null; onRegenerate: (angle?: string) => Promise<void>
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
   const [showOlder, setShowOlder] = useState(false)
+  // Draft progress: "sending" covers the moment between the click and the server accepting the job
+  const [sending, setSending] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [done, setDone] = useState<'ok' | 'failed' | null>(null)
+  const mine = !!job?.running && job.alert_id === alert.id
+  const wasMine = useRef(false)
+  useEffect(() => {
+    if (wasMine.current && !mine && job) {
+      setDone(job.error ? 'failed' : 'ok')
+      wasMine.current = false
+    }
+    if (mine) { wasMine.current = true; setDone(null) }
+  }, [mine, job])
+  useEffect(() => {  // the success note fades after a few seconds; a failure stays until the next try
+    if (done !== 'ok') return
+    const t = setTimeout(() => setDone(null), 8000)
+    return () => clearTimeout(t)
+  }, [done])
+  // Once the finished draft has loaded, bring it into view (on a phone it's well above the button)
+  const latestRef = useRef<HTMLDivElement>(null)
+  const latestId = alert.drafts[0]?.id
+  useEffect(() => {
+    if (done === 'ok') latestRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [done, latestId])
+  const draft = async (angle?: string) => {
+    setSending(true); setStartError(null); setDone(null)
+    try { await onRegenerate(angle) } catch (e) { setStartError(String(e)) } finally { setSending(false) }
+  }
   const [slidesOpen, setSlidesOpen] = useState(false)
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
   // Roundups: the "my N picks" cut (best by notability), starred in the facts table
@@ -194,7 +222,7 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
                 <span className="pill">{a.label}</span> <strong>“{a.hook}”</strong>
                 <div className="muted small">{a.pitch} · {a.style} · CTA: {a.cta}</div>
               </div>
-              {!STATIC && <button className="ghost" disabled={busy} onClick={() => onRegenerate(a.key)}
+              {!STATIC && <button className="ghost" disabled={busy || sending} onClick={() => draft(a.key)}
                                   title={['presale', 'status_change', 'team_week', 'big_game'].includes(String(alert.facts.format))
                                     ? 'templated format: drafted instantly, no model' : 'the model writes the script around this hook (~1 min)'}>
                 Draft this
@@ -204,7 +232,11 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
         </details>
       )}
 
-      {latest ? <DraftView draft={latest} alertId={alert.id} onChange={onDraftChange} /> : <p className="muted">No draft yet.</p>}
+      <div ref={latestRef}>
+        {done === 'ok' && <div className="draft-done" role="status">✓ New draft ready</div>}
+        {latest ? <DraftView key={latest.id} draft={latest} alertId={alert.id} onChange={onDraftChange} />
+          : <p className="muted">No draft yet.</p>}
+      </div>
       {older.length > 0 && (
         <button className="link" onClick={() => setShowOlder(!showOlder)}>
           {showOlder ? 'Hide' : 'Show'} {older.length} older draft{older.length > 1 ? 's' : ''}
@@ -212,8 +244,13 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       )}
       {showOlder && older.map((d) => <DraftView key={d.id} draft={d} alertId={alert.id} onChange={onDraftChange} />)}
 
+      {(mine || sending) && <DraftProgress job={mine ? job : null} />}
+      {done === 'failed' && <div className="warn" role="status">Drafting failed: {job?.error}</div>}
+      {startError && <div className="warn" role="status">Couldn't start the draft: {startError}</div>}
       <div className="actions">
-        {!STATIC && <button onClick={() => onRegenerate()} disabled={busy}>{latest ? 'New draft' : 'Write draft'}</button>}
+        {!STATIC && <button onClick={() => draft()} disabled={busy || sending}>
+          {mine || sending ? 'Drafting…' : latest ? 'New draft' : 'Write draft'}
+        </button>}
         <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
         {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
@@ -221,6 +258,31 @@ export function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }
       </div>
       {slidesOpen && <SlidesOverlay alertId={alert.id} title={alert.title} onClose={() => setSlidesOpen(false)} />}
     </section>
+  )
+}
+
+/** A bar that fills over the job's estimated time (the server learns how long one model draft takes on this PC),
+ * with the current step underneath. It stops at 95% until the job really finishes. */
+function DraftProgress({ job }: { job: Job | null }) {
+  // The job is polled every 3 s; tick locally in between so the bar moves smoothly
+  const [since, setSince] = useState(() => ({ at: Date.now(), elapsed: job?.elapsed ?? 0 }))
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { setSince({ at: Date.now(), elapsed: job?.elapsed ?? 0 }) }, [job?.elapsed])
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(id) }, [])
+  const elapsed = since.elapsed + Math.max(0, now - since.at) / 1000
+  const estimate = job?.estimate ?? 0
+  const pct = estimate ? Math.min(95, (elapsed / estimate) * 100) : 3
+  const over = !!estimate && elapsed > estimate
+  return (
+    <div className="draft-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}
+         aria-label="Drafting">
+      <div className="bar"><div className={over ? 'fill slow' : 'fill'} style={{ width: `${pct}%` }} /></div>
+      <div className="muted small">
+        {job ? (job.step ?? 'Working') : 'Starting'}…
+        {job && <> · {Math.round(elapsed)}s{estimate > 5 && !over ? ` of about ${estimate}s` : ''}</>}
+        {over && ' · taking longer than usual, still going'}
+      </div>
+    </div>
   )
 }
 

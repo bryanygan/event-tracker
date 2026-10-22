@@ -163,3 +163,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - 2hollis (Fillmore, Feb 16 2027, public on-sale Oct 28 10 AM ET, presales Oct 27) was published on TM after the
   6:30 run; the area query returns it by 4 PM. Built `--midday` (P1-12) on `feature/midday`, 3 new tests (244).
 - Deleted the Pages project and its Access app; PAGES_PROJECT blanked in `.env`.
+- 4:30 run (run 9, 453 s): 2hollis ingested, alert 24 (new_tour, score 88) drafted. Publish skipped as intended.
+- Merged `feature/midday` (`4796005`), registered `PhillyEvents-Midday` (first run Oct 23 11:30 AM), rebuilt and
+  restarted the dashboard.
+- Draft progress bar on `feature/draft-progress` (user asked for visual confirmation on "New draft"). Also fixed
+  the latest DraftView not being keyed by draft id, so its text could stay on the old draft after a new one loaded.
+  `llm._ollama_up` is now public `ollama_up`. 3 new tests (247).

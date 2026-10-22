@@ -109,7 +109,7 @@ def test_ollama_session_stops_the_whole_process_tree(monkeypatch):
     monkeypatch.setattr(llm.os, "name", "nt")
     monkeypatch.setattr(llm, "_ollama_exe", lambda: "ollama.exe")
     up = iter([False, True])  # down at start, up after launch
-    monkeypatch.setattr(llm, "_ollama_up", lambda: next(up, True))
+    monkeypatch.setattr(llm, "ollama_up", lambda: next(up, True))
 
     class FakeProc:
         pid = 4242
@@ -126,7 +126,7 @@ def test_ollama_session_stops_the_whole_process_tree(monkeypatch):
 
 
 def test_ollama_session_leaves_a_running_ollama_alone(monkeypatch):
-    monkeypatch.setattr(llm, "_ollama_up", lambda: True)
+    monkeypatch.setattr(llm, "ollama_up", lambda: True)
     monkeypatch.setattr(llm.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no kills")))
     with llm.ollama_session():
         pass

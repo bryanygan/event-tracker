@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -82,7 +83,12 @@ async def local_only(request: Request, call_next):
 # One background job at a time (a pipeline run or a draft regeneration), so the
 # N95 never runs two LLM generations at once.
 _job_lock = threading.Lock()
-_job = {"name": None, "started": None, "error": None, "finished": None}
+_job = {"name": None, "started": None, "error": None, "finished": None,
+        "alert_id": None, "step": None, "estimate": None}  # draft jobs: which alert, what's happening, ~seconds
+_job_t0 = 0.0
+# How long one model generation took last time, so the progress bar's estimate matches this PC
+_gen_seconds = {"last": 60.0}
+OLLAMA_START_SECONDS = 15
 
 
 def conn():
@@ -98,10 +104,14 @@ def get_db():
         c.close()
 
 
-def _start_job(name: str, fn) -> dict:
+def _start_job(name: str, fn, alert_id: int | None = None, step: str | None = None,
+               estimate: float | None = None) -> dict:
+    global _job_t0
     if not _job_lock.acquire(blocking=False):
         raise HTTPException(409, f"Busy: {_job['name']} is still running")
-    _job.update(name=name, started=datetime.now().isoformat(timespec="seconds"), error=None, finished=None)
+    _job_t0 = time.monotonic()
+    _job.update(name=name, started=datetime.now().isoformat(timespec="seconds"), error=None, finished=None,
+                alert_id=alert_id, step=step, estimate=estimate)
 
     def worker():
         try:
@@ -114,12 +124,14 @@ def _start_job(name: str, fn) -> dict:
             _job_lock.release()
 
     threading.Thread(target=worker, daemon=True).start()
-    return dict(_job)
+    return {**_job, "running": True, "elapsed": 0.0}  # even if a quick job already finished; the next poll says so
 
 
 @app.get("/api/job")
 def job_status():
-    return {**_job, "running": _job_lock.locked()}
+    running = _job_lock.locked()
+    # elapsed from the server's clock, so the bar is right even if the phone's clock or time zone differs
+    return {**_job, "running": running, "elapsed": round(time.monotonic() - _job_t0, 1) if running else None}
 
 
 @app.get("/api/summary")
@@ -280,14 +292,31 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
 
+    use_llm = drafts.needs_llm(facts, angle)
+    cold = use_llm and not llm.ollama_up()
+    retried = []
+
+    def progress(step: str, extra_generation: bool = False):
+        _job["step"] = step
+        if extra_generation:  # the fact-check retry: one more generation
+            retried.append(step)
+            _job["estimate"] = (_job["estimate"] or 0) + _gen_seconds["last"]
+
     def work():
         with closing(conn()) as job_conn:
-            if drafts.needs_llm(facts, angle):
+            if use_llm:
                 with llm.ollama_session():
-                    drafts.draft_alert(job_conn, alert_id, angle=angle)
+                    progress("Writing the draft")
+                    started = time.monotonic()
+                    drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
+                    if not retried:  # remember a clean single generation's time for the next estimate
+                        _gen_seconds["last"] = min(max(time.monotonic() - started, 10.0), 300.0)
             else:  # templated format + chosen angle: no model, done in a moment
-                drafts.draft_alert(job_conn, alert_id, angle=angle)
-    return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else ""), work)
+                drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
+    estimate = (OLLAMA_START_SECONDS if cold else 0) + _gen_seconds["last"] if use_llm else 2
+    return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else ""), work,
+                      alert_id=alert_id, step="Starting the model" if cold else "Writing the draft",
+                      estimate=round(estimate))
 
 
 class DraftUpdate(BaseModel):

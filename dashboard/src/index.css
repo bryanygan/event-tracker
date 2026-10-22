@@ -99,6 +99,13 @@ button.tab.active { background: var(--accent); color: var(--accent-text); border
 .draft-foot > span { flex: 1; }
 .actions-inline { display: flex; gap: 6px; }
 .actions { display: flex; gap: 8px; margin-top: 12px; }
+.draft-progress { margin-top: 12px; }
+.draft-progress .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin-bottom: 4px; }
+.draft-progress .fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s linear; }
+.draft-progress .fill.slow { animation: draft-pulse 1.4s ease-in-out infinite; }
+@keyframes draft-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .draft-progress .fill { transition: none; } .draft-progress .fill.slow { animation: none; } }
+.draft-done { color: var(--accent); font-weight: 600; font-size: 0.9rem; margin: 4px 0 6px; }
 
 .table-wrap { overflow-x: auto; }
 table.events { border-collapse: collapse; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }

@@ -37,9 +37,9 @@ function timeLeft(iso: string) {
   return h < 48 ? `${Math.round(h)}h left` : `${Math.round(h / 24)} days left`
 }
 
-type Props = { refreshKey: number; busy: boolean; summary: Summary | null; onJob: (j: Job) => void; onChange: () => void }
+type Props = { refreshKey: number; busy: boolean; job: Job | null; summary: Summary | null; onJob: (j: Job) => void; onChange: () => void }
 
-export default function QueueView({ refreshKey, busy, summary, onJob, onChange }: Props) {
+export default function QueueView({ refreshKey, busy, job, summary, onJob, onChange }: Props) {
   const [queue, setQueue] = useState<Queue | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [filter, setFilter] = useState<Filter>('active')
@@ -76,7 +76,7 @@ export default function QueueView({ refreshKey, busy, summary, onJob, onChange }
       <TrendNotes onChange={changed} />
       {shown.length === 0 && <p className="muted">Nothing here.</p>}
       {shown.map((i) => (
-        <QueueCard key={i.alert_id} item={i} alert={alerts.find((a) => a.id === i.alert_id)} busy={busy}
+        <QueueCard key={i.alert_id} item={i} alert={alerts.find((a) => a.id === i.alert_id)} busy={busy} job={job}
                    onJob={onJob} onChange={changed} />
       ))}
     </>
@@ -87,8 +87,8 @@ function Count({ label, value, hot = false }: { label: string; value?: number; h
   return <div className={hot ? 'stat hot' : 'stat'}><strong>{value ?? '–'}</strong><span>{label}</span></div>
 }
 
-function QueueCard({ item, alert, busy, onJob, onChange }: {
-  item: QueueItem; alert?: Alert; busy: boolean; onJob: (j: Job) => void; onChange: () => void
+function QueueCard({ item, alert, busy, job, onJob, onChange }: {
+  item: QueueItem; alert?: Alert; busy: boolean; job: Job | null; onJob: (j: Job) => void; onChange: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
@@ -172,7 +172,7 @@ function QueueCard({ item, alert, busy, onJob, onChange }: {
       </div>
       {open && alert && (
         <div className="embedded">
-          <AlertCard alert={alert} busy={busy}
+          <AlertCard alert={alert} busy={busy} job={job}
             onRegenerate={async (angle) => onJob(await api.regenerate(alert.id, angle))}
             onStatus={async (s) => { await api.setAlertStatus(alert.id, s); onChange() }}
             onDraftChange={onChange} />

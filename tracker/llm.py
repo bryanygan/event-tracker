@@ -117,7 +117,7 @@ DRAFT_SCHEMA = {
 
 # ---------- Ollama process management ----------
 
-def _ollama_up() -> bool:
+def ollama_up() -> bool:
     try:
         return requests.get(f"{config.OLLAMA_URL}/api/version", timeout=2).ok
     except requests.RequestException:
@@ -136,7 +136,7 @@ def _ollama_exe() -> str | None:
 def ollama_session():
     """Make sure Ollama is reachable for the duration; stop it after if we started it."""
     proc = None
-    if not _ollama_up():
+    if not ollama_up():
         exe = _ollama_exe()
         if not exe:
             raise RuntimeError("Ollama isn't running and ollama.exe wasn't found")
@@ -146,7 +146,7 @@ def ollama_session():
         proc = subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 creationflags=flags)
         for _ in range(60):
-            if _ollama_up():
+            if ollama_up():
                 break
             time.sleep(1)
         else:

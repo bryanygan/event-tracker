@@ -29,9 +29,14 @@ def needs_llm(facts: dict, angle: str | None) -> bool:
     return not (angle and templates.script_for(facts))
 
 
-def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None = None) -> int:
+def _quiet(step: str, extra_generation: bool = False) -> None:
+    pass
+
+
+def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None = None, progress=_quiet) -> int:
     """Generate one draft for an alert, optionally from a chosen angle (angles.py). Assumes Ollama is
-    reachable when needs_llm(). Returns draft id."""
+    reachable when needs_llm(). Returns draft id. `progress(step, extra_generation)` hears what it's doing,
+    for the dashboard's progress bar; extra_generation=True means a retry just added another model call."""
     alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     facts = json.loads(alert["facts"])
     chosen = angles.find(facts, angle) if angle else None
@@ -44,10 +49,13 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
     if chosen and script:
         out = {"hook": chosen["hook"], "script": script, "caption": caption,
                "hashtags": angles.template_hashtags(facts), "model": "template"}
+        progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
     out = llm.generate(facts, model=model, script=script, caption=caption, **({"angle": chosen} if chosen else {}))
+    progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
+        progress("Second try: the first draft didn't match the facts", extra_generation=True)
         retry = llm.generate(facts, model=model, script=script, caption=caption)
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
@@ -61,6 +69,7 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
         # Templated formats have a known-good fallback hook, so a flagged one is replaced, not shipped.
         out["hook"] = templates.fallback_hook(facts)
         warnings = llm.check_facts(out, facts)
+    progress("Saving the draft")
     return _save(conn, alert, facts, out, warnings, angle)
 
 

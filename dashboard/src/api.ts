@@ -255,7 +255,11 @@ export type Summary = {
   metrics_due: number
 }
 
-export type Job = { name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean }
+export type Job = {
+  name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean
+  // draft jobs: the alert, the current step, and about how many seconds the whole thing takes on this PC
+  alert_id?: number | null; step?: string | null; estimate?: number | null; elapsed?: number | null
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
