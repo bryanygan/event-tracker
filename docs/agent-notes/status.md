@@ -87,7 +87,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-10 genre completeness | Merged 2026-10-22: `tracker/genres.py` (artist genre fill + capped TM name lookup for venue-calendar acts) |
 | P1-09 manual trend notes | Merged 2026-10-22: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
 | P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
-| P2-15 phone editing | Built 2026-10-22 on `feature/remote-editing`: live dashboard via the user's Cloudflare Tunnel + Access JWT check; needs a hostname from the user |
+| P2-15 phone editing | Live 2026-10-22 (`d9b0fac`): REMOTE_HOST route added to the user's existing tunnel (the ttspotslideshow one) + its own Access app ("Admin Only"); user's first 3 phone edits audited ok |
 | P1-12..13, P2-14 | Not started. Midday pass needs a user decision |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.

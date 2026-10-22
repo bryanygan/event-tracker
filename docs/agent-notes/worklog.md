@@ -154,3 +154,7 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   snapshot published (slides.json 76 KB).
 - Logged the user's Calvin Harris video (post 1, alert 9; no link yet).
 - P2-15 phone editing on `feature/remote-editing` (see decisions.md "Phone editing"). 15 new tests (241).
+- Merged (`d9b0fac`), Access app created, `.env` filled, dashboard restarted. User added the hostname to their
+  existing tunnel (new dashboard has one URL field: `http://127.0.0.1:8765`). Unauthenticated page/API/POST
+  and a forged token all 302 to the Access login; the user's 3 phone edits (dismiss, note, shortlist) logged.
+  Pi-hole cached the hostname's NXDOMAIN from before the route existed; it clears on its own.
