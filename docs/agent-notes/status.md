@@ -85,6 +85,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-08 3–5 pick / genre-cut roundups | Built on `feature/roundups-genres`: `picks` on weekend/stacked-month facts + "picks" angle; "your lane this weekend" cut (`weekend_lane:` key) |
 | P1-10 genre completeness | Built on `feature/roundups-genres`: `tracker/genres.py` (artist genre fill + capped TM name lookup for venue-calendar acts) |
 | P1-09 manual trend notes | Built on `feature/trend-notes`: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
+| P1-11 9:16 slides | Built on `feature/slides`: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay; awaiting merge |
 | P1-12..13, P2 | Not started. Midday pass and mobile editing need user decisions |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.

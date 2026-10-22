@@ -226,6 +226,16 @@ CREATE TABLE IF NOT EXISTS trend_notes (
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
+
+-- 9:16 slide decks (tracker/slides.py): manifest built from facts + your edits, one deck per alert.
+CREATE TABLE IF NOT EXISTS slide_decks (
+    alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
+    base TEXT NOT NULL,             -- JSON manifest as built from `facts` (no edits)
+    facts TEXT NOT NULL,            -- JSON: the alert's facts the base was built from
+    overrides TEXT NOT NULL,        -- JSON: your edits by slide id (text, hidden, image + credit/rights)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 

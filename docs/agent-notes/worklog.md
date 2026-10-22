@@ -133,3 +133,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   `TrendNotes.tsx` panel + card pills. 20 new tests (165 total). Real-data check on a DB copy (port 8768):
   a national artist note, a Philly genre note and an expired note matched the right 7 ideas; the other 14 kept
   "search" unknown. Screenshots at desktop and ~420px width.
+
+### P1-11 slides (2026-10-22, build agent C, `feature/slides`)
+- `tracker/slides.py` + `slide_decks` table + `/api/alerts/{id}/slides` (GET/PUT/DELETE, POST rebuild);
+  `slides.json` in the static snapshot; canvas renderer + full-screen overlay opened from a "Slides" button.
+- Checked on a copy of the real DB: all 7 formats build; rendered presale, weekend (8 shows) and team-week
+  decks; stress test (95-char name, unbreakable word, 7 sale lines, photo); date-correction rebuild kept the
+  artist edit and photo; static snapshot renders read-only at 500px.

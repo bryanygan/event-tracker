@@ -244,3 +244,26 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
 - Genre-level notes (e.g. "Pop") match every idea in that genre, by design; use artist terms for precise ones.
 - UI: a collapsed "Trend notes (N active)" panel on "What to post" (no new tab, to keep phones uncluttered),
   pills on matching queue cards. The snapshot exports `trends.json` read-only (it's behind Cloudflare Access).
+
+## 9:16 slides (P1-11, 2026-10-22; `tracker/slides.py`, `dashboard/src/slides/render.ts`)
+
+- **Python decides the words, the browser draws.** The manifest (title, one slide per show up to 8, ticket
+  times for presales/new shows, CTA) is built from facts only, deterministically, and checked by
+  `llm.check_facts` in tests. Drawing is client-side canvas (1080x1920), so the read-only phone snapshot can
+  render and download slides too, and no image library (Pillow) or headless browser is needed on the PC.
+  ttspotslideshow was read for look and feel only (dark gradients, bold white type); no code or runtime link.
+- **Edits are stored, not flattened.** `slide_decks` keeps the base manifest, the facts it came from and your
+  overrides (text per field, skip flag, image). A saved deck keeps showing what you saved and warns when the
+  facts change (only changes that would alter a slide count). "Rebuild" keeps an edit only where the default
+  it replaced is unchanged; an edit on a date that moved is dropped and listed. Show slides are keyed by
+  ticket URL, so a date correction doesn't orphan edits to the artist line.
+- **Rights:** no artist photos, album art or music are fetched or suggested. Images are opt-in uploads only
+  (data: URLs; web links are rejected, which also avoids fetching and keeps the canvas exportable), at most 4
+  per deck, each with a required credit and a rights basis (own / licensed / permission / open licence). The
+  credit is drawn on the slide. setlist.fm is credited on comeback title slides.
+- **Layout:** text stays out of TikTok's caption zone (bottom ~440px) and right-hand buttons; text shrinks
+  before a word is ever split, and a long name with a photo shrinks the photo first. Genre picks the palette.
+- **No zip download:** "Download all" saves the PNGs one by one (no new dependency). Fonts are the system
+  stack, so slides look slightly different on a phone than on the PC.
+- Not enforced: a request-size limit on `PUT /api/alerts/{id}/slides` (images are validated after parsing).
+  The API only listens on 127.0.0.1.
