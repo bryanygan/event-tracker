@@ -11,6 +11,7 @@ README is [../../README.md](../../README.md).
 | [gotchas.md](gotchas.md) | Mistakes already made and environment traps. Saves you from repeating them. |
 | [environment.md](environment.md) | The machine, what else runs on it, external APIs and what they actually return. |
 | [worklog.md](worklog.md) | Chronological log of sessions: what was done, in order. |
+| [venue-coverage.md](venue-coverage.md) | Which Philly venues Ticketmaster misses, what they sell through, how to read them. |
 
 ## Keeping these useful
 
