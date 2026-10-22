@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, STATIC, type Job, type Summary } from './api'
 import AlertsView from './views/AlertsView'
 import EventsView from './views/EventsView'
+import PostsView from './views/PostsView'
 import RunsView from './views/RunsView'
 
-type Tab = 'alerts' | 'events' | 'runs'
+type Tab = 'alerts' | 'posts' | 'events' | 'runs'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('alerts')
@@ -65,6 +66,7 @@ export default function App() {
           <Stat label="upcoming events" value={summary?.upcoming_events} />
           <Stat label="open alerts" value={summary?.open_alerts} />
           <Stat label="drafts to review" value={summary?.pending_drafts} />
+          <Stat label="posted this week" value={summary?.posts_this_week} />
         </div>
         {STATIC ? (
           <div className="run-box">
@@ -122,15 +124,17 @@ export default function App() {
       {error && <div className="banner error">{error}</div>}
 
       <nav>
-        {(['alerts', 'events', 'runs'] as Tab[]).map((t) => (
+        {(['alerts', 'posts', 'events', 'runs'] as Tab[]).map((t) => (
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-            {{ alerts: 'Alerts & drafts', events: 'Events', runs: 'Runs' }[t]}
+            {{ alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
+            {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}
           </button>
         ))}
       </nav>
 
       <main>
         {tab === 'alerts' && <AlertsView refreshKey={refreshKey} busy={!!job?.running} onJob={setJob} onChange={refresh} />}
+        {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'events' && <EventsView refreshKey={refreshKey} />}
         {tab === 'runs' && <RunsView refreshKey={refreshKey} />}
       </main>

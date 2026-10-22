@@ -53,6 +53,11 @@ COMEBACK_MIN_YEARS = 3             # "first Philly show since <year>" when the g
 MULTI_ACT_MIN = 5                  # acts on one bill for the last show to count as a festival/radio show
 COMEBACK_BONUS = 10                # score bump for comebacks (the brief's 'back after X years' angle)
 
+# --- Posted videos (tracker/posts.py) ---
+# A group (a format, a video style) needs this many posts with numbers at the same age before the
+# dashboard compares it with others. Below that it's shown as "too few to compare".
+ANALYTICS_MIN_POSTS = 3
+
 # --- Your niche (tracker/listening.py) ---
 # The user covers mostly rap, hyperpop, pop, R&B, EDM, bedroom/indie pop, but is open to anything notable.
 # Plays are counted over the last LISTENING_WINDOW_DAYS. Bonuses add to the normal 0-100 score.

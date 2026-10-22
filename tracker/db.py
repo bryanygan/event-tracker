@@ -135,6 +135,42 @@ CREATE TABLE IF NOT EXISTS drafts (
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, filmed, rejected
     notes TEXT
 );
+
+-- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
+CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY,
+    alert_id INTEGER REFERENCES alerts(id),   -- NULL for videos that didn't come from an alert
+    draft_id INTEGER REFERENCES drafts(id),
+    platform TEXT NOT NULL DEFAULT 'tiktok',
+    url TEXT,
+    title TEXT NOT NULL,
+    posted_at TEXT NOT NULL,        -- UTC ISO
+    format TEXT,                    -- presale, weekend, stacked_month... (the alert's format, or chosen by hand)
+    video_style TEXT,               -- voiceover, slideshow, footage, face-to-camera, other
+    hook TEXT,                      -- the hook you actually used
+    length_seconds INTEGER,
+    notes TEXT,
+    facts_snapshot TEXT,            -- JSON: the alert's facts when you posted (what we knew then, no hindsight)
+    created_at TEXT NOT NULL
+);
+
+-- Numbers copied from TikTok analytics at some moment. NULL = not recorded (never "zero").
+CREATE TABLE IF NOT EXISTS post_metrics (
+    id INTEGER PRIMARY KEY,
+    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    observed_at TEXT NOT NULL,      -- UTC ISO; compared with posted_at to get the post's age
+    views INTEGER,
+    likes INTEGER,
+    comments INTEGER,
+    shares INTEGER,
+    saves INTEGER,
+    followers_gained INTEGER,
+    avg_watch_seconds REAL,
+    completion_rate REAL,           -- percent watched to the end, 0-100
+    source TEXT NOT NULL DEFAULT 'manual',
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_post_metrics_post ON post_metrics(post_id);
 """
 
 

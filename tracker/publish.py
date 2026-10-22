@@ -101,6 +101,8 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
         "events": api.list_events(q="", genre="", days=config.LOOKAHEAD_DAYS, limit=5000, c=conn),
         "genres": api.genres(c=conn),
         "runs": api.runs(limit=20, c=conn),
+        "posts": api.list_posts(c=conn),
+        "analytics": {g: api.analytics(group_by=g, c=conn) for g in ("format", "video_style")},
     }
     for name, payload in files.items():
         (data / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

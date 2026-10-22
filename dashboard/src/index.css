@@ -104,6 +104,19 @@ table.events { border-collapse: collapse; width: 100%; background: var(--panel);
 table.events th, table.events td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.events th { font-size: 0.78rem; text-transform: uppercase; color: var(--muted); }
 
+.section-title { margin: 0; font-size: 1rem; }
+.badge { margin-left: 6px; background: #d97706; color: #fff; border-radius: 99px; padding: 0 6px; font-size: 0.75rem; }
+.pill.due { color: #d97706; border-color: #d97706; }
+.pill a { color: inherit; text-decoration: none; }
+tr.thin { opacity: 0.55; }
+.post .hook-used { font-weight: 600; margin: 8px 0 4px; }
+table.metrics { font-size: 0.85rem; margin-top: 8px; }
+.post-form { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.post-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.post-form input, .post-form select { text-transform: none; letter-spacing: normal; color: var(--text); font-size: 0.95rem; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+input.grow { flex: 1; }
+
 @media (max-width: 640px) {
   .stats { gap: 14px; }
   .run-box { align-items: flex-start; }

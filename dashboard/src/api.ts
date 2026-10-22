@@ -39,6 +39,66 @@ export type Alert = {
   created_at: string
   status: 'new' | 'drafted' | 'dismissed'
   drafts: Draft[]
+  posts: { id: number; draft_id: number | null; url: string | null; posted_at: string }[]
+}
+
+export const VIDEO_STYLES = ['voiceover', 'slideshow', 'footage', 'face-to-camera', 'other'] as const
+export type VideoStyle = (typeof VIDEO_STYLES)[number]
+export const COUNT_METRICS = ['views', 'likes', 'comments', 'shares', 'saves', 'followers_gained'] as const
+
+export type Metrics = {
+  id: number
+  post_id: number
+  observed_at: string
+  age_hours: number
+  views: number | null
+  likes: number | null
+  comments: number | null
+  shares: number | null
+  saves: number | null
+  followers_gained: number | null
+  avg_watch_seconds: number | null
+  completion_rate: number | null
+  notes: string | null
+}
+export type MetricsInput = Partial<Omit<Metrics, 'id' | 'post_id' | 'age_hours'>>
+
+export type Checkpoint = '24h' | '7d'
+
+export type Post = {
+  id: number
+  alert_id: number | null
+  draft_id: number | null
+  url: string | null
+  title: string
+  posted_at: string
+  format: string | null
+  video_style: VideoStyle | null
+  hook: string | null
+  length_seconds: number | null
+  notes: string | null
+  age_hours: number
+  metrics: Metrics[]
+  checkpoints: Record<Checkpoint, number | null> // id of the snapshot used for each comparison age
+  due: Checkpoint[]
+}
+export type PostInput = Partial<Pick<Post, 'alert_id' | 'draft_id' | 'url' | 'title' | 'posted_at' | 'format' |
+  'video_style' | 'hook' | 'length_seconds' | 'notes'>>
+
+export type Analytics = {
+  group_by: 'format' | 'video_style'
+  min_posts: number
+  checkpoints: Record<Checkpoint, { target_hours: number; window_hours: [number, number] }>
+  groups: {
+    group: string
+    posts: number
+    checkpoints: Record<Checkpoint, {
+      n: number
+      enough: boolean
+      median_views: number | null
+      per_1k_views: Record<'likes' | 'comments' | 'shares' | 'saves' | 'followers_gained', number | null>
+    }>
+  }[]
 }
 
 export type EventRow = {
@@ -84,6 +144,8 @@ export type Summary = {
   generated_at?: string // static snapshots only
   publish?: { at: string; ok: boolean; message: string; url?: string } | null
   source_problems?: { source: string; error: string }[]
+  posts_this_week: number
+  metrics_due: number
 }
 
 export type Job = { name: string | null; started: string | null; finished: string | null; error: string | null; running: boolean }
@@ -129,6 +191,14 @@ const staticApi = {
   genres: () => snapshot<string[]>('genres'),
   runs: () => snapshot<Run[]>('runs'),
   triggerRun: readOnly,
+  posts: () => snapshot<Post[]>('posts'),
+  analytics: (groupBy: Analytics['group_by']) =>
+    snapshot<Record<string, Analytics>>('analytics').then((all) => all[groupBy]),
+  createPost: readOnly,
+  updatePost: readOnly,
+  deletePost: readOnly,
+  addMetrics: readOnly,
+  deleteMetrics: readOnly,
 }
 
 const liveApi = {
@@ -146,6 +216,15 @@ const liveApi = {
   runs: () => req<Run[]>('/api/runs'),
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
+  posts: () => req<Post[]>('/api/posts'),
+  analytics: (groupBy: Analytics['group_by']) => req<Analytics>(`/api/analytics?group_by=${groupBy}`),
+  createPost: (fields: PostInput) => req<{ id: number }>('/api/posts', { method: 'POST', body: JSON.stringify(fields) }),
+  updatePost: (id: number, fields: PostInput) =>
+    req(`/api/posts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  deletePost: (id: number) => req(`/api/posts/${id}`, { method: 'DELETE' }),
+  addMetrics: (postId: number, fields: MetricsInput) =>
+    req<{ id: number }>(`/api/posts/${postId}/metrics`, { method: 'POST', body: JSON.stringify(fields) }),
+  deleteMetrics: (id: number) => req(`/api/metrics/${id}`, { method: 'DELETE' }),
 }
 
 export const api: typeof liveApi = STATIC ? { ...staticApi, publish: readOnly } : liveApi
