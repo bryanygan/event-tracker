@@ -82,6 +82,7 @@ function AlertCard({ alert, busy, onRegenerate, onStatus, onDraftChange }: {
         ))}
         <span className="muted small" title="notability score">★ {Math.round(alert.score)}</span>
       </div>
+      {alert.updated_at && <p className="muted small">Facts refreshed {fmtWhen(alert.updated_at)} (new shows, cancellations or sale changes).</p>}
 
       <details className="facts">
         <summary>Facts ({shows.length} show{shows.length === 1 ? '' : 's'}) — the only things the draft is allowed to say</summary>
@@ -141,6 +142,12 @@ function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number
 
   return (
     <div className={`draft status-${draft.status}`}>
+      {draft.facts_changes.length > 0 && (
+        <div className="warn">
+          ↻ The facts changed since this draft was written. Edit it or write a new draft:
+          <ul>{draft.facts_changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        </div>
+      )}
       {draft.warnings.length > 0 && (
         <div className="warn">⚠ Check before filming: {draft.warnings.join(' · ')}</div>
       )}

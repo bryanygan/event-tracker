@@ -8,6 +8,7 @@ Each detector returns alert dicts:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from collections import defaultdict
@@ -19,6 +20,7 @@ from .scoring import is_game, upcoming_events
 from .store import now_iso
 
 TZ = ZoneInfo(config.TIMEZONE)
+log = logging.getLogger(__name__)
 
 
 # ---------- formatting helpers (facts are pre-formatted so the LLM can copy them) ----------
@@ -433,15 +435,84 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
     return alerts
 
 
+# Facts that change on every run without anything real happening; ignored when deciding whether an alert changed.
+VOLATILE_FACTS = {"hours_until_open", "your_plays"}
+
+
+def _stable(facts: dict) -> dict:
+    # None and missing mean the same (alerts raised before a fact existed don't have the key at all)
+    return {k: v for k, v in facts.items() if k not in VOLATILE_FACTS and v is not None}
+
+
 def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
-    """Insert alerts, skipping ones we've already raised. Returns ids of newly created alerts."""
-    created = []
+    """Insert new alerts; refresh the facts of ones already raised. Returns ids of newly created alerts.
+
+    A weekend roundup raised on Wednesday is re-detected on Thursday and Friday; if a show was added or
+    cancelled meanwhile, its facts, title and score are updated (the old version goes to alert_history).
+    Drafts are never touched: each keeps the facts it was written from, and the dashboard shows what
+    changed since (facts_diff). Dismissed alerts and alerts you've logged a post for are left as they were.
+    """
+    created, refreshed = [], 0
     for a in alerts:
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO alerts (key, kind, title, score, facts, created_at) VALUES (?,?,?,?,?,?)",
-            (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso()),
-        )
-        if cur.rowcount:
+        old = conn.execute("SELECT * FROM alerts WHERE key=?", (a["key"],)).fetchone()
+        if old is None:
+            cur = conn.execute(
+                "INSERT INTO alerts (key, kind, title, score, facts, created_at) VALUES (?,?,?,?,?,?)",
+                (a["key"], a["kind"], a["title"], a["score"], json.dumps(a["facts"]), now_iso()))
             created.append(cur.lastrowid)
+            continue
+        posted = conn.execute("SELECT 1 FROM posts WHERE alert_id=? LIMIT 1", (old["id"],)).fetchone()
+        if old["status"] == "dismissed" or posted or _stable(json.loads(old["facts"])) == _stable(a["facts"]):
+            continue
+        conn.execute("INSERT INTO alert_history (alert_id, title, score, facts, replaced_at) VALUES (?,?,?,?,?)",
+                     (old["id"], old["title"], old["score"], old["facts"], now_iso()))
+        conn.execute("UPDATE alerts SET title=?, score=?, facts=?, updated_at=? WHERE id=?",
+                     (a["title"], a["score"], json.dumps(a["facts"]), now_iso(), old["id"]))
+        refreshed += 1
     conn.commit()
+    if refreshed:
+        log.info("Refreshed facts on %d existing alerts", refreshed)
     return created
+
+
+def _show_label(s: dict) -> str:
+    return f"{s.get('artist') or s.get('event_name')} ({s.get('date')})"
+
+
+def _show_key(s: dict) -> tuple:
+    return (s.get("artist") or s.get("event_name"), s.get("date"), s.get("venue"))
+
+
+SHOW_FIELDS = ("time", "status", "price", "venue", "support")  # per-show facts worth reporting when they change
+
+
+def facts_diff(old: dict, new: dict) -> list[str]:
+    """What changed between two versions of an alert's facts, as short lines for the dashboard
+    ("Added: Nova Vale (Sat, Oct 24)", "Removed: ...", "sale_opens: A → B"). Empty if nothing material."""
+    out = []
+    old_shows = old.get("shows") or ([old["show"]] if old.get("show") else [])
+    new_shows = new.get("shows") or ([new["show"]] if new.get("show") else [])
+    before = {_show_key(s): s for s in old_shows}
+    after = {_show_key(s): s for s in new_shows}
+    out += [f"Added: {_show_label(s)}" for k, s in after.items() if k not in before]
+    out += [f"Removed: {_show_label(s)}" for k, s in before.items() if k not in after]
+    for k in before.keys() & after.keys():
+        for f in SHOW_FIELDS:
+            if before[k].get(f) != after[k].get(f):
+                out.append(f"{_show_label(after[k])}: {f} {before[k].get(f) or '—'} → {after[k].get(f) or '—'}")
+    for key in ("all_sales", "presales"):
+        was = {(w["name"], w.get("opens") or w.get("starts")) for w in old.get(key) or []}
+        now = {(w["name"], w.get("opens") or w.get("starts")) for w in new.get(key) or []}
+        out += [f"New sale: {n}, {t}" for n, t in sorted(now - was)]
+        out += [f"Sale no longer listed: {n}, {t}" for n, t in sorted(was - now)]
+    was_last, now_last = ((f.get("history") or {}).get("last_philly_show") for f in (old, new))
+    if was_last != now_last:
+        out.append(f"Last Philly show (setlist.fm): {was_last or '—'} → {now_last or '—'}")
+    skip = VOLATILE_FACTS | {"shows", "show", "all_sales", "presales", "history"}
+    for k in sorted((old.keys() | new.keys()) - skip):
+        if old.get(k) != new.get(k):
+            if isinstance(old.get(k), (dict, list)) or isinstance(new.get(k), (dict, list)):
+                out.append(f"{k} changed")
+            else:
+                out.append(f"{k}: {old.get(k) if old.get(k) is not None else '—'} → {new.get(k) if new.get(k) is not None else '—'}")
+    return out

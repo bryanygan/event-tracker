@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, db, drafts, llm, posts, publish
+from . import config, db, detectors, drafts, llm, posts, publish
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -99,10 +99,13 @@ def source_problems(c) -> list[dict]:
             for r in rows if r["source"] in names and (not r["ok"] or not r["count"])]
 
 
-def _draft_row(r) -> dict:
+def _draft_row(r, alert_facts: dict) -> dict:
     d = dict(r)
     d["onscreen"] = json.loads(d["onscreen"] or "[]")
     d["warnings"] = json.loads(d["warnings"] or "[]")
+    # What a later run changed in the alert since this draft was written (empty = the draft is current)
+    written_from = d.pop("facts")
+    d["facts_changes"] = detectors.facts_diff(json.loads(written_from), alert_facts) if written_from else []
     return d
 
 
@@ -117,7 +120,7 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
         a["posts"] = posted.get(a["id"], [])
-        a["drafts"] = [_draft_row(d) for d in c.execute(
+        a["drafts"] = [_draft_row(d, a["facts"]) for d in c.execute(
             "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
     return alerts
 

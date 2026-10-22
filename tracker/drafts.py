@@ -40,10 +40,10 @@ def draft_alert(conn, alert_id: int, model: str | None = None) -> int:
         warnings.append(f"Verify: last Philly show {facts['history']['last_philly_show']} "
                         f"({facts['history']['last_philly_venue']}) is from setlist.fm, which is crowd-sourced")
     cur = conn.execute(
-        """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at, facts)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (alert_id, facts.get("format", alert["kind"]), out["model"], out["hook"], out["script"], out["caption"],
-         " ".join(out["hashtags"]), json.dumps(llm.onscreen_lines(facts)), json.dumps(warnings), now_iso()))
+         " ".join(out["hashtags"]), json.dumps(llm.onscreen_lines(facts)), json.dumps(warnings), now_iso(), alert["facts"]))
     conn.execute("UPDATE alerts SET status='drafted' WHERE id=? AND status='new'", (alert_id,))
     conn.commit()
     if warnings:

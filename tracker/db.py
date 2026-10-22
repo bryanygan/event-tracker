@@ -117,7 +117,18 @@ CREATE TABLE IF NOT EXISTS alerts (
     score REAL DEFAULT 0,
     facts TEXT NOT NULL,            -- JSON: the only facts the LLM may use
     created_at TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'new'  -- new, drafted, dismissed
+    status TEXT NOT NULL DEFAULT 'new',  -- new, drafted, dismissed
+    updated_at TEXT                 -- last time a run changed its facts (NULL = never changed)
+);
+
+-- Earlier versions of an alert's facts, kept whenever a run refreshes them (see detectors.save_alerts).
+CREATE TABLE IF NOT EXISTS alert_history (
+    id INTEGER PRIMARY KEY,
+    alert_id INTEGER NOT NULL REFERENCES alerts(id),
+    title TEXT NOT NULL,
+    score REAL,
+    facts TEXT NOT NULL,
+    replaced_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS drafts (
@@ -133,7 +144,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     warnings TEXT,                  -- JSON list: things in the LLM text not found in the facts
     created_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, filmed, rejected
-    notes TEXT
+    notes TEXT,
+    facts TEXT                      -- JSON: the alert's facts this draft was written from
 );
 
 -- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
@@ -193,6 +205,14 @@ _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
+    "alerts": {"updated_at": "TEXT"},
+    "drafts": {"facts": "TEXT"},
+}
+# Run once, right after the column is added to an existing database.
+_BACKFILL = {
+    # Drafts written before this column existed were written from the alert's facts as they are now
+    # (alert facts never changed before refreshing existed).
+    ("drafts", "facts"): "UPDATE drafts SET facts = (SELECT facts FROM alerts WHERE alerts.id = drafts.alert_id)",
 }
 
 
@@ -202,4 +222,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
         for col, typ in cols.items():
             if col not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                if (table, col) in _BACKFILL:
+                    conn.execute(_BACKFILL[(table, col)])
     conn.commit()

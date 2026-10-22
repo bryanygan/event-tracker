@@ -24,6 +24,7 @@ export type Draft = {
   hashtags: string
   onscreen: string[]
   warnings: string[]
+  facts_changes: string[] // what a later run changed in the alert since this draft was written
   created_at: string
   status: 'pending' | 'approved' | 'filmed' | 'rejected'
   notes: string | null
@@ -37,6 +38,7 @@ export type Alert = {
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
   created_at: string
+  updated_at: string | null // last time a run refreshed the facts
   status: 'new' | 'drafted' | 'dismissed'
   drafts: Draft[]
   posts: { id: number; draft_id: number | null; url: string | null; posted_at: string }[]
