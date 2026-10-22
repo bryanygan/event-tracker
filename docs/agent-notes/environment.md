@@ -47,6 +47,15 @@ Both have working dir = project root, Priority 7, Interactive logon. Remove with
 - No key. ~50 requests / 5 s. Errors come back as HTTP 200 with an `error` object (quota = code 4).
 - Gives `nb_fan`. No genres on artist search results.
 
+**setlist.fm** `https://api.setlist.fm/rest/1.0` (header `x-api-key`, `Accept: application/json`)
+- Free key, **non-commercial** use; credit setlist.fm where its data is shown. ~2 req/s, 1,440/day.
+- "No results" is an HTTP **404**, not an empty list. Dates are `dd-MM-yyyy`. Upcoming shows appear in setlists.
+- Venue objects carry `city.coords` (lat/long), which is how "Philly area" is decided. `cityName` search is fuzzy.
+- Artist search returns joint billings ("Papa Roach & Beartooth"); match the exact name.
+
+**Ticketmaster basketball** (`classificationName=basketball`, same radius): ~100 events; Sixers home games are
+"Philadelphia 76ers vs. <Opponent>" with the Sixers as attraction #1. No `priceRanges`, no presales.
+
 **Spotify Web API** (client credentials, this app is in development mode)
 - Search/artist objects: only `external_urls, href, id, images, name, type, uri`. No popularity/followers/
   genres. `top-tracks` → 403. Effectively useless for ranking; not used.

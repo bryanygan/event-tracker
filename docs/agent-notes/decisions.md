@@ -52,6 +52,30 @@ Center; both keys kept). Unknown venues get `DEFAULT_VENUE_TIER = 20`.
 **Event names are cleaned** (`ticketmaster.clean_event_name`): strips "(21+ Event)", "(21 and Over)", "(18+)",
 "- All Ages (under 16 with adult)", NBSPs. Deliberately keeps things like "(30th Anniversary)".
 
+**Sixers from the Ticketmaster basketball feed, filtered to `SPORTS_TEAMS`** (2026-10-21). The feed also has
+Villanova, Delaware Blue Coats, NCAA women's championship, Big 5 Classic; the user asked for the Sixers, so only
+home games of listed teams are kept (TM lists the home team first). Music and sports raw events go into ONE
+`upsert_events` call, because the store marks anything missing from the batch as "removed". No prices or
+presales exist on regular-season games. Games score `SPORTS_BASE_SCORE` + marquee opponent + weekend (Deezer
+fans are meaningless for a team; Deezer and setlist.fm skip `segment='Sports'`).
+
+**Philly history from setlist.fm** (2026-10-21). Per artist: `search/setlists?artistMbid=…&cityName=Philadelphia`
+(whole Philly history in one call; the fuzzy city match includes Camden/Chester) plus page 1 of the artist's
+setlists (recent suburban venues), all filtered by venue coords within `RADIUS_MILES`; newest past hit wins.
+The first version paged the last 100 setlists, which reached only ~18 months back for heavy tourers (found 20/40;
+the new way found 90/100). Only a *found* show is used: crowd-sourced data, so "none found" never becomes
+"first time ever". `COMEBACK_MIN_YEARS = 3` (2-year gaps made weak hooks: "since 2024"). Comebacks get
+`COMEBACK_BONUS`, a "Back after N years:" title, a script line, an on-screen line, a caption line crediting
+setlist.fm (their API terms ask for credit), and a "Verify" warning on the draft. Up to 100 artists/run,
+cached 30 days, ~3 calls/artist (limit 1,440/day).
+
+**Multi-act last shows are labeled** (2026-10-21, after the user confirmed Calvin Harris's "last Philly show" was
+Q102 Jingle Ball 2018, a 15-act radio show). setlist.fm has no festival flag, so we count setlists at that
+venue+date (`search/setlists?venueId&date`, 1 call): Jingle Ball 9, Made in America 16, a normal concert ~3.
+`MULTI_ACT_MIN = 5`. Such comebacks still count (they haven't played Philly since), but scripts add "Last time
+was a 9-act lineup at <venue>" and captions say "(a 9-act lineup, per setlist.fm)", so viewers don't assume it
+was their own concert.
+
 ## Detectors
 
 **Presale alerts: one per artist** (2026-10-21). Real shows have 4–5 windows (Citi, Live Nation, venue,

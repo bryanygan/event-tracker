@@ -60,6 +60,11 @@ def presale_script(facts: dict) -> str:
         by_time.setdefault(s["opens"], []).append(s["name"] if s["name"] == GENERAL else pretty_sale_name(s["name"]))
 
     lines = [_pick(_OPENERS, artist)]
+    if comeback(facts):
+        h = facts["history"]
+        lines.append(f"{artist} is playing Philly for the first time since {h['last_philly_show_year']}.")
+        if h.get("last_philly_show_was_multi_act"):
+            lines.append(f"Last time was a {h['last_philly_show_lineup_size']}-act lineup at {h['last_philly_venue']}.")
     first = True
     general_only = all(n == GENERAL for names in by_time.values() for n in names)
     for opens, names in by_time.items():
@@ -68,10 +73,12 @@ def presale_script(facts: dict) -> str:
         if presales:
             label = _presale_label(presales) + (" and the general on-sale" if has_general else "")
             verb = "opens" if len(presales) == 1 and not has_general else "open"
-            lines.append(f"The {label} for {artist} {verb} {opens}." if first
+            who = "" if comeback(facts) else f" for {artist}"  # the comeback line already named them
+            lines.append(f"The {label}{who} {verb} {opens}." if first
                          else f"Then the {label} {verb} {opens}.")
         elif has_general:
-            lines.append(f"{artist} tickets go on sale to everyone {opens}." if first
+            lines.append(f"{'Tickets' if comeback(facts) else artist + ' tickets'} go on sale to everyone {opens}."
+                         if first
                          else f"General on-sale is {opens}.")
         first = False
     lines.append(f"That's for {_shows_phrase(facts['shows'])}.")
@@ -160,6 +167,11 @@ def game_hashtags(facts: dict) -> list[str]:
     return list(dict.fromkeys(tags))
 
 
+def comeback(facts: dict) -> bool:
+    """A long enough gap since the artist's last Philly show (from setlist.fm) to mention it."""
+    return bool((facts.get("history") or {}).get("is_comeback"))
+
+
 def _game_when(g: dict) -> str:
     return f"{g['date']} at {g['time']}" if g.get("time") else g["date"]
 
@@ -191,6 +203,8 @@ def fallback_hook(facts: dict) -> str:
     """Used when the model's hook still fails the fact check after a retry."""
     fmt = facts.get("format")
     if fmt == "presale":
+        if comeback(facts):  # the comeback *is* the hook
+            return f"{facts['artist']}'s first Philly show since {facts['history']['last_philly_show_year']}"
         day = facts["sale_opens"].split(",")[0]  # "Thu"
         return f"Set an alarm: {facts['artist']} tickets drop {day}"
     if fmt == "team_week":
@@ -219,6 +233,10 @@ def caption_for(facts: dict) -> str:
         sales = facts.get("all_sales") or [{"name": facts["sale_name"], "opens": facts["sale_opens"]}]
         first = sales[0]
         parts = [f"{artist} tickets 🎟️ {pretty_sale_name(first['name'])}: {first['opens']}."]
+        if comeback(facts):  # setlist.fm's API terms ask for credit where their data is shown
+            h = facts["history"]
+            lineup = f"a {h['last_philly_show_lineup_size']}-act lineup, " if h.get("last_philly_show_was_multi_act") else ""
+            parts.insert(0, f"First Philly show since {h['last_philly_show_year']} ({lineup}per setlist.fm)!")
         general = next((s for s in sales[1:] if s["name"] == GENERAL), None)
         if general:
             parts.append(f"General on-sale: {general['opens']}.")

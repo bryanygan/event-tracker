@@ -16,7 +16,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from . import config, db, detectors, drafts, publish, store
-from .fetchers import deezer
+from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 
 log = logging.getLogger("tracker")
@@ -72,6 +72,10 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None) -> dict:
             deezer.enrich_headliners(conn)
         except Exception as exc:  # enrichment is a nice-to-have; never fail the run over it
             log.warning("Deezer enrichment failed: %s", exc)
+        try:
+            setlistfm.enrich_history(conn)
+        except Exception as exc:
+            log.warning("setlist.fm history failed: %s", exc)
 
         alerts = detectors.run_all(conn, run_id)
         new_alert_ids = detectors.save_alerts(conn, alerts)

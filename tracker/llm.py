@@ -76,7 +76,10 @@ FORMAT_GUIDES = {
     "new_tour": (
         "Video: 'JUST ANNOUNCED: {artist} is coming to Philly.' Give the date(s) and venue, then when "
         "tickets go on sale if that's in the facts. If already_had_philly_dates is true, say 'another date "
-        "just got added' instead.\n"
+        "just got added' instead. If history.is_comeback is true, lead with it: 'first Philly show since "
+        "<history.last_philly_show_year>' (use only that year; never say 'first time ever'). If "
+        "history.last_philly_show_was_multi_act is true, that was a festival/radio show, not their own "
+        "concert: don't call it a headline show.\n"
         "Example hook: \"[Artist] just announced a Philly show\"\n"
         "Example script: \"Just announced: [Artist] is coming to [Venue] on [show_date]. Tickets go on sale "
         "[public_onsale]. Tag whoever you're going with.\""
@@ -334,10 +337,14 @@ def onscreen_lines(facts: dict) -> list[str]:
     elif fmt == "stacked_month":
         lines.append(f"{facts['month'].upper()} IN PHILLY: {facts['genre'].upper()}")
     elif fmt == "presale":
+        if (facts.get("history") or {}).get("is_comeback"):
+            lines.append(f"FIRST PHILLY SHOW SINCE {facts['history']['last_philly_show_year']}")
         for sale in facts.get("all_sales") or [{"name": facts["sale_name"], "opens": facts["sale_opens"]}]:
             lines.append(f"{sale['name'].upper()}: {sale['opens']}")
     elif fmt == "new_tour":
         lines.append(f"{'NEW DATE' if facts.get('already_had_philly_dates') else 'JUST ANNOUNCED'}: {facts['artist']}")
+        if (facts.get("history") or {}).get("is_comeback"):
+            lines.append(f"FIRST PHILLY SHOW SINCE {facts['history']['last_philly_show_year']}")
         if facts.get("public_onsale"):
             lines.append(f"On sale {facts['public_onsale']}")
     elif fmt == "status_change":

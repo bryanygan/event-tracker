@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS attractions (
     fans INTEGER,                   -- Deezer fan count, NULL if unknown/unmatched
     popularity INTEGER,             -- 0-100 derived from fans (log scale), NULL if unknown
     popularity_checked_at TEXT,
+    setlistfm_mbid TEXT,            -- MusicBrainz id used by setlist.fm
+    last_area_show_date TEXT,       -- most recent past show within the radius on setlist.fm (YYYY-MM-DD)
+    last_area_show_venue TEXT,
+    last_area_show_acts INTEGER,    -- artists with setlists at that venue that day (5+ = festival/radio show)
+    history_checked_back_to TEXT,   -- oldest setlist we looked at (how far back "no show found" goes)
+    history_checked_at TEXT,
     first_seen TEXT NOT NULL
 );
 
@@ -139,7 +145,9 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS won't add them to an
 # existing database, so add any that are missing. (Old unused columns are left in place.)
 _ADDED_COLUMNS = {
-    "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT"},
+    "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
+                    "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
+                    "history_checked_back_to": "TEXT", "history_checked_at": "TEXT"},
 }
 
 

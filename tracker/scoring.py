@@ -40,6 +40,7 @@ def score(popularity: int | None, venue_tier: int | None, tm_upcoming_total: int
 EVENT_VIEW_SQL = """
 SELECT e.*, v.name AS venue_name, v.city AS venue_city, v.state AS venue_state, v.tier AS venue_tier,
        a.id AS headliner_id, a.name AS headliner, a.popularity, a.fans,
+       a.last_area_show_date, a.last_area_show_venue, a.last_area_show_acts,
        a.tm_upcoming_total,
        (SELECT group_concat(a2.name, ', ') FROM event_attractions ea2
           JOIN attractions a2 ON a2.id = ea2.attraction_id

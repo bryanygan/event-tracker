@@ -24,7 +24,7 @@ commented code over abstraction.
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | Read-only Cloudflare Pages copy behind Access; refuses to deploy if the site isn't protected |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
-| Tests | `tests/` | 57 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
+| Tests | `tests/` | 77 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
 
 ## Live on the machine right now
 
@@ -44,7 +44,7 @@ commented code over abstraction.
 - `main`: skeleton → pythonw fix → merge of `feature/live-ticketmaster` → squash `9bc0c27` (presale templates)
   → squash `d4bc0e1` (Cloudflare Pages) → merge of `fix/ollama-runner-leak` (`f113735`) → merge of
   `feature/sixers` (`cb0ae9f`, branch deleted). `main` is what the scheduled tasks should run.
-- In progress: `feature/setlist-history` (setlist.fm "first Philly show since …").
+- `feature/setlist-history` (pushed, not merged): setlist.fm "first Philly show since …". Ask before merging.
 - The templates and Cloudflare branches were **squash-merged and deleted on purpose**: the Cloudflare branch
   had a commit with the account ID and the user's other infra names (see gotchas.md). Don't restore them.
   `feature/live-ticketmaster` still exists (already merged; safe to delete).
