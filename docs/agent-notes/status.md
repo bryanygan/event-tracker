@@ -44,7 +44,7 @@ commented code over abstraction.
 - `main`: skeleton → pythonw fix → merge of `feature/live-ticketmaster` → squash `9bc0c27` (presale templates)
   → squash `d4bc0e1` (Cloudflare Pages) → merge of `fix/ollama-runner-leak` (`f113735`) → merge of
   `feature/sixers` (`cb0ae9f`, branch deleted). `main` is what the scheduled tasks should run.
-- `feature/setlist-history` (pushed, not merged): setlist.fm "first Philly show since …". Ask before merging.
+- `feature/setlist-history` merged into `main` (`a8435c4`) and deleted.
 - The templates and Cloudflare branches were **squash-merged and deleted on purpose**: the Cloudflare branch
   had a commit with the account ID and the user's other infra names (see gotchas.md). Don't restore them.
   `feature/live-ticketmaster` still exists (already merged; safe to delete).
@@ -58,6 +58,13 @@ commented code over abstraction.
 3. Brief's phase 5+: setlist.fm for "back after X years" (needs a key), Sixers via TM `classificationName=sports`,
    food/festivals via scrapers, phone notifications, slideshow assets (user has a related project at
    `C:\Users\Admin\Documents\ttspotslideshow`).
+
+**On hold by the user (2026-10-21): phone notifications** (ntfy etc.). Don't start until the user says the
+pipeline is polished and has run for a while without hiccups.
+
+**Under discussion: non-Ticketmaster sellers** (AXS, DICE, Tixr…). None has a public API (checked 2026-10-21).
+Real gap found: Johnny Brenda's sells via Etix, Underground Arts via Tixr (only some of its shows are also on TM).
+Proposed approach: measure which notable venues are missing, then read those venues' own calendars, deduped against TM.
 
 ## Open questions for the user
 
