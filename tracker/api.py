@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from contextlib import closing
@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import angles, config, context, db, drafts, llm, opportunities, posts, publish, remote, slides, trends
+from . import angles, config, context, db, drafts, llm, opportunities, planner, posts, publish, remote, slides, trends
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -189,6 +189,8 @@ class AlertUpdate(BaseModel):
     shortlisted: bool | None = None
     snoozed_until: str | None = None  # UTC ISO; send null to un-snooze
     note: str | None = None
+    planned_for: str | None = None    # ISO with timezone; null takes it off the calendar
+    series: str | None = None         # null/blank = the format's default series
 
 
 @app.patch("/api/alerts/{alert_id}")
@@ -196,8 +198,11 @@ def update_alert(alert_id: int, body: AlertUpdate, c=Depends(get_db)):
     fields = body.model_dump(exclude_unset=True)
     if "status" in fields and fields["status"] not in ("new", "drafted", "dismissed"):
         raise HTTPException(400, "bad status")
-    if fields.get("snoozed_until"):
-        fields["snoozed_until"] = _post_call(posts._utc, fields["snoozed_until"])
+    for k in ("snoozed_until", "planned_for"):
+        if fields.get(k):
+            fields[k] = _post_call(posts._utc, fields[k])
+    if "series" in fields:
+        fields["series"] = (fields["series"] or "").strip()[:60] or None
     if "shortlisted" in fields:
         fields["shortlisted"] = int(bool(fields["shortlisted"]))
     if not c.execute("SELECT 1 FROM alerts WHERE id=?", (alert_id,)).fetchone():
@@ -227,6 +232,16 @@ def queue(c=Depends(get_db)):
         "weights": config.OPPORTUNITY_WEIGHTS,
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
     }
+
+
+@app.get("/api/calendar")
+def calendar(start: str | None = None, c=Depends(get_db)):
+    """This week and next: planned, posted and due videos, with balance warnings (tracker/planner.py)."""
+    try:
+        first = date.fromisoformat(start) if start else None
+    except ValueError:
+        raise HTTPException(400, "start must be YYYY-MM-DD")
+    return planner.calendar(c, start=first)
 
 
 @app.get("/api/alerts/{alert_id}/slides")
@@ -355,6 +370,7 @@ class PostFields(BaseModel):
     hook: str | None = None
     length_seconds: int | None = None
     notes: str | None = None
+    series: str | None = None
 
 
 class PostCreate(PostFields):

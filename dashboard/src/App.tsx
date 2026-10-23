@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, STATIC, type Job, type Summary } from './api'
 import AlertsView from './views/AlertsView'
+import CalendarView from './views/CalendarView'
 import EventsView from './views/EventsView'
 import PostsView from './views/PostsView'
 import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 
-type Tab = 'queue' | 'alerts' | 'posts' | 'events' | 'runs'
-const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs']
+type Tab = 'queue' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs'
+const TABS: Tab[] = ['queue', 'calendar', 'alerts', 'posts', 'events', 'runs']
 
 export default function App() {
   // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone
@@ -133,7 +134,7 @@ export default function App() {
       <nav>
         {TABS.map((t) => (
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-            {{ queue: 'What to post', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
+            {{ queue: 'What to post', calendar: 'Calendar', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
             {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}
           </button>
         ))}
@@ -141,6 +142,7 @@ export default function App() {
 
       <main>
         {tab === 'queue' && <QueueView refreshKey={refreshKey} busy={!!job?.running} job={job} summary={summary} onJob={setJob} onChange={refresh} />}
+        {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'alerts' && <AlertsView refreshKey={refreshKey} busy={!!job?.running} job={job} onJob={setJob} onChange={refresh} />}
         {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'events' && <EventsView refreshKey={refreshKey} />}

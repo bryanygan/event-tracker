@@ -351,3 +351,18 @@ conflicts, no lag; every feature works the same on the phone).
 - Drafts per run: 20 with Claude (8 with Ollama). `python -m tracker.run --redraft-local` writes Claude drafts
   for live alerts whose newest draft came from Ollama; it stops near the daily cap or after a Claude failure
   rather than redrafting locally.
+
+## Editorial calendar (P1-13, 2026-10-22; `tracker/planner.py`)
+
+- A plan is two fields on the alert: `planned_for` (UTC) and `series` (NULL = config.SERIES_FOR_FORMAT for its
+  format). Posts get `series` too, defaulted from the alert when logged. No new stage: a planned idea keeps its
+  workflow stage and shows a 📅 pill; nothing posts, and nothing else about the idea changes.
+- The calendar is computed per request from opportunities.queue + posts (no stored calendar to drift): this week
+  and next from Monday, by local (ET) day. Each day: posted, planned, and "due" (the post-by of ideas not planned).
+- Warnings: > CALENDAR_MAX_PER_DAY on a day; > CALENDAR_MAX_SAME_FORMAT_WEEK of one format in a week; under
+  CALENDAR_MIN_LANE_SHARE of a week's music videos in the lane (queue items now carry `lane`); the same artist in
+  two videos close together (single-artist videos only: roundups name many artists on purpose); plans after the
+  post-by or stale time (also a queue caveat); a series with a cadence (SERIES_CADENCE_DAYS) past due with
+  nothing planned.
+- Tried on a copy of the live DB with 4 plans: flagged the 3-video Friday, a 4-presale week and 4 plans set after
+  the idea goes stale.

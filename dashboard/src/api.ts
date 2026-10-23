@@ -111,13 +111,14 @@ export type Post = {
   hook: string | null
   length_seconds: number | null
   notes: string | null
+  series: string | null
   age_hours: number
   metrics: Metrics[]
   checkpoints: Record<Checkpoint, number | null> // id of the snapshot used for each comparison age
   due: Checkpoint[]
 }
 export type PostInput = Partial<Pick<Post, 'alert_id' | 'draft_id' | 'url' | 'title' | 'posted_at' | 'format' |
-  'video_style' | 'hook' | 'length_seconds' | 'notes'>>
+  'video_style' | 'hook' | 'length_seconds' | 'notes' | 'series'>>
 
 export type Analytics = {
   group_by: 'format' | 'video_style'
@@ -191,6 +192,31 @@ export type QueueItem = {
   stage: Stage
   rules_version: string
   trend_notes: TrendMatch[] // your trend notes that match this idea, expired ones included (marked)
+  planned_for: string | null // when you plan to post it (UTC ISO); nothing posts by itself
+  series: string | null // your series, else the format's default
+  series_set: string | null // the series you typed (null = the default)
+  format: string
+  artists: string[]
+  lane: 'lane' | 'other' | 'sports'
+}
+
+// Editorial calendar (tracker/planner.py)
+export type CalendarItem = Pick<QueueItem, 'alert_id' | 'kind' | 'format' | 'title' | 'stage' | 'band' | 'score' |
+  'post_by' | 'expires_at' | 'planned_for' | 'series' | 'series_set' | 'lane' | 'caveats'>
+export type CalendarPost = { id: number; alert_id: number | null; title: string; posted_at: string; url: string | null;
+  format: string | null; series: string | null; lane: QueueItem['lane'] | null; artists: string[] }
+export type CalendarDay = { date: string; label: string; past: boolean; today: boolean
+  planned: CalendarItem[]; posted: CalendarPost[]; due: CalendarItem[] }
+export type Calendar = {
+  start: string
+  days: CalendarDay[]
+  empty_days: string[]
+  warnings: string[]
+  balance: { week: string; label: string; formats: Record<string, number>; lane: number; music: number }[]
+  series: { name: string; last_posted: string | null; next_planned: string | null; cadence_days: number | null
+    overdue: boolean; ideas: number }[]
+  unplanned: CalendarItem[]
+  default_hour: number
 }
 
 // Trends you noticed, typed in by hand (tracker/trends.py). Evidence, never facts for drafts.
@@ -223,7 +249,8 @@ export type Queue = {
   rules_version: string
 }
 
-export type AlertPatch = Partial<{ status: Alert['status']; shortlisted: boolean; snoozed_until: string | null; note: string | null }>
+export type AlertPatch = Partial<{ status: Alert['status']; shortlisted: boolean; snoozed_until: string | null; note: string | null
+  planned_for: string | null; series: string | null }>
 
 export type Run = {
   id: number
@@ -317,6 +344,7 @@ const staticApi = {
   triggerRun: readOnly,
   posts: () => snapshot<Post[]>('posts'),
   queue: () => snapshot<Queue>('queue'),
+  calendar: (_start?: string) => snapshot<Calendar>('calendar'),
   updateAlert: readOnly,
   analytics: (groupBy: Analytics['group_by']) =>
     snapshot<Record<string, Analytics>>('analytics').then((all) => all[groupBy]),
@@ -357,6 +385,7 @@ const liveApi = {
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
   posts: () => req<Post[]>('/api/posts'),
   queue: () => req<Queue>('/api/queue'),
+  calendar: (start?: string) => req<Calendar>(`/api/calendar${start ? `?start=${start}` : ''}`),
   updateAlert: (id: number, fields: AlertPatch) =>
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   analytics: (groupBy: Analytics['group_by']) => req<Analytics>(`/api/analytics?group_by=${groupBy}`),

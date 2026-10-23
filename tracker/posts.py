@@ -23,7 +23,7 @@ RATE_METRICS = ("likes", "comments", "shares", "saves", "followers_gained")
 # Post ages to compare at: name -> (target hours, earliest, latest). The snapshot closest to the target
 # inside the window counts; outside every window it's kept but not used for comparisons.
 CHECKPOINTS = {"24h": (24, 18, 36), "7d": (168, 120, 240)}
-POST_FIELDS = ("url", "title", "posted_at", "format", "video_style", "hook", "length_seconds", "notes")
+POST_FIELDS = ("url", "title", "posted_at", "format", "video_style", "hook", "length_seconds", "notes", "series")
 
 
 class PostError(ValueError):
@@ -59,6 +59,8 @@ def _check_fields(fields: dict) -> dict:
         raise PostError("length_seconds must be positive")
     if "title" in out and not (out["title"] or "").strip():
         raise PostError("title can't be empty")
+    if "series" in out:
+        out["series"] = (out["series"] or "").strip()[:60] or None
     return out
 
 
@@ -84,6 +86,9 @@ def create_post(conn, *, alert_id: int | None = None, draft_id: int | None = Non
         facts = json.loads(alert["facts"])
         fields.setdefault("title", alert["title"])
         fields.setdefault("format", facts.get("format") or alert["kind"])
+        series = alert["series"] or config.SERIES_FOR_FORMAT.get(fields["format"])
+        if series:
+            fields.setdefault("series", series)
         snapshot = alert["facts"]
         from .opportunities import snapshot as queue_snapshot  # local import: opportunities reads posts too
         fields["opportunity_snapshot"] = json.dumps(queue_snapshot(conn, alert_id))

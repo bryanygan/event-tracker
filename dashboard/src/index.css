@@ -163,6 +163,33 @@ input.grow { flex: 1; }
   .run-box { align-items: flex-start; }
 }
 
+/* Editorial calendar (views/CalendarView.tsx): 7 columns on desktop, a list on phones */
+.cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.cal-day { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-height: 90px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.cal-day.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.cal-day.past { opacity: 0.6; }
+.cal-date { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.cal-entry { font-size: 0.82rem; border-left: 3px solid var(--line); padding-left: 5px; }
+.cal-entry.planned { border-left-color: var(--accent); }
+.cal-entry.planned button.link { text-align: left; padding: 0; font-size: inherit; }
+.cal-entry.posted { border-left-color: #16a34a; }
+.cal-entry.due { border-left-color: #d97706; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.cal-entry.kind-presale_soon { border-left-color: #d97706; }
+.cal-entry.kind-new_tour { border-left-color: #7c3aed; }
+.cal-entry.kind-stacked_month { border-left-color: #2563eb; }
+.cal-entry.kind-team_week, .cal-entry.kind-big_game { border-left-color: #006bb6; }
+.cal-add { font-size: 0.78rem; padding: 2px 4px; margin-top: auto; max-width: 100%; }
+.cal-h { margin: 18px 0 8px; }
+.cal-unplanned { padding: 8px 12px; margin-bottom: 8px; }
+.plan-form { margin-top: 6px; }
+@media (max-width: 760px) {
+  .cal-week { grid-template-columns: 1fr; }
+  .cal-day { min-height: 0; }
+  .cal-day.past { display: none; }
+  .cal-add { font-size: 16px; } /* no zoom-on-focus on iOS */
+}
+
 /* 9:16 slides overlay (views/SlidesOverlay.tsx): full screen, touch-first */
 .slides-overlay {
   position: fixed; inset: 0; z-index: 50; background: var(--bg); overflow-y: auto; overscroll-behavior: contain;

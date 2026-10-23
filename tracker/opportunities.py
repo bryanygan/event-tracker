@@ -152,6 +152,12 @@ def _artists(facts: dict) -> set[str]:
     return {n.casefold() for n in names if n}
 
 
+def series_for(alert: dict) -> str | None:
+    """The idea's series: yours if you set one, else the format's default (config.SERIES_FOR_FORMAT)."""
+    facts = alert["facts"] if isinstance(alert["facts"], dict) else json.loads(alert["facts"])
+    return alert.get("series") or config.SERIES_FOR_FORMAT.get(facts.get("format") or alert["kind"])
+
+
 def stage(alert: dict, draft: dict | None, posts: list[dict], expired: bool, now: datetime) -> str:
     """Where the idea is in your workflow, derived from alert/draft/post state (nothing extra stored)."""
     if alert["status"] == "dismissed":
@@ -210,6 +216,14 @@ def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[di
             break
     if not events:
         caveats.append("None of its shows are listed anymore (past, or removed from the feed)")
+    planned = _dt(alert.get("planned_for"))
+    if planned and not posts and alert["status"] != "dismissed":
+        if t["expires_at"] and planned > _dt(t["expires_at"]):
+            caveats.append(f"Planned for {_when(planned)}, after it goes stale ({_when(_dt(t['expires_at']))})")
+        elif t["post_by"] and planned > _dt(t["post_by"]):
+            caveats.append(f"Planned for {_when(planned)}, after its post-by time ({_when(_dt(t['post_by']))})")
+        elif planned < now:
+            caveats.append(f"Planned for {_when(planned)} and not logged as posted yet")
 
     band = None if score is None else "strong" if score >= config.QUEUE_STRONG else "medium" if score >= config.QUEUE_MEDIUM else "low"
     return {
@@ -219,6 +233,7 @@ def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[di
         "stage": stage(alert, draft, posts, t["expired"] or not events, now),
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
         "trend_notes": trend_matches,
+        "lane": "sports" if alert["kind"] in ("team_week", "big_game") else "lane" if local(alert, facts, events)[0] == 100 else "other",
     }
 
 
@@ -258,6 +273,8 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             "alert_id": a["id"], "kind": a["kind"], "title": a["title"], "notability": a["score"],
             "created_at": a["created_at"], "updated_at": a["updated_at"],
             "shortlisted": bool(a["shortlisted"]), "snoozed_until": a["snoozed_until"], "note": a["note"],
+            "planned_for": a["planned_for"], "series": series_for(a), "series_set": a["series"],
+            "format": a["facts"].get("format") or a["kind"], "artists": sorted(_artists(a["facts"])),
             "your_plays": a["facts"].get("your_plays") or 0,
             "links": [{"label": f"{s.get('artist') or s.get('event_name')} · {s.get('date')}", "url": s["url"]}
                       for s in shows if s.get("url")][:6],

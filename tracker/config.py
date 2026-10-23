@@ -145,6 +145,22 @@ REASON_MIN = 75            # a component counts as a reason on the card at this 
 TREND_NOTES_MAX = 500      # refuse new notes past this (each is matched against every idea on every queue load)
 TREND_NOTE_DAYS = 7       # a trend note stops counting this long after you saw it (unless you set expires_at)
 
+# --- Editorial calendar (tracker/planner.py) ---
+# A plan is yours: a posting time and a series label on an idea. Nothing posts at that time; the calendar
+# only lays out what's planned, posted and due, and points out gaps and lopsided weeks.
+CALENDAR_DAYS = 14                 # this week and next, starting Monday
+CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM local
+CALENDAR_MAX_PER_DAY = 2           # more planned videos than this on one day gets a warning
+CALENDAR_MAX_SAME_FORMAT_WEEK = 3  # ...and more than this of one format in a week
+CALENDAR_MIN_LANE_SHARE = 0.5      # warn when under half of a week's music videos are in your lane
+# Default series by format: recurring shows of the page. Change a single idea's series on its card.
+SERIES_FOR_FORMAT = {
+    "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
+    "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
+}
+# How often a series should run. When the last post is older than this and none is planned, the calendar says so.
+SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}
+
 # --- Posted videos (tracker/posts.py) ---
 # A group (a format, a video style) needs this many posts with numbers at the same age before the
 # dashboard compares it with others. Below that it's shown as "too few to compare".

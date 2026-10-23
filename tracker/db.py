@@ -128,7 +128,9 @@ CREATE TABLE IF NOT EXISTS alerts (
     expires_at TEXT,                -- UTC ISO: after this the idea is stale
     shortlisted INTEGER NOT NULL DEFAULT 0,  -- you starred it in the queue
     snoozed_until TEXT,             -- UTC ISO: hidden from the queue until then ("Later")
-    note TEXT                       -- your note on the idea
+    note TEXT,                      -- your note on the idea
+    planned_for TEXT,               -- UTC ISO: when you plan to post it (planner.py); nothing posts by itself
+    series TEXT                     -- your series label ("Philly this weekend"); NULL = the format's default
 );
 
 -- Earlier versions of an alert's facts, kept whenever a run refreshes them (see detectors.save_alerts).
@@ -175,6 +177,7 @@ CREATE TABLE IF NOT EXISTS posts (
     notes TEXT,
     facts_snapshot TEXT,            -- JSON: the alert's facts when you posted (what we knew then, no hindsight)
     opportunity_snapshot TEXT,      -- JSON: the queue's score and reasons when you posted (opportunities.snapshot)
+    series TEXT,                    -- recurring series it belongs to (the alert's series, or typed in)
     created_at TEXT NOT NULL
 );
 
@@ -287,9 +290,10 @@ _ADDED_COLUMNS = {
                     "genre_source": "TEXT", "genre_checked_at": "TEXT",  # genres.py: NULL source = Ticketmaster's own
                     "deezer_genre": "TEXT", "deezer_genre_checked_at": "TEXT"},  # fetchers/deezer.py
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
-               "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
+               "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT",
+               "planned_for": "TEXT", "series": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},
-    "posts": {"opportunity_snapshot": "TEXT"},
+    "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
 }
 # Run once, right after the column is added to an existing database.
 _BACKFILL = {
