@@ -364,3 +364,17 @@ conflicts, no lag; every feature works the same on the phone).
   day: posted, planned, and "due" (the post-by of ideas not planned). The only note on a plan is factual: "after it
   goes stale" / "after its post-by time". "Mix" (formats, lane share per week) and the Series table ("behind" once
   a series with a cadence has gone longer than usual since its last post) are for reference.
+
+## Music news pillar: roadmap and source checks (2026-10-23; `music-roadmap.md`)
+
+- Roadmap for expanding into national music news, from outside advice the user received (the advice document is
+  not kept in the repo; the roadmap captures it). User decisions: free sources only (no Apple Developer Program),
+  Last.fm key in `.env` as `LAST_FM_API_KEY`, feeds every 30 minutes, YouTube later, a separate tab until it
+  reliably finds postable stories, then merged into What to post.
+- Feed checks: 13 working feeds (Pitchfork, Stereogum, The FADER, Rated R&B, Mixmag, Line of Best Fit, Billboard,
+  XXL, HotNewHipHop, AllHipHop, The Source, Vibe, Uproxx Music). HipHopDX's feed is stale (`/feed` 410), Complex /
+  Pigeons & Planes and Resident Advisor have none. No robots.txt blocks; crawl delays 5-10 s at most; 9 of 13 answer
+  conditional requests with 304, so 30-minute polling is ~620 mostly-empty requests a day.
+- Reddit: `.json` listings return 403 to unauthenticated requests; Reddit announced 2026-09-30 that RSS support ends
+  2026-11-13, new public API requests close after 2026-10-31 and public API access closes by March 2027 (reported by
+  Decrypt, TechWyse, aiweekly; Reddit's own posts not read directly). So r/hiphopheads stays a manual check.

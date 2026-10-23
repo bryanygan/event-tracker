@@ -94,6 +94,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | Cleanup | Live 2026-10-22 (`d292940`, `d58a4c1`): Deezer genre check, 20 Claude drafts/run, `--redraft-local` (23 alerts redrafted), genre refresh in live alerts |
 | P1-13 editorial calendar | Built 2026-10-22 on `feature/calendar`, NOT merged (user said wait): `tracker/planner.py`, `/api/calendar`, a separate last Calendar tab, no warnings |
 | P2-14 | Not started |
+| Music news pillar | Planned 2026-10-23: `music-roadmap.md` (M0 coverage prototype first) |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
 P0-06 merged 2026-10-22 (user approved); branch deleted.
