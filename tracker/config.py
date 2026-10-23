@@ -315,4 +315,5 @@ NEWS_MAX_AGE_DAYS = 14          # items older than this (by the feed's own date)
 NEWS_TIMEOUT = 25               # seconds per feed
 NEWS_MAX_BYTES = 5_000_000      # a feed bigger than this is refused (the largest seen is ~1 MB)
 NEWS_EXCERPT_CHARS = 300        # the feed's own summary, cut short; never the article body
+WATCHLIST_IDS_PER_RUN = 40     # Deezer + MusicBrainz lookups per 6:30 / 4:30 run (~50 s at MusicBrainz's 1/s)
 NEWS_USER_AGENT = "PhillyEventsTracker/0.1 (personal project; reads public music-news feeds every 30 minutes)"

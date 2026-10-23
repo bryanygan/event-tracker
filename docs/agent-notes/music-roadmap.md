@@ -333,6 +333,33 @@ Work:
 **Acceptance:** the 350 core artists are seeded with ids where unambiguous; articles from M1 show matched artists;
 editing the watchlist persists across re-seeds.
 
+**Built 2026-10-23 on `feature/watchlist`** (`tracker/watchlist.py`, `tracker/fetchers/musicbrainz.py`, 14 new
+tests). Notes:
+
+- 335 core artists, not 350, because `listening.artist_key` merges spellings that differ only in case or
+  punctuation. The name shown is the most-played spelling.
+- Play counts are **not stored**. The API reads them live from `plays.db`.
+- An artist who falls out of rotation becomes tier `dropped` and is kept, not deleted. Your edits set
+  `user_edited`, and re-seeding never touches those rows.
+- **Common-word rule.** Two letters or fewer always counts as a common word.
+  - A capitalized name counts if it appears in lowercase in any stored headline or summary (as in M0).
+  - A name styled in lowercase only counts if it appears in lowercase in 3+ articles whose headline isn't about
+    it. M0's rule ("all plain letters") flagged about 35 lowercase-styled names, most of them hyperpop artists. On
+    real data the new rule flags 8, all ordinary words or two-letter names.
+  - A common-word name counts only in a headline that also has a music word, at `low` confidence.
+- **Second signal.** The plan's "or a second signal" (another watchlist artist in the same headline) isn't
+  built. The music word is the only rule.
+- **When matching runs.**
+  - Each news check matches only its new articles. On the first check it builds the watchlist itself.
+  - The 6:30 and 4:30 runs re-seed, recompute common words and rematch everything (about 1 s).
+  - Those runs also look up 40 artists' ids per run (`WATCHLIST_IDS_PER_RUN`; about 1.1 s each because of
+    MusicBrainz's 1 request/second limit), so all 335 are done in about 4 days. Ids are refreshed after 90 days.
+- **Dashboard.** Music news shows **For you** by default: headline matches only, with an "Include mentions"
+  option for summary-only ones. Headlines get artist pills (🎧 plays; hover to see why it matched). There is
+  also a collapsible **Watchlist** editor (tier, aliases, common-word override, mute, add an artist).
+- **First real-data pass (copy of tracker.db):** 49 of 343 articles tagged: 44 by headline, 2 low-confidence and
+  15 summary mentions. 18 artists are linked to the events pipeline's artists.
+
 ### M3: Story classification, clustering and status (M)
 
 Part of advice step 04 ("story verification"), plus section 6 of it (group articles into stories).

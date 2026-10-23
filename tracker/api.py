@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import angles, config, context, db, drafts, llm, opportunities, planner, posts, publish, remote, slides, trends
+from . import (angles, config, context, db, drafts, listening, llm, opportunities, planner, posts, publish, remote, slides,
+               trends, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -518,20 +519,68 @@ def runs(limit: int = 20, source: str | None = None, c=Depends(get_db)):
 
 
 @app.get("/api/news")
-def news_articles(days: int = 3, source: str | None = None, limit: int = 500, c=Depends(get_db)):
-    """Recent music-news articles, newest first (tracker/news.py). `seen_at` is the feed's date, or when we first
-    read it if the feed has none."""
+def news_articles(days: int = 3, source: str | None = None, mine: bool = False, limit: int = 500, c=Depends(get_db)):
+    """Recent music-news articles, newest first (tracker/news.py), with the watchlist artists they mention
+    (tracker/watchlist.py). `mine`: only those. `seen_at` is the feed's date, or when we first read it if the feed
+    has none."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
     rows = c.execute("""SELECT a.id, a.url, a.title, a.excerpt, a.published_at, a.fetched_at, a.categories,
                                a.first_read, s.key AS source_key, s.name AS source_name,
                                COALESCE(a.published_at, a.fetched_at) AS seen_at
                         FROM articles a JOIN news_sources s ON s.id = a.source_id
                         WHERE COALESCE(a.published_at, a.fetched_at) >= ? AND (? IS NULL OR s.key = ?)
+                          AND (? = 0 OR EXISTS (SELECT 1 FROM article_artists aa WHERE aa.article_id = a.id))
                         -- undated items from a source's first read could be any age: after the dated ones
                         ORDER BY (a.published_at IS NULL AND a.first_read), seen_at DESC, a.id DESC
-                        LIMIT ?""", (since, source, source, limit))
-    return [{**dict(r), "categories": json.loads(r["categories"] or "[]"), "first_read": bool(r["first_read"])}
+                        LIMIT ?""", (since, source, source, int(mine), limit)).fetchall()
+    taste = listening.load()
+    tags: dict[int, list] = {}
+    ids = [r["id"] for r in rows]
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        for t in c.execute(f"""SELECT aa.article_id, aa.match, aa.location, aa.confidence, w.id, w.name, w.key, w.tier
+                               FROM article_artists aa JOIN artist_identities w ON w.id = aa.artist_id
+                               WHERE aa.article_id IN ({','.join('?' * len(chunk))})""", chunk):
+            tags.setdefault(t["article_id"], []).append(
+                {"id": t["id"], "name": t["name"], "tier": t["tier"], "match": t["match"], "location": t["location"],
+                 "confidence": t["confidence"], "plays": taste.plays.get(t["key"], 0)})
+    return [{**dict(r), "categories": json.loads(r["categories"] or "[]"), "first_read": bool(r["first_read"]),
+             "artists": sorted(tags.get(r["id"], []), key=lambda t: -t["plays"])}
             for r in rows]
+
+
+@app.get("/api/watchlist")
+def get_watchlist(c=Depends(get_db)):
+    """Watchlist artists with live play counts (never stored) and articles about them in the last 30 days."""
+    return watchlist.listing(c)
+
+
+class WatchlistAdd(BaseModel):
+    name: str
+    tier: str = "watch"
+    aliases: list[str] = []
+
+
+@app.post("/api/watchlist", status_code=201)
+def add_watchlist(body: WatchlistAdd, c=Depends(get_db)):
+    try:
+        return {"id": watchlist.add(c, body.name, body.tier, body.aliases)}
+    except watchlist.WatchlistError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.patch("/api/watchlist/{artist_id}")
+def patch_watchlist(artist_id: int, body: dict, c=Depends(get_db)):
+    allowed = {"tier", "muted", "aliases", "common_word_override"}
+    if not body or set(body) - allowed:
+        raise HTTPException(400, f"can change: {', '.join(sorted(allowed))}")
+    try:
+        watchlist.update(c, artist_id, body)
+        return next(r for r in watchlist.listing(c) if r["id"] == artist_id)  # same shape as GET /api/watchlist
+    except KeyError:
+        raise HTTPException(404, "no such artist")
+    except watchlist.WatchlistError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/news/sources")

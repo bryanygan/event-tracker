@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import config, db, store
+from . import config, db, store, watchlist
 from .fetchers import news_rss
 
 log = logging.getLogger("tracker.news")
@@ -59,11 +59,11 @@ def is_due(source, now: datetime) -> bool:
     return now >= due
 
 
-def store_articles(conn, source, articles: list[dict], now: datetime) -> int:
-    """Insert articles not seen before (by guid, or by URL if the guid changed). Returns how many were new."""
+def store_articles(conn, source, articles: list[dict], now: datetime) -> list[int]:
+    """Insert articles not seen before (by guid, or by URL if the guid changed). Returns the new articles' ids."""
     first_read = source["last_ok_at"] is None
     oldest = (now - timedelta(days=config.NEWS_MAX_AGE_DAYS)).isoformat()
-    new = 0
+    new = []
     for a in articles:
         if a["published_at"] and a["published_at"] < oldest:
             continue
@@ -79,19 +79,21 @@ def store_articles(conn, source, articles: list[dict], now: datetime) -> int:
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (source["id"], a["guid"], a.get("url"), a["title"], a.get("excerpt"), a["published_at"], now.isoformat(),
              json.dumps(a["categories"]), news_rss.title_hash(a["title"]), int(first_read)))
-        new += cur.rowcount
+        if cur.rowcount:
+            new.append(cur.lastrowid)
     return new
 
 
 def read_source(conn, session, source, now: datetime) -> dict:
     """One conditional GET. On any failure the stored articles and validators stay as they were."""
-    result = {"source": source["key"], "status": None, "new": 0, "error": None}
+    result = {"source": source["key"], "status": None, "new": 0, "new_ids": [], "error": None}
     try:
         got = news_rss.fetch(session, source["url"], source["etag"], source["last_modified"])
         result["status"] = got["status"]
         if got["status"] == 200:
             articles = news_rss.parse(got["body"])
-            result["new"] = store_articles(conn, source, articles, now)
+            result["new_ids"] = store_articles(conn, source, articles, now)
+            result["new"] = len(result["new_ids"])
             conn.execute("""UPDATE news_sources SET etag=?, last_modified=?, last_ok_at=?, last_error=NULL,
                             failures=0, last_fetched_at=? WHERE id=?""",
                          (got["etag"], got["last_modified"], now.isoformat(), now.isoformat(), source["id"]))
@@ -120,6 +122,11 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
                 time.sleep(0.5)  # every source is a different host; this just keeps the job gentle
             results.append(read_source(conn, session, source, now or _now()))
         new = sum(r["new"] for r in results)
+        # Tag the new articles with watchlist artists (the first time, build the watchlist from listening history)
+        if not conn.execute("SELECT 1 FROM artist_identities LIMIT 1").fetchone():
+            watchlist.refresh(conn)
+        else:
+            watchlist.rematch(conn, [i for r in results for i in r["new_ids"]])
         failed = [f"{r['source']} ({r['error']})" for r in results if r["error"]]
         store.finish_run(conn, run_id, fetched=new, api_calls=len(results), ok=True,
                          error=("failed: " + ", ".join(failed)) if failed else None)

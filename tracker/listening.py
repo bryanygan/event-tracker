@@ -30,6 +30,7 @@ def artist_key(name: str | None) -> str:
 class Taste:
     plays: dict[str, int] = field(default_factory=dict)     # artist_key -> plays in the window
     buckets: dict[str, str] = field(default_factory=dict)   # artist_key -> genre bucket ("rage", "pop", ...)
+    names: dict[str, str] = field(default_factory=dict)     # artist_key -> most-played spelling (the watchlist's name)
 
     def plays_for(self, *names: str | None) -> int:
         return max((self.plays.get(artist_key(n), 0) for n in names if n), default=0)
@@ -52,9 +53,14 @@ def load(path: str | None = None, today: date | None = None) -> Taste:
     try:
         con = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
         taste = Taste()
+        best: dict[str, int] = {}
         for artist, n in con.execute("SELECT artist, COUNT(*) FROM plays WHERE played_at >= ? GROUP BY artist", (since,)):
             k = artist_key(artist)
+            if not k:
+                continue
             taste.plays[k] = taste.plays.get(k, 0) + n  # "artist" and "Artist" are one artist
+            if n > best.get(k, 0):
+                best[k], taste.names[k] = n, artist.strip()
         for key, bucket in con.execute("SELECT artist_key, primary_bucket FROM artist_genres"):
             taste.buckets.setdefault(artist_key(key), bucket)
         con.close()
@@ -64,6 +70,12 @@ def load(path: str | None = None, today: date | None = None) -> Taste:
     log.info("Listening history: %d artists played in the last %d days", len(taste.plays), config.LISTENING_WINDOW_DAYS)
     _cache[path] = taste
     return taste
+
+
+def rotation(taste: Taste, min_plays: int | None = None) -> dict[str, tuple[str, int]]:
+    """artist_key -> (name, plays) for artists with at least `min_plays` (default ROTATION_MIN_PLAYS)."""
+    floor = config.ROTATION_MIN_PLAYS if min_plays is None else min_plays
+    return {k: (taste.names.get(k, k), n) for k, n in taste.plays.items() if n >= floor}
 
 
 def plays_bonus(plays: int) -> int:

@@ -297,7 +297,20 @@ export type NewsArticle = {
   published_at: string | null; fetched_at: string; seen_at: string; categories: string[]
   first_read: boolean // already in the feed the first time it was read (its time may be "when we started")
   source_key: string; source_name: string
+  artists: NewsArtistTag[] // watchlist artists it mentions (tracker/watchlist.py), most played first
 }
+export type NewsArtistTag = {
+  id: number; name: string; tier: WatchTier; plays: number
+  match: 'exact' | 'alias'; location: 'title' | 'excerpt'; confidence: 'high' | 'medium' | 'low'
+}
+export type WatchTier = 'core' | 'adjacent' | 'watch' | 'breakout' | 'dropped'
+export type WatchArtist = {
+  id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual'; aliases: string[]; muted: boolean
+  user_edited: boolean; common_word: boolean; common_word_auto: boolean; common_word_override: number | null
+  ambiguous_name: boolean; mbid: string | null; deezer_id: number | null; attraction_id: string | null
+  plays: number; articles_30d: number; bucket: string | null
+}
+export type WatchPatch = Partial<{ tier: WatchTier; muted: boolean; aliases: string[]; common_word_override: boolean | null }>
 export type NewsSource = {
   key: string; name: string; url: string; enabled: boolean; niches: string[]; poll_minutes: number
   last_fetched_at: string | null; last_ok_at: string | null; last_not_modified_at: string | null
@@ -370,8 +383,11 @@ const staticApi = {
   createTrend: readOnly,
   updateTrend: readOnly,
   deleteTrend: readOnly,
-  news: (_days: number) => Promise.resolve<NewsArticle[]>([]),
+  news: (_days: number, _mine = false) => Promise.resolve<NewsArticle[]>([]),
   newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
+  watchlist: () => Promise.resolve<WatchArtist[]>([]),
+  addWatch: readOnly,
+  updateWatch: readOnly,
 }
 
 const liveApi = {
@@ -416,8 +432,13 @@ const liveApi = {
   updateTrend: (id: number, fields: TrendInput) =>
     req(`/api/trends/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   deleteTrend: (id: number) => req(`/api/trends/${id}`, { method: 'DELETE' }),
-  news: (days: number) => req<NewsArticle[]>(`/api/news?days=${days}`),
+  news: (days: number, mine = false) => req<NewsArticle[]>(`/api/news?days=${days}${mine ? '&mine=true' : ''}`),
   newsSources: () => req<NewsHealth>('/api/news/sources'),
+  watchlist: () => req<WatchArtist[]>('/api/watchlist'),
+  addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
+    req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
+  updateWatch: (id: number, fields: WatchPatch) =>
+    req<WatchArtist>(`/api/watchlist/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
 }
 
 export const api: typeof liveApi = STATIC ? { ...staticApi, publish: readOnly } : liveApi

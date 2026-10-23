@@ -290,6 +290,38 @@ CREATE TABLE IF NOT EXISTS articles (
 CREATE INDEX IF NOT EXISTS idx_articles_seen ON articles(fetched_at);
 CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(source_id, url);
 
+-- Music watchlist (tracker/watchlist.py, roadmap M2): one row per artist. Seeded from your listening history (names
+-- and tiers only; play counts stay in plays.db and are read live). Your edits (user_edited=1) survive re-seeds.
+CREATE TABLE IF NOT EXISTS artist_identities (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,       -- listening.artist_key(name)
+    name TEXT NOT NULL,
+    aliases TEXT NOT NULL DEFAULT '[]',  -- JSON list of other spellings to match
+    tier TEXT NOT NULL,             -- core, adjacent, watch, breakout; 'dropped' = fell out of your rotation
+    origin TEXT NOT NULL,           -- listening, manual (related / editorial later, M7)
+    muted INTEGER NOT NULL DEFAULT 0,  -- never matched
+    user_edited INTEGER NOT NULL DEFAULT 0,  -- you changed it: re-seeding leaves it alone
+    common_word INTEGER NOT NULL DEFAULT 0,  -- the name is also an ordinary word (auto, from the headlines)
+    common_word_override INTEGER,   -- your call: NULL = automatic, 0 = no, 1 = yes
+    ambiguous_name INTEGER NOT NULL DEFAULT 0,  -- MusicBrainz has 2+ artists by this exact name
+    mbid TEXT,
+    deezer_id INTEGER,
+    attraction_id TEXT,             -- the events pipeline's artist, matched by name key
+    ids_checked_at TEXT,            -- last Deezer / MusicBrainz lookup
+    created_at TEXT NOT NULL
+);
+
+-- How an article was tied to an artist. Rebuilt when the watchlist changes; added to as new articles arrive.
+CREATE TABLE IF NOT EXISTS article_artists (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist_identities(id) ON DELETE CASCADE,
+    match TEXT NOT NULL,            -- exact, alias
+    location TEXT NOT NULL,         -- title, excerpt
+    confidence TEXT NOT NULL,       -- high (title), medium (excerpt), low (a common-word name next to a music word)
+    PRIMARY KEY (article_id, artist_id)
+);
+CREATE INDEX IF NOT EXISTS idx_article_artists_artist ON article_artists(artist_id);
+
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,
