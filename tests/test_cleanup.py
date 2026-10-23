@@ -122,3 +122,20 @@ def test_draft_limit_is_larger_with_claude(conn, monkeypatch):
     assert len(drafts.draft_pending(conn)) == drafts.MAX_CLAUDE_DRAFTS_PER_RUN
     monkeypatch.setattr(llm, "uses_claude", lambda: False)
     assert len(drafts.draft_pending(conn)) == drafts.MAX_DRAFTS_PER_RUN
+
+
+def test_refresh_genres_updates_alerts_that_are_never_redetected(conn):
+    from tracker import detectors
+    ingest(conn, [tm_event(event_id="a", name="Nova Vale", genre="Rock", date="2026-11-08")])
+    facts = {"format": "new_tour", "artist": "Nova Vale",
+             "shows": [{"artist": "Nova Vale", "date": "Sun, Nov 8", "genre": "Rock"}]}
+    for i, status in enumerate(["drafted", "dismissed"]):
+        conn.execute("INSERT INTO alerts (key, kind, title, facts, created_at, status) VALUES (?,?,?,?,?,?)",
+                     (f"k{i}", "new_tour", "t", json.dumps(facts), "2026-10-01T00:00:00+00:00", status))
+    assert detectors.refresh_genres(conn, "2026-10-21") == 0  # nothing changed yet
+    conn.execute("UPDATE attractions SET deezer_genre='Pop'")
+    assert detectors.refresh_genres(conn, "2026-10-21") == 1
+    live, dismissed = [json.loads(r[0])["shows"][0]["genre"] for r in conn.execute("SELECT facts FROM alerts ORDER BY id")]
+    assert (live, dismissed) == ("Pop", "Rock")
+    assert conn.execute("SELECT COUNT(*) FROM alert_history").fetchone()[0] == 1
+    assert detectors.refresh_genres(conn, "2026-10-21") == 0

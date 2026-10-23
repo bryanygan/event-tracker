@@ -149,6 +149,7 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
 
         alerts = detectors.run_all(conn, run_id)
         new_alert_ids = detectors.save_alerts(conn, alerts)
+        detectors.refresh_genres(conn, datetime.now(detectors.TZ).date().isoformat())
         log.info("Detectors raised %d alerts, %d new", len(alerts), len(new_alert_ids))
         store.finish_run(conn, run_id, fetched=len(events), api_calls=calls, ok=True)
     except Exception as exc:
