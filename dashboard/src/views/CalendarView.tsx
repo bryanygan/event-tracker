@@ -97,12 +97,8 @@ export default function CalendarView({ refreshKey, onChange }: { refreshKey: num
         <button className="ghost" onClick={() => setStart(shiftDays(cal.start, -7))}>← Earlier</button>
         <button className="ghost" onClick={() => setStart(undefined)}>This week</button>
         <button className="ghost" onClick={() => setStart(shiftDays(cal.start, 7))}>Later →</button>
-        <span className="muted small">Plans are yours: nothing posts at a planned time. Plan ideas from here or from a card on “What to post”.</span>
+        <span className="muted small">A loose plan: put as many ideas on a day as you like and pick on the day. Nothing posts at a planned time.</span>
       </div>
-      {cal.warnings.length > 0 && <div className="warn"><ul>{cal.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
-      {cal.empty_days.length > 0 && (
-        <p className="muted small">Nothing planned or posted: {cal.empty_days.join(' · ')}</p>
-      )}
 
       {weeks.map((w, n) => (
         <div key={n} className="cal-week">
@@ -121,7 +117,7 @@ export default function CalendarView({ refreshKey, onChange }: { refreshKey: num
           <tbody>
             {cal.series.map((s) => (
               <tr key={s.name}>
-                <td>{s.name}{s.overdue && <span className="pill due">due</span>}</td>
+                <td>{s.name}{s.behind && <span className="pill" title="last post is older than usual">behind</span>}</td>
                 <td>{s.last_posted ? fmtWhen(s.last_posted) : <span className="muted">never</span>}</td>
                 <td>{s.next_planned ? fmtWhen(s.next_planned) : <span className="muted">–</span>}</td>
                 <td>{s.ideas}</td>
@@ -132,9 +128,9 @@ export default function CalendarView({ refreshKey, onChange }: { refreshKey: num
         </table>
       </div>
 
-      {cal.balance.length > 0 && <>
+      {cal.mix.length > 0 && <>
         <h3 className="section-title cal-h">Mix</h3>
-        {cal.balance.map((b) => (
+        {cal.mix.map((b) => (
           <p key={b.week} className="small">
             <strong>{b.label}</strong>: {Object.entries(b.formats).map(([f, n]) => `${n} ${f.replace('_', ' ')}`).join(', ')}
             {b.music > 0 && <span className="muted"> · {b.lane} of {b.music} music videos in your lane</span>}
@@ -165,11 +161,11 @@ function Day({ day, cal, known, onChange }: { day: CalendarDay; cal: Calendar; k
       {day.planned.map((i) => (
         <div key={`a${i.alert_id}`} className={`cal-entry planned kind-${i.kind}`}>
           <button className="link" disabled={STATIC} onClick={() => setEditing(editing === i.alert_id ? null : i.alert_id)}
-                  title={[i.series, ...i.caveats].filter(Boolean).join('\n')}>
+                  title={i.series ?? ''}>
             {fmtTime(i.planned_for!)} · {i.title}
           </button>
           {i.series && <div className="muted small">{i.series}</div>}
-          {i.caveats.some((c) => c.startsWith('Planned for')) && <div className="small error-text">⚠ after its deadline</div>}
+          {i.late && <div className="muted small">{i.late}</div>}
           {editing === i.alert_id && (
             <PlanControl alertId={i.alert_id} plannedFor={i.planned_for} series={i.series} seriesSet={i.series_set} knownSeries={known}
                          onDone={() => { setEditing(null); onChange() }} onCancel={() => setEditing(null)} />

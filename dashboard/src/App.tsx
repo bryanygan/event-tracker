@@ -8,7 +8,7 @@ import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 
 type Tab = 'queue' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs'
-const TABS: Tab[] = ['queue', 'calendar', 'alerts', 'posts', 'events', 'runs']
+const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs', 'calendar']
 
 export default function App() {
   // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone

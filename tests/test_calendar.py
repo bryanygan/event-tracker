@@ -1,4 +1,4 @@
-"""Editorial calendar (P1-13): plans are yours, nothing posts, and the warnings come from stored data.
+"""Editorial calendar (P1-13): a loose plan of your own. Nothing posts, and it doesn't nag about how much is planned.
 Invented artist names only."""
 import json
 from datetime import datetime, timedelta, timezone
@@ -52,54 +52,37 @@ def test_plans_posts_and_deadlines_land_on_their_local_day(conn):
     assert [i["alert_id"] for i in fri["due"]] == [due]          # by local day, not the UTC date (Oct 24)
     assert [p["alert_id"] for p in day(cal, "2026-10-20")["posted"]] == [posted]
     assert day(cal, "2026-10-20")["past"] and day(cal, "2026-10-21")["today"]
-    assert "Thu, Oct 22" in cal["empty_days"] and "Fri, Oct 23" not in cal["empty_days"]
-    assert "Tue, Oct 20" not in cal["empty_days"]                 # past days aren't gaps
-    assert [i["alert_id"] for i in cal["unplanned"]] == [due, *[i["alert_id"] for i in cal["unplanned"][1:]]]
+    assert cal["unplanned"][0]["alert_id"] == due                 # soonest deadline first
     assert planned not in [i["alert_id"] for i in cal["unplanned"]]
 
 
-def test_warnings_for_crowded_days_repeats_and_late_plans(conn):
-    for a in ("Nova Vale", "Kilo Moon", "Iron Lark"):
-        add_alert(conn, a, planned=at(23))
-    add_alert(conn, "Nova Vale", kind="presale_soon", fmt="presale", planned=at(26), post_by=at(25))
+def test_busy_days_are_fine_and_only_late_plans_get_a_note(conn):
+    for a in ("Nova Vale", "Kilo Moon", "Iron Lark", "Soft Arcade"):  # four on one day: a shortlist, not a problem
+        add_alert(conn, a, kind="presale_soon", fmt="presale", planned=at(23))
+    late = add_alert(conn, "Echo Bay", kind="presale_soon", fmt="presale", planned=at(26), post_by=at(25))
     cal = planner.calendar(conn, now=NOW)
-    w = " | ".join(cal["warnings"])
-    assert "Fri, Oct 23: 3 videos planned" in w
-    assert "Nova Vale is in 2 videos close together (planned Fri, Oct 23, planned Mon, Oct 26)" in w
-    assert "after its post-by time" in w
+    assert "warnings" not in cal
+    fri = day(cal, "2026-10-23")
+    assert len(fri["planned"]) == 4 and all(i["late"] is None for i in fri["planned"])
+    [mon] = day(cal, "2026-10-26")["planned"]
+    assert mon["alert_id"] == late and mon["late"] == "after its post-by time"
+    [week] = [m for m in cal["mix"] if m["week"] == "2026-10-19"]  # for reference, no targets
+    assert week["formats"] == {"presale": 4} and (week["lane"], week["music"]) == (1, 4)
 
 
-def test_a_plan_soon_after_a_post_about_the_same_artist_is_flagged(conn):
-    old = add_alert(conn, "Echo Bay")
-    posts.create_post(conn, alert_id=old, posted_at=at(20).isoformat())
-    add_alert(conn, "Echo Bay", kind="presale_soon", fmt="presale", planned=at(24))
-    assert any("Echo Bay is in 2 videos close together (posted Tue, Oct 20, planned Sat, Oct 24)" in w
-               for w in planner.calendar(conn, now=NOW)["warnings"])
-
-
-def test_week_balance_format_and_lane(conn):
-    for i, a in enumerate(("Kilo Moon", "Iron Lark", "Soft Arcade", "Kilo Moon")):
-        add_alert(conn, a, kind="presale_soon", fmt="presale", planned=at(22 + i, 14))
-    cal = planner.calendar(conn, now=NOW)
-    [week] = [b for b in cal["balance"] if b["week"] == "2026-10-19"]
-    assert week["formats"] == {"presale": 4} and (week["lane"], week["music"]) == (0, 4)
-    w = " | ".join(cal["warnings"])
-    assert "4 presale videos; mix in another format" in w and "only 0 of 4 music videos are in your lane" in w
-
-
-def test_series_default_from_format_override_and_overdue(conn):
+def test_series_default_from_format_override_and_behind(conn):
     weekend = add_alert(conn, "Nova Vale", kind="weekend", fmt="weekend")
     pid = posts.create_post(conn, alert_id=weekend, posted_at=(NOW - timedelta(days=9)).isoformat())
     assert conn.execute("SELECT series FROM posts WHERE id=?", (pid,)).fetchone()[0] == "Philly this weekend"
     mine = add_alert(conn, "Kilo Moon", series="Deep cuts")
     cal = planner.calendar(conn, now=NOW)
     weekly = next(s for s in cal["series"] if s["name"] == "Philly this weekend")
-    assert weekly["overdue"] and weekly["cadence_days"] == 7
-    assert any("Philly this weekend: last posted" in w for w in cal["warnings"])
+    assert weekly["behind"] and weekly["cadence_days"] == 7
+    assert not next(s for s in cal["series"] if s["name"] == "Stacked month")["behind"]  # never posted: not behind
     assert any(s["name"] == "Deep cuts" for s in cal["series"])
     assert next(i for i in cal["unplanned"] if i["alert_id"] == mine)["series"] == "Deep cuts"
     add_alert(conn, "Echo Bay", kind="weekend", fmt="weekend", planned=at(23))  # planning one clears it
-    assert not next(s for s in planner.calendar(conn, now=NOW)["series"] if s["name"] == "Philly this weekend")["overdue"]
+    assert not next(s for s in planner.calendar(conn, now=NOW)["series"] if s["name"] == "Philly this weekend")["behind"]
 
 
 def test_dismissed_and_posted_ideas_leave_the_plan(conn):
@@ -109,6 +92,15 @@ def test_dismissed_and_posted_ideas_leave_the_plan(conn):
     posts.create_post(conn, alert_id=done, posted_at=at(23).isoformat())
     fri = day(planner.calendar(conn, now=NOW), "2026-10-23")
     assert fri["planned"] == [] and [p["alert_id"] for p in fri["posted"]] == [done]
+
+
+def test_a_plan_changes_nothing_on_the_queue(conn):
+    a = add_alert(conn, "Nova Vale")
+    from tracker import opportunities
+    before = next(i for i in opportunities.queue(conn, NOW) if i["alert_id"] == a)
+    conn.execute("UPDATE alerts SET planned_for=? WHERE id=?", (at(30).isoformat(), a))  # after it goes stale
+    after = next(i for i in opportunities.queue(conn, NOW) if i["alert_id"] == a)
+    assert {k: v for k, v in after.items() if k != "planned_for"} == {k: v for k, v in before.items() if k != "planned_for"}
 
 
 def test_api_plan_and_clear(tmp_path, monkeypatch):
@@ -125,8 +117,6 @@ def test_api_plan_and_clear(tmp_path, monkeypatch):
     with db.connect(path) as c2:
         row = c2.execute("SELECT planned_for, series FROM alerts WHERE id=?", (aid,)).fetchone()
     assert tuple(row) == ("2026-10-23T22:00:00+00:00", "Deep cuts")
-    [item] = [i for i in client.get("/api/queue").json()["items"] if i["alert_id"] == aid]
-    assert item["planned_for"] == "2026-10-23T22:00:00+00:00" and item["series"] == "Deep cuts"
     assert client.get("/api/calendar").status_code == 200
     assert client.get("/api/calendar", params={"start": "nope"}).status_code == 400
     client.patch(f"/api/alerts/{aid}", json={"planned_for": None, "series": ""})

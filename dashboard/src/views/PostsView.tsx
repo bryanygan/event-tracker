@@ -117,7 +117,7 @@ export function PostForm({ alertId, draftId, hook = '', onDone, onCancel }: {
   alertId?: number; draftId?: number; hook?: string; onDone: () => void; onCancel: () => void
 }) {
   const fromAlert = alertId !== undefined
-  const [f, setF] = useState({ posted_at: localNow(), url: '', title: '', format: 'other', video_style: '', length: '', hook, notes: '', series: '' })
+  const [f, setF] = useState({ posted_at: localNow(), url: '', title: '', format: 'other', video_style: '', length: '', hook, notes: '' })
   const [error, setError] = useState<string | null>(null)
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
 
@@ -126,7 +126,6 @@ export function PostForm({ alertId, draftId, hook = '', onDone, onCancel }: {
     const body: PostInput = {
       alert_id: alertId, draft_id: draftId, posted_at: toUtc(f.posted_at),
       url: f.url.trim() || undefined, hook: f.hook.trim() || undefined, notes: f.notes.trim() || undefined,
-      series: f.series.trim() || undefined, // blank: the idea's series (or none for a video logged by hand)
       video_style: (f.video_style || undefined) as VideoStyle | undefined, length_seconds: num(f.length),
       ...(fromAlert ? {} : { title: f.title, format: f.format }),
     }
@@ -142,7 +141,6 @@ export function PostForm({ alertId, draftId, hook = '', onDone, onCancel }: {
     <div className="post-form">
       <div className="form-grid">
         <label>Posted at<input type="datetime-local" value={f.posted_at} onChange={set('posted_at')} /></label>
-        <label>Series<input placeholder={fromAlert ? "the idea's series" : 'optional'} value={f.series} onChange={set('series')} /></label>
         <label>TikTok link<input placeholder="https://www.tiktok.com/@…/video/…" value={f.url} onChange={set('url')} /></label>
         {!fromAlert && <label>Title<input value={f.title} onChange={set('title')} /></label>}
         {!fromAlert && (

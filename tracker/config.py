@@ -146,19 +146,16 @@ TREND_NOTES_MAX = 500      # refuse new notes past this (each is matched against
 TREND_NOTE_DAYS = 7       # a trend note stops counting this long after you saw it (unless you set expires_at)
 
 # --- Editorial calendar (tracker/planner.py) ---
-# A plan is yours: a posting time and a series label on an idea. Nothing posts at that time; the calendar
-# only lays out what's planned, posted and due, and points out gaps and lopsided weeks.
+# A nice-to-have tab. A plan is yours: a posting time and a series label on an idea, a shortlist for that day
+# rather than a commitment (plan several, pick on the day). Nothing posts at that time.
 CALENDAR_DAYS = 14                 # this week and next, starting Monday
 CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM local
-CALENDAR_MAX_PER_DAY = 2           # more planned videos than this on one day gets a warning
-CALENDAR_MAX_SAME_FORMAT_WEEK = 3  # ...and more than this of one format in a week
-CALENDAR_MIN_LANE_SHARE = 0.5      # warn when under half of a week's music videos are in your lane
 # Default series by format: recurring shows of the page. Change a single idea's series on its card.
 SERIES_FOR_FORMAT = {
     "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
     "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
 }
-# How often a series should run. When the last post is older than this and none is planned, the calendar says so.
+# How often a series usually runs. The Series table marks one "behind" when its last post is older than this.
 SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}
 
 # --- Posted videos (tracker/posts.py) ---

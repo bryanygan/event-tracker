@@ -216,14 +216,6 @@ def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[di
             break
     if not events:
         caveats.append("None of its shows are listed anymore (past, or removed from the feed)")
-    planned = _dt(alert.get("planned_for"))
-    if planned and not posts and alert["status"] != "dismissed":
-        if t["expires_at"] and planned > _dt(t["expires_at"]):
-            caveats.append(f"Planned for {_when(planned)}, after it goes stale ({_when(_dt(t['expires_at']))})")
-        elif t["post_by"] and planned > _dt(t["post_by"]):
-            caveats.append(f"Planned for {_when(planned)}, after its post-by time ({_when(_dt(t['post_by']))})")
-        elif planned < now:
-            caveats.append(f"Planned for {_when(planned)} and not logged as posted yet")
 
     band = None if score is None else "strong" if score >= config.QUEUE_STRONG else "medium" if score >= config.QUEUE_MEDIUM else "low"
     return {
@@ -274,7 +266,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             "created_at": a["created_at"], "updated_at": a["updated_at"],
             "shortlisted": bool(a["shortlisted"]), "snoozed_until": a["snoozed_until"], "note": a["note"],
             "planned_for": a["planned_for"], "series": series_for(a), "series_set": a["series"],
-            "format": a["facts"].get("format") or a["kind"], "artists": sorted(_artists(a["facts"])),
+            "format": a["facts"].get("format") or a["kind"],  # planned_for/series/format: the Calendar tab
             "your_plays": a["facts"].get("your_plays") or 0,
             "links": [{"label": f"{s.get('artist') or s.get('event_name')} · {s.get('date')}", "url": s["url"]}
                       for s in shows if s.get("url")][:6],

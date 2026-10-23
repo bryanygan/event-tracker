@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type Job, type Queue, type QueueItem, type Stage, type Summary } from '../api'
 import { fmtWhen } from '../App'
 import { AlertCard, KIND_LABEL } from './AlertsView'
-import { PlanControl } from './CalendarView'
 import { PostForm } from './PostsView'
 import TrendNotes, { TrendPills } from './TrendNotes'
 
@@ -95,7 +94,6 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
   const [open, setOpen] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
   const [logging, setLogging] = useState(false)
-  const [planning, setPlanning] = useState(false)
   const [note, setNote] = useState(item.note ?? '')
   const patch = async (fields: Parameters<typeof api.updateAlert>[1]) => { await api.updateAlert(item.alert_id, fields); onChange() }
   const snoozeDay = () => patch({ snoozed_until: new Date(Date.now() + 864e5).toISOString() })
@@ -113,9 +111,6 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
           </span>
         )}
         {item.shortlisted && <span className="pill new">★ shortlisted</span>}
-        {item.planned_for && !['posted', 'measured', 'dismissed'].includes(item.stage) && (
-          <span className="pill new" title={item.series ?? ''}>📅 {fmtWhen(item.planned_for)}</span>
-        )}
       </div>
       <h2 className="queue-title">
         {item.title}
@@ -172,11 +167,6 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
             ? <button className="ghost" onClick={() => patch({ snoozed_until: null })}>Back to queue</button>
             : <button className="ghost" onClick={snoozeDay} title="hide for 24 hours">Later</button>}
           <button className="ghost" onClick={() => setEditingNote(true)}>{item.note ? 'Edit note' : 'Note'}</button>
-          {!planning && !['posted', 'measured', 'dismissed'].includes(item.stage) && (
-            <button className="ghost" onClick={() => setPlanning(true)} title="put it on the Calendar tab (nothing posts by itself)">
-              📅 {item.planned_for ? 'Move' : 'Plan'}
-            </button>
-          )}
           {!logging && <button className="ghost" onClick={() => setLogging(true)}
                                title="log the video so the queue knows it's done (add the TikTok link for 24h/7d numbers)">
             {item.posts.length ? '✓ Posted again' : '✓ Posted'}
@@ -186,9 +176,6 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
             : <button className="ghost" onClick={() => patch({ status: 'dismissed' })}>Dismiss</button>}
         </>}
       </div>
-      {planning && <PlanControl alertId={item.alert_id} plannedFor={item.planned_for} series={item.series}
-                                seriesSet={item.series_set} onDone={() => { setPlanning(false); onChange() }}
-                                onCancel={() => setPlanning(false)} />}
       {logging && <PostForm alertId={item.alert_id} draftId={item.draft?.id} hook={item.draft?.hook ?? ''}
                             onDone={() => { setLogging(false); onChange() }} onCancel={() => setLogging(false)} />}
       {open && alert && (

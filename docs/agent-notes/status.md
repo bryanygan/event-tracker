@@ -92,7 +92,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | Draft progress bar | Live 2026-10-22: job carries alert_id/step/estimate/elapsed; bar + step under the card's buttons, scroll to the new draft |
 | Claude drafts | Live 2026-10-22 (`c90ed9f`) |
 | Cleanup | Live 2026-10-22 (`d292940`, `d58a4c1`): Deezer genre check, 20 Claude drafts/run, `--redraft-local` (23 alerts redrafted), genre refresh in live alerts |
-| P1-13 editorial calendar | Built 2026-10-22 on `feature/calendar`: `tracker/planner.py`, `/api/calendar`, Calendar tab, Plan on queue cards, series on alerts/posts |
+| P1-13 editorial calendar | Built 2026-10-22 on `feature/calendar`, NOT merged (user said wait): `tracker/planner.py`, `/api/calendar`, a separate last Calendar tab, no warnings |
 | P2-14 | Not started |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.

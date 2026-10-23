@@ -196,25 +196,24 @@ export type QueueItem = {
   series: string | null // your series, else the format's default
   series_set: string | null // the series you typed (null = the default)
   format: string
-  artists: string[]
   lane: 'lane' | 'other' | 'sports'
 }
 
 // Editorial calendar (tracker/planner.py)
 export type CalendarItem = Pick<QueueItem, 'alert_id' | 'kind' | 'format' | 'title' | 'stage' | 'band' | 'score' |
-  'post_by' | 'expires_at' | 'planned_for' | 'series' | 'series_set' | 'lane' | 'caveats'>
+  'post_by' | 'expires_at' | 'planned_for' | 'series' | 'series_set' | 'lane'> & {
+  late: string | null // 'after it goes stale' / 'after its post-by time'
+}
 export type CalendarPost = { id: number; alert_id: number | null; title: string; posted_at: string; url: string | null;
-  format: string | null; series: string | null; lane: QueueItem['lane'] | null; artists: string[] }
+  format: string | null; series: string | null; lane: QueueItem['lane'] | null }
 export type CalendarDay = { date: string; label: string; past: boolean; today: boolean
   planned: CalendarItem[]; posted: CalendarPost[]; due: CalendarItem[] }
 export type Calendar = {
   start: string
   days: CalendarDay[]
-  empty_days: string[]
-  warnings: string[]
-  balance: { week: string; label: string; formats: Record<string, number>; lane: number; music: number }[]
+  mix: { week: string; label: string; formats: Record<string, number>; lane: number; music: number }[]
   series: { name: string; last_posted: string | null; next_planned: string | null; cadence_days: number | null
-    overdue: boolean; ideas: number }[]
+    behind: boolean; ideas: number }[]
   unplanned: CalendarItem[]
   default_hour: number
 }
