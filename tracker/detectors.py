@@ -616,6 +616,37 @@ def save_alerts(conn: sqlite3.Connection, alerts: list[dict]) -> list[int]:
     return created
 
 
+def refresh_genres(conn: sqlite3.Connection, today: str) -> int:
+    """Bring show genres in live alerts up to date (a genre fix, genres.py). Alerts that are never re-detected,
+    like new_tour, would otherwise keep the genre they were raised with. Same rules as save_alerts: dismissed and
+    posted alerts are left alone and the old version goes to alert_history. Returns how many alerts changed."""
+    current = {}
+    for e in upcoming_events(conn, today):
+        f = event_facts(e)
+        current[(f.get("artist"), f.get("date"))] = f.get("genre")
+    changed = 0
+    rows = conn.execute("""SELECT * FROM alerts a WHERE status != 'dismissed'
+                           AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.alert_id = a.id)""").fetchall()
+    for old in rows:
+        facts = json.loads(old["facts"])
+        shows = [s for s in (facts.get("shows") or []) + [facts.get("show")] if isinstance(s, dict)]
+        dirty = False
+        for s in shows:
+            key = (s.get("artist"), s.get("date"))
+            if key in current and current[key] and current[key] != s.get("genre"):
+                s["genre"], dirty = current[key], True
+        if not dirty:
+            continue
+        conn.execute("INSERT INTO alert_history (alert_id, title, score, facts, replaced_at) VALUES (?,?,?,?,?)",
+                     (old["id"], old["title"], old["score"], old["facts"], now_iso()))
+        conn.execute("UPDATE alerts SET facts=?, updated_at=? WHERE id=?", (json.dumps(facts), now_iso(), old["id"]))
+        changed += 1
+    conn.commit()
+    if changed:
+        log.info("Updated show genres on %d alerts", changed)
+    return changed
+
+
 def _show_label(s: dict) -> str:
     return f"{s.get('artist') or s.get('event_name')} ({s.get('date')})"
 
