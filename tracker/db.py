@@ -290,6 +290,82 @@ CREATE TABLE IF NOT EXISTS articles (
 CREATE INDEX IF NOT EXISTS idx_articles_seen ON articles(fetched_at);
 CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(source_id, url);
 
+-- Music watchlist (tracker/watchlist.py, roadmap M2): one row per artist. Seeded from your listening history (names
+-- and tiers only; play counts stay in plays.db and are read live). Your edits (user_edited=1) survive re-seeds.
+CREATE TABLE IF NOT EXISTS artist_identities (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,       -- listening.artist_key(name)
+    name TEXT NOT NULL,
+    aliases TEXT NOT NULL DEFAULT '[]',  -- JSON list of other spellings to match
+    tier TEXT NOT NULL,             -- core, adjacent, watch, breakout; 'dropped' = fell out of your rotation
+    origin TEXT NOT NULL,           -- listening, manual (related / editorial later, M7)
+    muted INTEGER NOT NULL DEFAULT 0,  -- never matched
+    user_edited INTEGER NOT NULL DEFAULT 0,  -- you changed it: re-seeding leaves it alone
+    common_word INTEGER NOT NULL DEFAULT 0,  -- the name is also an ordinary word (auto, from the headlines)
+    common_word_override INTEGER,   -- your call: NULL = automatic, 0 = no, 1 = yes
+    ambiguous_name INTEGER NOT NULL DEFAULT 0,  -- MusicBrainz has 2+ artists by this exact name
+    mbid TEXT,
+    deezer_id INTEGER,
+    attraction_id TEXT,             -- the events pipeline's artist, matched by name key
+    ids_checked_at TEXT,            -- last Deezer / MusicBrainz lookup
+    created_at TEXT NOT NULL
+);
+
+-- How an article was tied to an artist. Rebuilt when the watchlist changes; added to as new articles arrive.
+CREATE TABLE IF NOT EXISTS article_artists (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist_identities(id) ON DELETE CASCADE,
+    match TEXT NOT NULL,            -- exact, alias
+    location TEXT NOT NULL,         -- title, excerpt
+    confidence TEXT NOT NULL,       -- high (title), medium (excerpt), low (a common-word name next to a music word)
+    PRIMARY KEY (article_id, artist_id)
+);
+CREATE INDEX IF NOT EXISTS idx_article_artists_artist ON article_artists(artist_id);
+
+-- Music stories (tracker/stories.py, roadmap M3): articles about the same thing grouped into one card. Rebuilt
+-- after each news check; a story you acted on (feedback / alert_id) keeps its id and those fields.
+CREATE TABLE IF NOT EXISTS stories (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,       -- "<primary artist id>:<type family>:<first article id>", stable across rebuilds
+    story_type TEXT NOT NULL,       -- album_announcement, single_release, tour, chart, legal... (stories.TYPES)
+    rule TEXT,                      -- why: the classifier rule that fired, e.g. "tour: 'announces 2027 tour'"
+    primary_artist_id INTEGER REFERENCES artist_identities(id) ON DELETE SET NULL,
+    other_artist_ids TEXT NOT NULL DEFAULT '[]',  -- JSON list
+    title TEXT NOT NULL,            -- headline of the first article
+    release_title TEXT,             -- album/song name when a headline states it
+    release_status TEXT,            -- rumored, teased, announced, scheduled, released (NULL = not about a release)
+    release_date TEXT,              -- YYYY-MM-DD when an article states one (first stated; see verification)
+    verification TEXT NOT NULL DEFAULT 'unverified',  -- unverified, corroborated (2+ sources), confirmed (M4), conflicting
+    sensitive INTEGER NOT NULL DEFAULT 0,  -- deaths, arrests, lawsuits, health: never auto-promoted, no template hooks
+    dated INTEGER NOT NULL DEFAULT 1,  -- 0 = only undated items from before tracking began: time unknown, listed last
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    feedback TEXT,                  -- your call (M5): interested, not_my_lane, already_covered
+    alert_id INTEGER,               -- once sent to the queue (M5)
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stories_seen ON stories(last_seen);
+
+CREATE TABLE IF NOT EXISTS story_articles (
+    story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    PRIMARY KEY (story_id, article_id)
+);
+
+-- Every factual claim with where it came from (roadmap section 5). Drafts read facts from here only.
+CREATE TABLE IF NOT EXISTS story_evidence (
+    id INTEGER PRIMARY KEY,
+    story_id INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,             -- article (catalog / official later, M4 / M8)
+    provider TEXT NOT NULL,         -- source name, e.g. "Pitchfork news"
+    url TEXT,
+    excerpt TEXT,                   -- the words the claim was read from
+    claim TEXT NOT NULL,            -- release_date, title, status
+    value TEXT NOT NULL,
+    observed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_story_evidence_story ON story_evidence(story_id);
+
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,

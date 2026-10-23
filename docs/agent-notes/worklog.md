@@ -191,4 +191,13 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   back-off 30/60/120 min, pipeline lock), `/api/news`, `/api/news/sources`, Music news tab (last). News runs kept
   out of the Runs tab and the header's last run. Live read into a scratch DB: 343 articles, 0 failures, 15 s.
   14 new tests (283).
+- Merged `feature/news-rss` (`202b66c`), registered `PhillyEvents-News` (no end date), dashboard rebuilt and
+  restarted. First scheduled check: 14 feeds, 343 articles, 15 s.
+- `feature/watchlist` (M2): `artist_identities` + `article_artists`, seeding from listening (names/tiers only),
+  matching with the tightened common-word rule, Deezer + MusicBrainz ids (40/run), `/api/watchlist`, For you
+  filter, artist pills and a Watchlist editor in the Music news tab. 14 new tests (297).
+- `feature/stories` (M3, stacked on M2): `stories`, `story_articles`, `story_evidence`; rule-based types (incl. the
+  user's M0 kinds: legal, politics, brand/media, lifestyle, roundup), release status and dates, conflicting dates,
+  clustering with a shared-word check, `/api/news/stories`, Stories view (default) in Music news. Checked with
+  headless Edge screenshots on a DB copy. 30 new tests (327).
 

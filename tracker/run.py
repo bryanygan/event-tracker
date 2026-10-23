@@ -20,7 +20,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, context, db, detectors, drafts, genres, publish, store
+from . import config, context, db, detectors, drafts, genres, publish, store, watchlist
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import venue_calendars
@@ -142,6 +142,13 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
             deezer.enrich_headliners(conn)
         except Exception as exc:  # enrichment is a nice-to-have; never fail the run over it
             log.warning("Deezer enrichment failed: %s", exc)
+        if not midday:  # music watchlist (roadmap M2): re-seed from listening, rematch news, a few id lookups
+            try:
+                log.info("Watchlist: %s", watchlist.refresh(conn))
+                if not from_cache:
+                    log.info("Watchlist ids looked up: %d", watchlist.resolve_ids(conn, limit=config.WATCHLIST_IDS_PER_RUN))
+            except Exception as exc:  # never fail the run over the music pillar
+                log.warning("Watchlist refresh failed: %s", exc)
         try:
             setlistfm.enrich_history(conn, limit=config.MIDDAY_SETLIST_ARTISTS if midday else setlistfm.MAX_ARTISTS_PER_RUN)
         except Exception as exc:

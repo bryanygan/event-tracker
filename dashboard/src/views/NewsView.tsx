@@ -1,28 +1,34 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type NewsArticle, type NewsHealth, type NewsSource } from '../api'
+import { api, type NewsArticle, type NewsArtistTag, type NewsHealth, type NewsSource } from '../api'
+import StoriesList from './StoriesList'
+import WatchlistPanel from './WatchlistPanel'
 import { fmtWhen } from '../App'
 
-// Music news, step 1 (roadmap M1): what the feeds published, read every 30 minutes. Matching your artists,
-// grouping into stories and scoring come later (M2-M5); for now this is the raw feed plus source health.
+// Music news (roadmap M1-M2): what the feeds published, read every 30 minutes, tagged with your watchlist artists.
+// Stories group the articles (M3); scoring comes in M5.
 export default function NewsView({ refreshKey }: { refreshKey: number }) {
-  const [days, setDays] = useState(2)
+  const [view, setView] = useState<'stories' | 'articles'>('stories')
+  const [days, setDays] = useState(3)
   const [q, setQ] = useState('')
   const [source, setSource] = useState('')
   const [bySource, setBySource] = useState(false)
+  const [mine, setMine] = useState(true) // "For you": only articles that mention a watchlist artist
+  const [mentions, setMentions] = useState(false) // also count artists named only in the summary
   const [articles, setArticles] = useState<NewsArticle[] | null>(null)
   const [health, setHealth] = useState<NewsHealth | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.news(days).then(setArticles).catch((e) => setError(String(e)))
+    api.news(days, mine).then(setArticles).catch((e) => setError(String(e)))
     api.newsSources().then(setHealth).catch((e) => setError(String(e)))
-  }, [days, refreshKey])
+  }, [days, mine, refreshKey])
 
   const shown = useMemo(() => {
     const ql = q.trim().toLowerCase()
     return (articles ?? []).filter((a) => (!source || a.source_key === source) &&
+      (!mine || mentions || a.artists.some((t) => t.location === 'title')) &&
       (!ql || a.title.toLowerCase().includes(ql) || (a.excerpt ?? '').toLowerCase().includes(ql)))
-  }, [articles, q, source])
+  }, [articles, q, source, mine, mentions])
 
   const groups = useMemo(() => {
     const m = new Map<string, NewsArticle[]>()
@@ -37,8 +43,8 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
     <>
       <p className="muted small">
         Headlines from {sources.length} music-news feeds, checked every 30 minutes
-        {lastCheck ? ` (last check ${fmtWhen(lastCheck.started_at)}, ${lastCheck.events_fetched} new)` : ''}.
-        Matching your artists and grouping duplicate stories come next; nothing here becomes an idea by itself.
+        {lastCheck ? ` (last check ${fmtWhen(lastCheck.started_at)}, ${lastCheck.events_fetched} new)` : ''}, tagged
+        with your watchlist artists and grouped into stories. Nothing here becomes an idea by itself.
       </p>
       {error && <div className="banner error">{error}</div>}
       {broken.length > 0 && (
@@ -49,14 +55,29 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       )}
 
       <div className="toolbar">
+        <button className={view === 'stories' ? 'tab active' : 'tab'} onClick={() => setView('stories')}>Stories</button>
+        <button className={view === 'articles' ? 'tab active' : 'tab'} onClick={() => setView('articles')}>All headlines</button>
+        <select value={days} onChange={(e) => setDays(+e.target.value)}>
+          {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
+        </select>
+      </div>
+
+      {view === 'stories' && <StoriesList refreshKey={refreshKey} days={days} />}
+      {view === 'articles' && <>
+      <div className="toolbar">
         <input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">All sources</option>
           {sources.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
         </select>
-        <select value={days} onChange={(e) => setDays(+e.target.value)}>
-          {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
-        </select>
+        <label className="small" title="Only articles about your watchlist artists">
+          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> For you
+        </label>
+        {mine && (
+          <label className="small" title="Also articles that only name the artist in the summary (roundups, credits)">
+            <input type="checkbox" checked={mentions} onChange={(e) => setMentions(e.target.checked)} /> Include mentions
+          </label>
+        )}
         <label className="small"><input type="checkbox" checked={bySource} onChange={(e) => setBySource(e.target.checked)} /> Group by source</label>
         <span className="muted small">{articles ? `${shown.length} articles` : 'Loading…'}</span>
       </div>
@@ -70,6 +91,9 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
             </section>
           ))
         : shown.length > 0 && <ArticleTable articles={shown} showSource />}
+      </>}
+
+      <WatchlistPanel refreshKey={refreshKey} />
 
       <h3>Sources</h3>
       <SourcesTable sources={health?.sources ?? []} />
@@ -93,6 +117,7 @@ function ArticleTable({ articles, showSource }: { articles: NewsArticle[]; showS
               {showSource && <td className="nowrap">{a.source_name}</td>}
               <td>
                 {a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.title}</a> : a.title}
+                {a.artists.length > 0 && <div className="trend-pills">{a.artists.map((t) => <ArtistPill key={t.id} t={t} />)}</div>}
                 {a.excerpt && <div className="muted small">{a.excerpt}</div>}
               </td>
             </tr>
@@ -100,6 +125,22 @@ function ArticleTable({ articles, showSource }: { articles: NewsArticle[]; showS
         </tbody>
       </table>
     </div>
+  )
+}
+
+const CONFIDENCE: Record<NewsArtistTag['confidence'], string> = {
+  high: 'named in the headline',
+  medium: 'named only in the summary',
+  low: 'name is also an ordinary word; counted because the headline has a music word',
+}
+
+function ArtistPill({ t }: { t: NewsArtistTag }) {
+  const why = [CONFIDENCE[t.confidence], t.match === 'alias' ? 'matched an alias' : '', `tier: ${t.tier}`,
+    t.plays ? `${t.plays} plays` : ''].filter(Boolean).join(' · ')
+  return (
+    <span className={`pill trend${t.location === 'excerpt' ? ' muted' : ''}`} title={why}>
+      {t.location === 'excerpt' ? 'mentions ' : ''}{t.name}{t.confidence === 'low' ? ' ?' : ''}{t.plays ? ` 🎧${t.plays}` : ''}
+    </span>
   )
 }
 

@@ -235,3 +235,4 @@ input.grow { flex: 1; }
   position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom, 0px)); background: var(--bg);
   display: flex; gap: 10px; align-items: center; padding: 10px 0;
 }
+.pill-warn { background: var(--warn-bg); color: var(--warn-text); }
