@@ -378,3 +378,51 @@ conflicts, no lag; every feature works the same on the phone).
 - Reddit: `.json` listings return 403 to unauthenticated requests; Reddit announced 2026-09-30 that RSS support ends
   2026-11-13, new public API requests close after 2026-10-31 and public API access closes by March 2027 (reported by
   Decrypt, TechWyse, aiweekly; Reddit's own posts not read directly). The rap publication feeds replace it (no manual Reddit check).
+
+## Release catalogs: provider bake-off (M4, 2026-10-23; `tracker/catalog.py`)
+
+**Method.** 22 watchlist artists were sampled:
+- 10 with a Deezer release dated that Friday;
+- 2 with an album announced in the news but not yet out;
+- 10 more spread across play tiers, from 1.4M Deezer fans down to a few hundred.
+
+Each provider was asked for the artist, then its releases. The per-artist script and table are in gitignored
+`data/m0/` (they name the user's artists).
+
+| | Deezer | MusicBrainz | iTunes Search |
+| --- | --- | --- | --- |
+| Artist found (exact name) | 22/22 | 18/22 (2 failed on a 503 rate limit at 1.1 s spacing) | 22/22 |
+| That Friday's releases (12, from Deezer's list) | 12/12 (sample drawn from Deezer) | 2/12 | 10/12, same day |
+| Announced album listed before release (2) | 0/2 | 2/2 | 2/2, with dates |
+| Release dates vs Deezer | – | – | 3 of 4 differences were 1-2 days (storefront time zones); one was 8 days |
+
+**Kept: Deezer and iTunes Search.**
+- Deezer is fast and lists releases on their day. It never lists them ahead.
+- iTunes covers same-day releases about as well and lists pre-orders with their date. One of them filled a release
+  date that no article gave.
+- Calls are spaced 3.1 s apart (Apple asks for about 20 a minute). The US storefront is used.
+
+**MusicBrainz: artist ids only.** It rarely has new releases the week they're out, and it rate-limits.
+
+**Apple Music API: still no.** The free iTunes API covered what the bake-off needed.
+
+**How it runs.**
+- Each 30-minute news check polls 16 artists' catalogs (`CATALOG_ARTISTS_PER_CHECK`), least recently checked
+  first. Artists with a release story in the last 2 weeks jump the queue, so each artist is checked about every
+  10 hours. That costs about 1 minute per check.
+- Releases older than 90 days aren't kept.
+- A real poll of 30 artists took 184 s and stored 155 releases.
+
+**Rules.**
+- A release story whose title matches a catalog entry (feature tags, "- Single" and "(Deluxe)" are ignored)
+  becomes `scheduled` or `released` and `confirmed`.
+- It's `conflicting` if an article date and a catalog date are more than 2 days apart, or the catalogs disagree by
+  that much. Both values are kept as evidence.
+- With no catalog entry, nothing changes.
+- **Catalog-only stories:** releases from the last 7 days, or listed for the next 120 days, that no news story
+  covers. They're shown in a separate **New releases** view.
+  - A guest spot on someone else's track says "featured on".
+  - A release that a news headline already names becomes evidence on that story instead.
+  - Compilations are skipped.
+- On the real-data trial this confirmed both announced albums' dates and surfaced an album pre-order (with its
+  date) by a core artist that no feed had covered.

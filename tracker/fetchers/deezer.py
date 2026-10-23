@@ -73,6 +73,14 @@ class DeezerClient:
         exact = [a for a in body.get("data", []) if a.get("name", "").casefold().strip() == target]
         return max(exact, key=lambda a: a.get("nb_fan") or 0) if exact else None
 
+    def releases(self, artist_id: int, limit: int = 50) -> list[dict]:
+        """Newest releases (tracker/catalog.py): {provider_id, title, record_type, release_date, url}. Deezer lists
+        a release on its day, never before (2026-10-23 bake-off)."""
+        body = self._get(ALBUMS_URL.format(artist_id), {"limit": limit}, artist_id)
+        return [{"provider_id": str(a["id"]), "title": a.get("title") or "", "record_type": a.get("record_type") or "",
+                 "release_date": a["release_date"], "url": a.get("link")}
+                for a in (body or {}).get("data", []) if a.get("release_date")]
+
     def artist_genre(self, artist_id: int) -> str | None:
         """The genre most of an artist's releases share, in Ticketmaster's words, or None when unclear."""
         body = self._get(ALBUMS_URL.format(artist_id), {"limit": 25}, artist_id)

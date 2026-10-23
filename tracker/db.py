@@ -308,6 +308,8 @@ CREATE TABLE IF NOT EXISTS artist_identities (
     deezer_id INTEGER,
     attraction_id TEXT,             -- the events pipeline's artist, matched by name key
     ids_checked_at TEXT,            -- last Deezer / MusicBrainz lookup
+    itunes_id INTEGER,              -- iTunes artist id (tracker/catalog.py), found on the first catalog check
+    releases_checked_at TEXT,       -- last catalog check (Deezer + iTunes), tracker/catalog.py
     created_at TEXT NOT NULL
 );
 
@@ -337,7 +339,8 @@ CREATE TABLE IF NOT EXISTS stories (
     release_date TEXT,              -- YYYY-MM-DD when an article states one (first stated; see verification)
     verification TEXT NOT NULL DEFAULT 'unverified',  -- unverified, corroborated (2+ sources), confirmed (M4), conflicting
     sensitive INTEGER NOT NULL DEFAULT 0,  -- deaths, arrests, lawsuits, health: never auto-promoted, no template hooks
-    dated INTEGER NOT NULL DEFAULT 1,  -- 0 = only undated items from before tracking began: time unknown, listed last
+    dated INTEGER NOT NULL DEFAULT 1,
+    origin TEXT NOT NULL DEFAULT 'news',  -- news (from articles) or catalog (a release no feed covered, M4)  -- 0 = only undated items from before tracking began: time unknown, listed last
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
     feedback TEXT,                  -- your call (M5): interested, not_my_lane, already_covered
@@ -365,6 +368,24 @@ CREATE TABLE IF NOT EXISTS story_evidence (
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_story_evidence_story ON story_evidence(story_id);
+
+-- Catalog records per provider (tracker/catalog.py, roadmap M4), side by side so gaps and disagreements show.
+-- Only recent and upcoming releases are kept (catalog.KEEP_DAYS); nothing here is guessed.
+CREATE TABLE IF NOT EXISTS releases (
+    id INTEGER PRIMARY KEY,
+    artist_id INTEGER NOT NULL REFERENCES artist_identities(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,         -- deezer, itunes
+    provider_id TEXT NOT NULL,
+    title TEXT NOT NULL,            -- as the provider writes it ("Glass Hours - Single")
+    title_key TEXT NOT NULL,        -- normalized for matching across providers and headlines (catalog.title_key)
+    record_type TEXT,               -- album, ep, single (compile = compilation, Deezer)
+    release_date TEXT NOT NULL,     -- YYYY-MM-DD; later than today = a pre-order / scheduled release
+    url TEXT,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    UNIQUE (artist_id, provider, provider_id)  -- a joint album is listed under each of its artists
+);
+CREATE INDEX IF NOT EXISTS idx_releases_artist ON releases(artist_id, release_date);
 
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
@@ -408,6 +429,8 @@ _ADDED_COLUMNS = {
                "planned_for": "TEXT", "series": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
+    "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT"},  # catalog.py (M4)
+    "stories": {"origin": "TEXT NOT NULL DEFAULT 'news'"},
 }
 # Run once, right after the column is added to an existing database.
 _BACKFILL = {

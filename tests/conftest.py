@@ -14,6 +14,7 @@ def no_real_services(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "VENUE_CALENDARS", [])    # or fetch real venue sites
     monkeypatch.setattr(config, "NEWS_SOURCES", [])       # or real music-news feeds
     monkeypatch.setattr(config, "WATCHLIST_IDS_PER_RUN", 0)  # or Deezer/MusicBrainz artist lookups
+    monkeypatch.setattr(config, "CATALOG_ARTISTS_PER_CHECK", 0)  # or Deezer/iTunes release catalogs
     monkeypatch.setattr(config, "LISTENING_DB", "")       # or read the user's real listening history
     monkeypatch.setattr(config, "PERPLEXITY_API_KEY", "")  # or spend money on web lookups
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")   # or on Claude drafts

@@ -96,6 +96,10 @@ NAMED = re.compile(rf"\b(?i:new|debut|sophomore|third|fourth|next|upcoming|surpr
                    rf"arrives|feat\.|ft\.|featuring|is|and)\b))")
 
 
+SINGLE_SUFFIX = re.compile(r"\s+-\s+(single|ep)\s*$", re.I)  # iTunes: "Glass Hours - Single"
+SONG_BY = re.compile(r"^(.+?)\s+[–—-]\s+(?:Song|Single|Album|EP) by\b", re.I)  # "Glass Hours – Song by Nova Vale"
+
+
 def classify(title: str, excerpt: str | None = None, source_key: str = "") -> tuple[str, str]:
     """(story type, why). The headline decides first. The summary only if the headline matched nothing, and then
     not for release types: summaries mention songs and features in passing ("his playlist featuring...")."""
@@ -130,7 +134,7 @@ def release_status(story_type: str, title: str, excerpt: str | None) -> str | No
 
 def release_title(title: str) -> str | None:
     """A release name the headline states: a quoted title, or "New Album Glass Hours"."""
-    m = NAMED.search(title)
+    m = NAMED.search(title) or SONG_BY.search(title)
     if m:
         return m.group(1).strip()
     m = QUOTED.search(title)
@@ -275,15 +279,11 @@ def _summarize(s: dict) -> dict:
         verification = "conflicting"
     evidence = []
     for a in arts:
-        if a["release_date"]:
-            evidence.append({"provider": a["source_name"], "url": a["url"], "claim": "release_date",
-                             "value": a["release_date"], "excerpt": a["title"], "observed_at": a["seen_at"]})
-        if a["release_title"]:
-            evidence.append({"provider": a["source_name"], "url": a["url"], "claim": "title",
-                             "value": a["release_title"], "excerpt": a["title"], "observed_at": a["seen_at"]})
-        if a["status"]:
-            evidence.append({"provider": a["source_name"], "url": a["url"], "claim": "status", "value": a["status"],
-                             "excerpt": a["title"], "observed_at": a["seen_at"]})
+        said = {"kind": "article", "provider": a["source_name"], "url": a["url"], "excerpt": a["title"],
+                "observed_at": a["seen_at"]}
+        for claim in ("release_date", "release_title", "status"):
+            if a[claim]:
+                evidence.append({**said, "claim": "title" if claim == "release_title" else claim, "value": a[claim]})
     return {
         "key": f"{s['primary']}:{s['family']}:{first['id']}",
         "story_type": story_type, "rule": rule, "primary_artist_id": s["primary"],
@@ -293,9 +293,112 @@ def _summarize(s: dict) -> dict:
         "sensitive": int(any(a["type"] in SENSITIVE_TYPES for a in arts)),
         # Undated items from before tracking began carry the time we first read the feed; the dated ones say more
         "first_seen": min(a["seen_at"] for a in timed), "last_seen": max(a["seen_at"] for a in timed),
-        "dated": int(not all(a["undated"] for a in arts)),
+        "dated": int(not all(a["undated"] for a in arts)), "origin": "news", "headlines": [a["title"] for a in arts],
         "article_ids": [a["id"] for a in arts], "evidence": evidence,
     }
+
+
+# ---------- catalogs (M4): evidence for release stories, and releases no feed covered ----------
+
+CATALOG_RECENT_DAYS = 7     # a catalog-only story for a release out in the last week
+CATALOG_AHEAD_DAYS = 120    # or listed for the next four months (an iTunes pre-order)
+DATE_TOLERANCE_DAYS = 2     # providers differ by a day or two around midnight (time zones); not a conflict
+PROVIDER_NAMES = {"deezer": "Deezer", "itunes": "Apple Music (iTunes)"}
+
+
+def _days_apart(a: str, b: str) -> int:
+    return abs((date.fromisoformat(a) - date.fromisoformat(b)).days)
+
+
+def _catalog_evidence(rows) -> list[dict]:
+    out = []
+    for r in rows:
+        said = {"kind": "catalog", "provider": PROVIDER_NAMES.get(r["provider"], r["provider"]), "url": r["url"],
+                "excerpt": r["title"], "observed_at": r["last_seen"]}
+        out += [{**said, "claim": "release_date", "value": r["release_date"]},
+                {**said, "claim": "title", "value": r["title"]}]
+    return out
+
+
+def add_catalog(conn, built: list[dict], today: date) -> list[dict]:
+    """Check release stories against `releases` (in place) and return catalog-only stories.
+
+    A story whose release title matches a catalog entry gets catalog evidence; its status moves to `scheduled`
+    (listed for a later date) or `released`, and it's `confirmed`, unless an article's date and the catalog's are
+    more than DATE_TOLERANCE_DAYS apart (or the catalogs disagree that much): then it's `conflicting`. No catalog
+    entry changes nothing: an announcement stays announced."""
+    from .catalog import FEAT, featured, title_key
+    rows = conn.execute("""SELECT r.*, w.name AS artist_name FROM releases r
+                           JOIN artist_identities w ON w.id = r.artist_id
+                           WHERE w.muted = 0 AND w.tier IN ('core', 'adjacent', 'watch', 'breakout')""").fetchall()
+    by_release: dict[tuple[int, str], list] = {}
+    for r in rows:
+        by_release.setdefault((r["artist_id"], r["title_key"]), []).append(r)
+    matched = set()
+    for s in built:
+        if s["story_type"] not in RELEASE_FAMILY or not s["release_title"]:
+            continue
+        k = (s["primary_artist_id"], title_key(s["release_title"]))
+        found = by_release.get(k)
+        if not found:
+            continue
+        matched.add(k)
+        catalog_dates = sorted({r["release_date"] for r in found})
+        status = "released" if catalog_dates[0] <= today.isoformat() else "scheduled"
+        if s["release_status"] is None or STATUS_ORDER.index(status) > STATUS_ORDER.index(s["release_status"]):
+            s["release_status"] = status
+        article_dates = {e["value"] for e in s["evidence"] if e["claim"] == "release_date"}
+        disagree = _days_apart(catalog_dates[0], catalog_dates[-1]) > DATE_TOLERANCE_DAYS or any(
+            min(_days_apart(d, c) for c in catalog_dates) > DATE_TOLERANCE_DAYS for d in article_dates)
+        s["verification"] = "conflicting" if disagree or s["verification"] == "conflicting" else "confirmed"
+        s["release_date"] = s["release_date"] or catalog_dates[0]
+        s["evidence"] += _catalog_evidence(found)
+
+    recent = (today - timedelta(days=CATALOG_RECENT_DAYS)).isoformat()
+    ahead = (today + timedelta(days=CATALOG_AHEAD_DAYS)).isoformat()
+    headlines = {}  # artist -> [(normalized headline, story)]: a release a headline already names isn't news on its own
+    for s in built:
+        for h in s.get("headlines", []):
+            headlines.setdefault(s["primary_artist_id"], []).append((f" {title_key(h)} ", s))
+    out = []
+    for (artist_id, key), found in by_release.items():
+        found = [r for r in found if r["record_type"] != "compile"]
+        dates = sorted({r["release_date"] for r in found})
+        if (artist_id, key) in matched or not key or not dates or not recent <= dates[0] <= ahead:
+            continue
+        named_in = next((s for h, s in headlines.get(artist_id, []) if f" {key} " in h), None)
+        if named_in:  # e.g. the single an album announcement says to "hear": evidence there, not a second card
+            named_in["evidence"] += _catalog_evidence(found)
+            continue
+        first = min(found, key=lambda r: (r["release_date"], r["provider"]))
+        kind = {"album": "album", "ep": "EP"}.get(first["record_type"], "single")
+        name = SINGLE_SUFFIX.sub("", first["title"])
+        released = dates[0] <= today.isoformat()
+        guest = featured(first["title"], first["artist_name"])
+        if guest:  # someone else's track with them on it (catalogs list those under the guest too)
+            name = FEAT.sub("", name).strip()
+            title = f"{first['artist_name']} is featured on “{name}”" + ("" if released else f", out {dates[0]}")
+            when = f"{dates[0]}T04:00:00+00:00" if released else min(r["first_seen"] for r in found)
+            story_type = "collaboration"
+        elif released:
+            title = f"{first['artist_name']} released the {kind} “{name}”"
+            when = f"{dates[0]}T04:00:00+00:00"  # midnight Eastern on release day
+            story_type = "single_release" if kind == "single" else "album_release"
+        else:
+            title = f"{first['artist_name']}: {kind} “{name}” is listed for {dates[0]}"
+            when = min(r["first_seen"] for r in found)  # when the pre-order showed up
+            story_type = "single_release" if kind == "single" else "album_announcement"
+        providers = sorted({PROVIDER_NAMES.get(r["provider"], r["provider"]) for r in found})
+        out.append({
+            "key": f"{artist_id}:catalog:{key}", "story_type": story_type,
+            "rule": "catalog: listed on " + " and ".join(providers) + " (no feed covered it)",
+            "primary_artist_id": artist_id, "other_artist_ids": [], "title": title, "release_title": name,
+            "release_status": "released" if released else "scheduled", "release_date": dates[0],
+            "verification": "conflicting" if _days_apart(dates[0], dates[-1]) > DATE_TOLERANCE_DAYS else "confirmed",
+            "sensitive": 0, "first_seen": when, "last_seen": when, "dated": 1, "origin": "catalog",
+            "article_ids": [], "evidence": _catalog_evidence(found),
+        })
+    return out
 
 
 def rebuild(conn, now: datetime | None = None) -> int:
@@ -303,13 +406,14 @@ def rebuild(conn, now: datetime | None = None) -> int:
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=STORY_DAYS)).replace(microsecond=0).isoformat()
     built = cluster(_load(conn, since))
+    built += add_catalog(conn, built, now.date())
     existing = {r["key"]: r for r in conn.execute("SELECT id, key, feedback, alert_id FROM stories")}
     keep = {k for k, r in existing.items() if r["feedback"] or r["alert_id"]}
     made = set()
     for s in built:
         fields = {k: s[k] for k in ("story_type", "rule", "primary_artist_id", "title", "release_title",
-                                    "release_status", "release_date", "verification", "sensitive", "dated", "first_seen",
-                                    "last_seen")}
+                                    "release_status", "release_date", "verification", "sensitive", "dated", "origin",
+                                    "first_seen", "last_seen")}
         fields["other_artist_ids"] = json.dumps(s["other_artist_ids"])
         if s["key"] in existing:
             story_id = existing[s["key"]]["id"]
@@ -325,9 +429,9 @@ def rebuild(conn, now: datetime | None = None) -> int:
                          [(story_id, i) for i in s["article_ids"]])
         conn.execute("DELETE FROM story_evidence WHERE story_id=?", (story_id,))
         conn.executemany("""INSERT INTO story_evidence (story_id, kind, provider, url, excerpt, claim, value, observed_at)
-                            VALUES (?, 'article', ?, ?, ?, ?, ?, ?)""",
-                         [(story_id, e["provider"], e["url"], e["excerpt"], e["claim"], e["value"], e["observed_at"])
-                          for e in s["evidence"]])
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                         [(story_id, e["kind"], e["provider"], e["url"], e["excerpt"], e["claim"], e["value"],
+                           e["observed_at"]) for e in s["evidence"]])
     stale = [r["id"] for k, r in existing.items() if k not in made and k not in keep]
     if stale:
         conn.execute(f"DELETE FROM stories WHERE id IN ({','.join('?' * len(stale))})", stale)

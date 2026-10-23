@@ -200,4 +200,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   user's M0 kinds: legal, politics, brand/media, lifestyle, roundup), release status and dates, conflicting dates,
   clustering with a shared-word check, `/api/news/stories`, Stories view (default) in Music news. Checked with
   headless Edge screenshots on a DB copy. 30 new tests (327).
+- Merged M2 + M3 (`b11d41c`), dashboard restarted; first news check built 335 artists and 29 stories live.
+- M4 bake-off (22 artists; decisions.md): kept Deezer + iTunes Search, MusicBrainz for ids only. `feature/catalog`:
+  `releases`, catalog polling in the news job (16 artists/check), catalog evidence (scheduled/released, confirmed or
+  conflicting), catalog-only stories in a New releases view, guest spots as "featured on". 15 new tests (341).
 

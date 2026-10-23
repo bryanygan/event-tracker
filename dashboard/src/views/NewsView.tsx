@@ -7,7 +7,7 @@ import { fmtWhen } from '../App'
 // Music news (roadmap M1-M2): what the feeds published, read every 30 minutes, tagged with your watchlist artists.
 // Stories group the articles (M3); scoring comes in M5.
 export default function NewsView({ refreshKey }: { refreshKey: number }) {
-  const [view, setView] = useState<'stories' | 'articles'>('stories')
+  const [view, setView] = useState<'stories' | 'releases' | 'articles'>('stories')
   const [days, setDays] = useState(3)
   const [q, setQ] = useState('')
   const [source, setSource] = useState('')
@@ -56,13 +56,16 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
 
       <div className="toolbar">
         <button className={view === 'stories' ? 'tab active' : 'tab'} onClick={() => setView('stories')}>Stories</button>
+        <button className={view === 'releases' ? 'tab active' : 'tab'} onClick={() => setView('releases')}
+                title="Releases by your watchlist artists that no feed covered, from Deezer and Apple Music (iTunes)">New releases</button>
         <button className={view === 'articles' ? 'tab active' : 'tab'} onClick={() => setView('articles')}>All headlines</button>
         <select value={days} onChange={(e) => setDays(+e.target.value)}>
           {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
         </select>
       </div>
 
-      {view === 'stories' && <StoriesList refreshKey={refreshKey} days={days} />}
+      {view === 'stories' && <StoriesList refreshKey={refreshKey} days={days} origin="news" />}
+      {view === 'releases' && <StoriesList refreshKey={refreshKey} days={days} origin="catalog" />}
       {view === 'articles' && <>
       <div className="toolbar">
         <input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />
