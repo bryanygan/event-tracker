@@ -314,7 +314,7 @@ conflicts, no lag; every feature works the same on the phone).
   the process dies, so it can't go stale.
 - Why: the 2hollis Philly date (Fillmore, 2027-02-16) wasn't in Ticketmaster's area search at 6:30 AM on
   2026-10-22; it was there by ~4 PM. The user found it by hand. The 4:30 run picks such shows up; 11:30 halves the gap.
-- User: "we can ditch the philly-events.pages.dev website since events.prin.cloud is up and running." Deleted the
+- User: "we can ditch the philly-events.pages.dev website since [the tunnel hostname] is up and running." Deleted the
   Pages project and its Access app ("Philly Events dashboard"; the "(editing)" app is the live one) and blanked
   PAGES_PROJECT. `tracker/publish.py` and the static build stay as an optional, off-by-default feature.
 
