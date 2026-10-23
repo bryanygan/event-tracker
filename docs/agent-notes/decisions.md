@@ -351,3 +351,16 @@ conflicts, no lag; every feature works the same on the phone).
 - Drafts per run: 20 with Claude (8 with Ollama). `python -m tracker.run --redraft-local` writes Claude drafts
   for live alerts whose newest draft came from Ollama; it stops near the daily cap or after a Claude failure
   rather than redrafting locally.
+
+## Editorial calendar (P1-13, 2026-10-22; `tracker/planner.py`)
+
+- User direction: a nice-to-have, kept separate from the other tabs (Calendar is the last tab; the queue cards,
+  Posted form and opportunity scores don't show or use plans). Posting 2-3 times a day is fine when the content
+  is worth it, and a plan is a shortlist for that day, not a commitment, so the calendar doesn't warn about busy
+  days, format mix, lane share or repeated artists.
+- A plan is two fields on the alert: `planned_for` (UTC) and `series` (NULL = config.SERIES_FOR_FORMAT for its
+  format). Logged posts get `series` too, defaulted from the alert (no form field). No new stage.
+- Computed per request from opportunities.queue + posts: this week and next from Monday, by local (ET) day. Each
+  day: posted, planned, and "due" (the post-by of ideas not planned). The only note on a plan is factual: "after it
+  goes stale" / "after its post-by time". "Mix" (formats, lane share per week) and the Series table ("behind" once
+  a series with a cadence has gone longer than usual since its last post) are for reference.

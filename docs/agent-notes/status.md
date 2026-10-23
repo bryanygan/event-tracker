@@ -91,8 +91,9 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-12 midday check | Live 2026-10-22 (`PhillyEvents-Midday`, 11:30 AM): `--midday`, no LLM/lookups/publish; one-run-at-a-time lock |
 | Draft progress bar | Live 2026-10-22: job carries alert_id/step/estimate/elapsed; bar + step under the card's buttons, scroll to the new draft |
 | Claude drafts | Live 2026-10-22 (`c90ed9f`) |
-| Cleanup | Built 2026-10-22 on `feature/cleanup`: Deezer genre check, 20 Claude drafts/run, `--redraft-local` |
-| P1-13, P2-14 | Not started |
+| Cleanup | Live 2026-10-22 (`d292940`, `d58a4c1`): Deezer genre check, 20 Claude drafts/run, `--redraft-local` (23 alerts redrafted), genre refresh in live alerts |
+| P1-13 editorial calendar | Built 2026-10-22 on `feature/calendar`, NOT merged (user said wait): `tracker/planner.py`, `/api/calendar`, a separate last Calendar tab, no warnings |
+| P2-14 | Not started |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.
 P0-06 merged 2026-10-22 (user approved); branch deleted.

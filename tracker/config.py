@@ -145,6 +145,19 @@ REASON_MIN = 75            # a component counts as a reason on the card at this 
 TREND_NOTES_MAX = 500      # refuse new notes past this (each is matched against every idea on every queue load)
 TREND_NOTE_DAYS = 7       # a trend note stops counting this long after you saw it (unless you set expires_at)
 
+# --- Editorial calendar (tracker/planner.py) ---
+# A nice-to-have tab. A plan is yours: a posting time and a series label on an idea, a shortlist for that day
+# rather than a commitment (plan several, pick on the day). Nothing posts at that time.
+CALENDAR_DAYS = 14                 # this week and next, starting Monday
+CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM local
+# Default series by format: recurring shows of the page. Change a single idea's series on its card.
+SERIES_FOR_FORMAT = {
+    "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
+    "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
+}
+# How often a series usually runs. The Series table marks one "behind" when its last post is older than this.
+SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}
+
 # --- Posted videos (tracker/posts.py) ---
 # A group (a format, a video style) needs this many posts with numbers at the same age before the
 # dashboard compares it with others. Below that it's shown as "too few to compare".

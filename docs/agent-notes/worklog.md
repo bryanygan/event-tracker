@@ -175,3 +175,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Claude trial on a DB copy (see decisions.md); CLAUDE_EFFORT=medium, HOUSE_TAGS typo fix, batch fallback. 254 tests.
 - `feature/cleanup`: Deezer release genres check Ticketmaster's (decisions.md), 20 drafts per run with Claude,
   `--redraft-local` for the old Ollama drafts. 8 new tests (262).
+- Merged `feature/cleanup` (`d292940`); `--from-cache` run backfilled Deezer genres for 600 artists (the rest on
+  the next run); `new_tour` alerts never refresh, so `feature/genre-refresh` (`d58a4c1`) updates show genres in
+  live alerts each run (posted alerts excluded, e.g. 2hollis). `--redraft-local`: 23 Claude drafts, 0 fact
+  warnings, $0.007 this month.
+- `feature/calendar` (P1-13): planner.py, `/api/calendar`, Calendar tab, series on posts. User asked to keep it
+  separate from the other tabs and drop the busy-day/mix/repeat warnings (posting 2-3 a day is fine; plans are a
+  shortlist). Not merged yet (user's call). 6 new tests (269).

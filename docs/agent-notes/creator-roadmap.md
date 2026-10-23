@@ -753,6 +753,8 @@ These are suggested GitHub issues/PR-sized work packages. Create branches and PR
 
 ### P1-13 — Editorial calendar, repeat-series planning
 
+**Status (2026-10-22):** implemented (`tracker/planner.py`, Calendar tab); see decisions.md.
+
 **Touch:** opportunity status/schema, dashboard.  
 **Implement:** planned posting time, series labels, balance by format/niche, already-covered topic alert.  
 **Acceptance:** creator retains final control; no automatic publishing; historic posted records preserved.
