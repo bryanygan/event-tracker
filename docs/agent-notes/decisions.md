@@ -377,4 +377,4 @@ conflicts, no lag; every feature works the same on the phone).
   conditional requests with 304, so 30-minute polling is ~620 mostly-empty requests a day.
 - Reddit: `.json` listings return 403 to unauthenticated requests; Reddit announced 2026-09-30 that RSS support ends
   2026-11-13, new public API requests close after 2026-10-31 and public API access closes by March 2027 (reported by
-  Decrypt, TechWyse, aiweekly; Reddit's own posts not read directly). So r/hiphopheads stays a manual check.
+  Decrypt, TechWyse, aiweekly; Reddit's own posts not read directly). The rap publication feeds replace it (no manual Reddit check).

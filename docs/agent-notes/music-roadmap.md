@@ -66,7 +66,7 @@ The advice confirmed these were implemented on 2026-10-22; all are still on `mai
 | Creator-first queue | `QueueView.tsx` | Promoted music stories appear here with a Music pill (M5) |
 | Post analytics | `tracker/posts.py`, `PostsView.tsx` | New formats appear automatically; add a pillar grouping (M6) |
 | Content angles | `tracker/angles.py` | New music angles/formats (M6) |
-| Manual trend notes | `tracker/trends.py` | Match notes against music stories too (M5); the manual Reddit/TikTok channel |
+| Manual trend notes | `tracker/trends.py` | Match notes against music stories too (M5); for anything you spot by hand (TikTok sounds, a thread you read) |
 | 9:16 slides | `tracker/slides.py` | Music slide manifests (M6) |
 | Perplexity research | `tracker/context.py` | Research by story or artist, not only by event alert (M6) |
 | Remote editing | Cloudflare Tunnel + Access | Works for the new tab unchanged (writes are audited the same way) |
@@ -131,9 +131,9 @@ unauthenticated requests. The `.rss` feeds still answer, but Reddit announced on
 supporting RSS on 2026-11-13**, stops accepting new public API requests after 2026-10-31, and closes public API
 access by March 2027 (reported by Decrypt, TechWyse and others; see decisions.md). The Responsible Builder Policy
 already requires approval for API access. So Reddit is **not** automated: building on a feed that disappears in
-three weeks would be wasted work and against the direction of Reddit's rules. Instead, r/hiphopheads' `[FRESH]`
-posts and top threads are a **manual** daily check you log as trend notes (M5 makes trend notes match music
-stories). The same goes for r/popheads and r/indieheads.
+three weeks would be wasted work and against the direction of Reddit's rules. **Decided 2026-10-23: the rap
+publication feeds below replace Reddit entirely** (no daily manual check either). If you happen to see something
+on Reddit you can still log it as a trend note, but nothing depends on it.
 
 **So the M1 source list is 13 feeds**, every niche covered: Pitchfork news (+ album reviews), Stereogum,
 The FADER, Rated R&B, Mixmag, The Line of Best Fit, Billboard, XXL, HotNewHipHop, AllHipHop, The Source, Vibe,
@@ -159,7 +159,7 @@ Release/discovery APIs:
 | Deezer | already in use | No |
 | YouTube Data API | later (decided 2026-10-23) | Free key with a daily quota (M8) |
 | Spotify | not used for this | `/browse/new-releases` is removed for Development Mode apps (2026 migration guide); keep Spotify out of the foundation |
-| Reddit | not automated | `.json` 403, RSS ending 2026-11-13, new API requests closed after 2026-10-31; manual only (above) |
+| Reddit | not used | `.json` 403, RSS ending 2026-11-13, new API requests closed after 2026-10-31; the rap feeds replace it (above) |
 
 ---
 
@@ -241,21 +241,19 @@ hyperpop and alternative artists.
    requests are already checked; still read each site's terms for feed use and note them.
 2. For each source record in a scratch file: item count, how far back it goes, whether excerpts are included,
    and the share of items that are music news (Vibe, Uproxx and The Source also publish non-music stories).
-3. Run a throwaway script (scratchpad, not the repo) **every 30 minutes** for about a week: conditional requests,
-   item metadata into a scratch SQLite file, titles matched against your 350 core artists (25+ plays). No Claude.
-   Alongside it, you skim r/hiphopheads `[FRESH]` and top posts once a day and jot what you'd have posted about:
-   that's the yardstick for "did the feeds catch what the community was talking about".
+3. Run a throwaway script (outside the app code, in the gitignored `data/m0/`) **every 30 minutes** for about a
+   week: conditional requests, item metadata into a scratch SQLite file, titles matched against your 350 core
+   artists (25+ plays) at report time. No Claude.
 4. Report: articles per day per source, the share that mention a watchlist artist, duplicates across sources (how
    many stories each article count collapses to), the story types seen, **coverage for small artists** (of your
    core artists who released something that week, from Deezer `/artist/{id}/albums`, how many showed up in any
-   feed at all), and how many of your r/hiphopheads notes the feeds also caught.
+   feed at all), and a sample of matched stories for you to judge: "would I have posted about this?".
 
 **Acceptance:** a source list with terms notes, a coverage number for small artists, and a go/no-go per source.
 If small-artist coverage is poor, that decides how much weight M2's catalog checks and M7's discovery carry.
 
 **Rules check:** one request per feed per 30 minutes (within every source's limits, section 3.3), conditional
-requests where supported, nothing committed except the findings (no listening data in the write-up). Reddit is
-read by you in a browser, not by the script.
+requests where supported, nothing committed except the findings (no listening data in the write-up).
 
 ### M1: RSS news discovery (M)
 
@@ -490,9 +488,9 @@ called "trending" without two signals.
   channel RSS feeds where available.
 - **Official artist/label sources**: label newsletters, artist sites with feeds, press pages; these are the
   strongest `confirmed` evidence.
-- **Reddit**: r/hiphopheads, r/popheads, r/indieheads stay a **manual** source (log what you see as trend notes).
-  `.json` is already 403, RSS ends 2026-11-13, and new API requests close after 2026-10-31, so there's no lasting
-  automated route; revisit only if Reddit offers an approved one for this use. Never scrape around it.
+- **Reddit**: not used (the rap feeds replace it, decided 2026-10-23). `.json` is already 403, RSS ends
+  2026-11-13, and new API requests close after 2026-10-31, so there's no lasting automated route; revisit only if
+  Reddit offers an approved one for this use. Never scrape around it.
 - **Cross-pillar link**: when an artist with music stories announces a Philly date, the event alert shows their
   recent story history, and the story shows the Philly date (one `artist_identities` row joins both).
 - **Time-sensitive alerts to your phone**: only for stories above both the relevance and confidence thresholds,
@@ -539,7 +537,6 @@ events-only view (filter) looks exactly like What to post does today.
 | News RSS feeds | Every 30–60 min, where permitted | `PhillyEvents-News` **every 30 minutes** (decided; within every source's limits, section 3.3); per-source `poll_minutes` and back-off on errors |
 | Official artist/label feeds | Every 30–60 min, if supported | Same task (M8) |
 | Catalog metadata (Deezer, MusicBrainz, iTunes Search; the advice's Apple Music row) | Every 6–12 hours | Inside the 6:30 AM and 4:30 PM pipeline runs (M4) |
-| Reddit communities | (manual, per the advice) | You, in a browser, daily; logged as trend notes |
 | Emerging-artist metrics | Daily snapshots | 6:30 AM run (M7) |
 | Genre discovery / watchlist expansion | Weekly | Monday 6:30 AM run (M7) |
 | Perplexity research | Only for strong stories | On demand or above a score threshold, existing caps (M6) |
@@ -584,14 +581,14 @@ lock, so they never fight over the database.
 | Risk | Handling |
 | --- | --- |
 | Feeds miss small/underground artists | M0 measures it; M4 catalog checks catch releases no feed covered; M7 discovery |
-| Thin rap coverage (HipHopDX stale, Complex without a feed) | Six working rap feeds found (section 3.3); M0 checks they catch what r/hiphopheads talks about |
+| Thin rap coverage (HipHopDX stale, Complex without a feed) | Six working rap feeds found (section 3.3); M0 measures what they catch |
 | Underground rage/plugg coverage (outlets are YouTube-first) | The FADER/Stereogum + catalog checks for your core artists (M4) + YouTube later (M8) |
-| Reddit going dark for automation | Never a dependency: manual daily check logged as trend notes |
+| Reddit going dark for automation | Not used at all; rap publication feeds instead |
 | Wrong-artist matches (common-word names, namesakes) | Word-boundary matching, `ambiguous_name`, MusicBrainz ids, a second signal required |
 | A tease or rumor drafted as confirmed | Release status on every story; status-aware fact check; templates that state status |
 | Duplicate ideas from many outlets | Story clustering; one card, many sources |
 | Site terms / scraping | RSS only, excerpts only, terms noted per source, no full-article scraping |
-| API policy changes (Spotify, Reddit) | Neither is a dependency; manual observations via trend notes |
+| API policy changes (Spotify, Reddit) | Neither is a dependency |
 | Noise overwhelms the queue | Separate tab until M9; only stories you send reach the queue; feedback buttons |
 | Momentum false positives | Minimum samples, minimum base, two-signal rule, labelled experimental |
 | Mini PC load | 30-minute lightweight job (seconds per run), conditional requests, shared lock, no Ollama in the news job |
@@ -606,8 +603,8 @@ Made by the user on 2026-10-23 (applied throughout this document):
 2. **Last.fm: key saved** in `.env` as `LAST_FM_API_KEY` (plus `LAST_FM_SHARED_SECRET`, unused for read calls).
    Verified working 2026-10-23.
 3. **Rap sources:** the user suggested r/hiphopheads (`.json` for new/top posts) and asked for better, more
-   reputable sources. Result: Reddit can't be automated (`.json` 403, RSS ending 2026-11-13, API closing), so it's
-   a manual daily check; six working rap publication feeds were found instead (XXL, HotNewHipHop, AllHipHop,
+   reputable sources. Result: Reddit can't be automated (`.json` 403, RSS ending 2026-11-13, API closing), and the
+   user chose the publication feeds instead of a manual Reddit check; six working rap feeds (XXL, HotNewHipHop, AllHipHop,
    The Source, Vibe, Uproxx Music), alongside The FADER, Pitchfork and Stereogum (section 3.3).
 4. **Feeds every 30 minutes**, since every source's limits allow it (section 3.3).
 5. **YouTube: later** (M8).
@@ -644,7 +641,7 @@ Still open (decide when the phase comes up):
 | Don't build around Spotify (§3) | Section 3.3 |
 | Core / adjacent / breakout artist groups; measure change over time (§4) | M2, M7 |
 | Momentum needs consistent measurements, minimum samples, multiple observations (§4) | M7 |
-| Reddit manual only unless approved under the Responsible Builder Policy (§4) | Manual daily check (M0, trend notes); no automation (section 3.3), M8 |
+| Reddit manual only unless approved under the Responsible Builder Policy (§4) | Not used: rap feeds replace it (section 3.3, decision 3), M8 |
 | (User, 2026-10-23) Separate tab now, part of What to post once reliable | M9 |
 | Monitor artist/label YouTube channels within quota (§4) | M8 |
 | "Data establishes facts, rules decide attention, AI presents" (§5) | Principle 1 |
