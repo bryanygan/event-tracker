@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import config, db, store, watchlist
+from . import catalog, config, db, store, stories, watchlist
 from .fetchers import news_rss
 
 log = logging.getLogger("tracker.news")
@@ -128,6 +128,14 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
         else:
             watchlist.rematch(conn, [i for r in results for i in r["new_ids"]])
         failed = [f"{r['source']} ({r['error']})" for r in results if r["error"]]
+        # A few artists' release catalogs (Deezer + iTunes), then stories again so catalog evidence shows up
+        try:
+            releases = catalog.poll(conn)
+            if releases["artists"]:
+                stories.rebuild(conn)
+        except Exception as exc:  # the feeds are the job; never lose them over a catalog problem
+            log.warning("Catalog check failed: %s", exc)
+            releases = {"artists": 0, "new": 0, "error": str(exc)}
         store.finish_run(conn, run_id, fetched=new, api_calls=len(results), ok=True,
                          error=("failed: " + ", ".join(failed)) if failed else None)
     except Exception as exc:
@@ -135,7 +143,7 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
                          error=str(exc))
         raise
     return {"run_id": run_id, "read": len(results), "new": new,
-            "not_modified": sum(r["status"] == 304 for r in results), "failed": failed}
+            "not_modified": sum(r["status"] == 304 for r in results), "failed": failed, "catalog": releases}
 
 
 def main(argv=None):

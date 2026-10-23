@@ -18,14 +18,14 @@ const VERIFY: Record<Story['verification'], string> = {
   conflicting: 'sources disagree (see the evidence)',
 }
 
-export default function StoriesList({ refreshKey, days }: { refreshKey: number; days: number }) {
+export default function StoriesList({ refreshKey, days, origin }: { refreshKey: number; days: number; origin: Story['origin'] }) {
   const [stories, setStories] = useState<Story[] | null>(null)
   const [q, setQ] = useState('')
   const [type, setType] = useState('')
   const [open, setOpen] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => { api.stories(days).then(setStories).catch((e) => setError(String(e))) }, [days, refreshKey])
+  useEffect(() => { api.stories(days, origin).then(setStories).catch((e) => setError(String(e))) }, [days, origin, refreshKey])
 
   const types = useMemo(() => [...new Set((stories ?? []).map((s) => s.story_type))].sort(), [stories])
   const shown = useMemo(() => {
@@ -55,7 +55,8 @@ export default function StoriesList({ refreshKey, days }: { refreshKey: number; 
                 <span className="pill" title={s.rule ?? ''}>{TYPE_LABEL[s.story_type] ?? s.story_type}</span>
                 {s.release_status && <span className="pill">{s.release_status}</span>}
                 <span className={`pill${s.verification === 'conflicting' ? ' pill-warn' : ''}`} title={VERIFY[s.verification]}>
-                  {s.source_count} source{s.source_count === 1 ? '' : 's'}{s.verification === 'conflicting' ? ' · conflicting' : ''}
+                  {s.origin === 'catalog' ? 'catalog' : `${s.source_count} source${s.source_count === 1 ? '' : 's'}`}
+                  {s.verification === 'conflicting' ? ' · conflicting' : s.verification === 'confirmed' ? ' · confirmed' : ''}
                 </span>
                 {s.sensitive && <span className="pill pill-warn" title="Deaths, arrests, lawsuits, health: handle with care; never promoted automatically">sensitive</span>}
               </div>
@@ -63,7 +64,8 @@ export default function StoriesList({ refreshKey, days }: { refreshKey: number; 
               <div className="small">
                 {[s.primary_artist, ...s.other_artists].filter(Boolean).map((a) => <ArtistName key={a!.id} a={a!} />)}
                 {s.release_title && <span className="muted"> · “{s.release_title}”</span>}
-                {s.release_date && <span className="muted"> · release date {s.release_date} (as reported)</span>}
+                {s.release_date && <span className="muted"> · release date {s.release_date}
+                  {s.evidence.some((e) => e.kind === 'catalog') ? ' (per the catalogs)' : ' (as reported)'}</span>}
               </div>
             </div>
             <span className="muted small nowrap" style={{ marginLeft: 'auto' }} title={s.dated ? '' : 'the feed gives no date; it was already there when tracking began'}>
@@ -71,7 +73,7 @@ export default function StoriesList({ refreshKey, days }: { refreshKey: number; 
             </span>
           </div>
           <button className="ghost small" onClick={() => setOpen(open === s.id ? null : s.id)}>
-            {open === s.id ? 'Hide sources' : `Sources and why (${s.sources.length})`}
+            {open === s.id ? 'Hide sources' : s.origin === 'catalog' ? 'Where it’s listed' : `Sources and why (${s.sources.length})`}
           </button>
           {open === s.id && (
             <div className="small">
@@ -90,7 +92,8 @@ export default function StoriesList({ refreshKey, days }: { refreshKey: number; 
                   <ul>
                     {s.evidence.filter((e) => e.claim !== 'status').map((e, i) => (
                       <li key={i}>{e.claim === 'release_date' ? 'Release date' : 'Title'}: <strong>{e.value}</strong>
-                        <span className="muted"> ({e.provider})</span></li>
+                        <span className="muted"> ({e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.provider}</a> : e.provider}
+                          {e.kind === 'catalog' ? ', catalog' : ''})</span></li>
                     ))}
                   </ul>
                 </>

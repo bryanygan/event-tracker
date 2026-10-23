@@ -456,6 +456,15 @@ then retain the best-performing providers. Record when catalog data is missing o
 **Acceptance:** bake-off results recorded; stories show verification with evidence per claim; catalog-only
 releases appear for small artists.
 
+**Built 2026-10-23 on `feature/catalog`.** The bake-off results and rules are in decisions.md ("Release
+catalogs"). The work is in `tracker/catalog.py`, `tracker/fetchers/itunes.py`, `DeezerClient.releases`, and
+`add_catalog` in `stories.py`, with 15 new tests.
+- New: the `releases` table (unique per artist, provider and release, so a joint album is listed under each of its
+  artists), `artist_identities.itunes_id` / `releases_checked_at`, and `stories.origin` (news / catalog).
+- MusicBrainz stays for ids only; `itunes_id` is found on an artist's first catalog check.
+- Music news tab: **Stories** (news) / **New releases** (catalog-only) / **All headlines**. Cards show
+  "confirmed", "release date … (per the catalogs)", and catalog links in the evidence.
+
 ### M5: Music opportunity scoring, the Music news tab, and feedback (M)
 
 Advice step 04: "Adapt your Opportunity Score for national music content so it doesn't automatically penalize

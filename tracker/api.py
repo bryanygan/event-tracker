@@ -550,12 +550,15 @@ def news_articles(days: int = 3, source: str | None = None, mine: bool = False, 
 
 
 @app.get("/api/news/stories")
-def news_stories(days: int = 7, c=Depends(get_db)):
-    """Watchlist stories (tracker/stories.py), newest activity first, each with its sources and evidence."""
+def news_stories(days: int = 7, origin: str | None = None, c=Depends(get_db)):
+    """Watchlist stories (tracker/stories.py), newest activity first, each with its sources and evidence.
+    `origin`: news (from articles) or catalog (releases no feed covered, tracker/catalog.py)."""
+    if origin not in (None, "news", "catalog"):
+        raise HTTPException(400, "origin must be news or catalog")
     since = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
     # Stories made only of undated items from before tracking began have an unknown time: after the dated ones
-    rows = c.execute("SELECT * FROM stories WHERE last_seen >= ? ORDER BY dated DESC, last_seen DESC, id DESC",
-                     (since,)).fetchall()
+    rows = c.execute("""SELECT * FROM stories WHERE last_seen >= ? AND (? IS NULL OR origin = ?)
+                        ORDER BY dated DESC, last_seen DESC, id DESC""", (since, origin, origin)).fetchall()
     if not rows:
         return []
     taste = listening.load()

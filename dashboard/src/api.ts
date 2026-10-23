@@ -316,7 +316,7 @@ export type Story = {
   primary_artist: StoryArtist | null; other_artists: StoryArtist[]
   release_title: string | null; release_status: 'rumored' | 'teased' | 'announced' | 'scheduled' | 'released' | null
   release_date: string | null; verification: 'unverified' | 'corroborated' | 'confirmed' | 'conflicting'
-  sensitive: boolean; dated: boolean; first_seen: string; last_seen: string; feedback: string | null; alert_id: number | null
+  sensitive: boolean; dated: boolean; origin: 'news' | 'catalog'; first_seen: string; last_seen: string; feedback: string | null; alert_id: number | null
   sources: { id: number; title: string; url: string | null; source_name: string; seen_at: string }[]
   source_count: number
   evidence: { kind: string; provider: string; url: string | null; claim: string; value: string; excerpt: string | null; observed_at: string }[]
@@ -397,7 +397,7 @@ const staticApi = {
   news: (_days: number, _mine = false) => Promise.resolve<NewsArticle[]>([]),
   newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
   watchlist: () => Promise.resolve<WatchArtist[]>([]),
-  stories: (_days: number) => Promise.resolve<Story[]>([]),
+  stories: (_days: number, _origin?: Story['origin']) => Promise.resolve<Story[]>([]),
   addWatch: readOnly,
   updateWatch: readOnly,
 }
@@ -447,7 +447,8 @@ const liveApi = {
   news: (days: number, mine = false) => req<NewsArticle[]>(`/api/news?days=${days}${mine ? '&mine=true' : ''}`),
   newsSources: () => req<NewsHealth>('/api/news/sources'),
   watchlist: () => req<WatchArtist[]>('/api/watchlist'),
-  stories: (days: number) => req<Story[]>(`/api/news/stories?days=${days}`),
+  stories: (days: number, origin?: Story['origin']) =>
+    req<Story[]>(`/api/news/stories?days=${days}${origin ? `&origin=${origin}` : ''}`),
   addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
     req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
   updateWatch: (id: number, fields: WatchPatch) =>
