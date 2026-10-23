@@ -310,6 +310,17 @@ export type WatchArtist = {
   ambiguous_name: boolean; mbid: string | null; deezer_id: number | null; attraction_id: string | null
   plays: number; articles_30d: number; bucket: string | null
 }
+export type StoryArtist = { id: number; name: string; tier: WatchTier; plays: number }
+export type Story = {
+  id: number; key: string; story_type: string; rule: string | null; title: string
+  primary_artist: StoryArtist | null; other_artists: StoryArtist[]
+  release_title: string | null; release_status: 'rumored' | 'teased' | 'announced' | 'scheduled' | 'released' | null
+  release_date: string | null; verification: 'unverified' | 'corroborated' | 'confirmed' | 'conflicting'
+  sensitive: boolean; dated: boolean; first_seen: string; last_seen: string; feedback: string | null; alert_id: number | null
+  sources: { id: number; title: string; url: string | null; source_name: string; seen_at: string }[]
+  source_count: number
+  evidence: { kind: string; provider: string; url: string | null; claim: string; value: string; excerpt: string | null; observed_at: string }[]
+}
 export type WatchPatch = Partial<{ tier: WatchTier; muted: boolean; aliases: string[]; common_word_override: boolean | null }>
 export type NewsSource = {
   key: string; name: string; url: string; enabled: boolean; niches: string[]; poll_minutes: number
@@ -386,6 +397,7 @@ const staticApi = {
   news: (_days: number, _mine = false) => Promise.resolve<NewsArticle[]>([]),
   newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
   watchlist: () => Promise.resolve<WatchArtist[]>([]),
+  stories: (_days: number) => Promise.resolve<Story[]>([]),
   addWatch: readOnly,
   updateWatch: readOnly,
 }
@@ -435,6 +447,7 @@ const liveApi = {
   news: (days: number, mine = false) => req<NewsArticle[]>(`/api/news?days=${days}${mine ? '&mine=true' : ''}`),
   newsSources: () => req<NewsHealth>('/api/news/sources'),
   watchlist: () => req<WatchArtist[]>('/api/watchlist'),
+  stories: (days: number) => req<Story[]>(`/api/news/stories?days=${days}`),
   addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
     req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
   updateWatch: (id: number, fields: WatchPatch) =>

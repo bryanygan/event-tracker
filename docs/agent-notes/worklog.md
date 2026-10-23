@@ -196,4 +196,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/watchlist` (M2): `artist_identities` + `article_artists`, seeding from listening (names/tiers only),
   matching with the tightened common-word rule, Deezer + MusicBrainz ids (40/run), `/api/watchlist`, For you
   filter, artist pills and a Watchlist editor in the Music news tab. 14 new tests (297).
+- `feature/stories` (M3, stacked on M2): `stories`, `story_articles`, `story_evidence`; rule-based types (incl. the
+  user's M0 kinds: legal, politics, brand/media, lifestyle, roundup), release status and dates, conflicting dates,
+  clustering with a shared-word check, `/api/news/stories`, Stories view (default) in Music news. Checked with
+  headless Edge screenshots on a DB copy. 30 new tests (327).
 

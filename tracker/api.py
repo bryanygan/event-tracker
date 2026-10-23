@@ -549,6 +549,44 @@ def news_articles(days: int = 3, source: str | None = None, mine: bool = False, 
             for r in rows]
 
 
+@app.get("/api/news/stories")
+def news_stories(days: int = 7, c=Depends(get_db)):
+    """Watchlist stories (tracker/stories.py), newest activity first, each with its sources and evidence."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
+    # Stories made only of undated items from before tracking began have an unknown time: after the dated ones
+    rows = c.execute("SELECT * FROM stories WHERE last_seen >= ? ORDER BY dated DESC, last_seen DESC, id DESC",
+                     (since,)).fetchall()
+    if not rows:
+        return []
+    taste = listening.load()
+    artists = {r["id"]: {"id": r["id"], "name": r["name"], "tier": r["tier"], "plays": taste.plays.get(r["key"], 0)}
+               for r in c.execute("SELECT id, name, key, tier FROM artist_identities")}
+    ids = [r["id"] for r in rows]
+    marks = ",".join("?" * len(ids))
+    sources: dict[int, list] = {}
+    for a in c.execute(f"""SELECT x.story_id, a.id, a.title, a.url, s.name AS source_name,
+                                  COALESCE(a.published_at, a.fetched_at) AS seen_at
+                           FROM story_articles x JOIN articles a ON a.id = x.article_id
+                           JOIN news_sources s ON s.id = a.source_id
+                           WHERE x.story_id IN ({marks}) ORDER BY seen_at""", ids):
+        sources.setdefault(a["story_id"], []).append({k: a[k] for k in ("id", "title", "url", "source_name", "seen_at")})
+    evidence: dict[int, list] = {}
+    for e in c.execute(f"SELECT * FROM story_evidence WHERE story_id IN ({marks}) ORDER BY observed_at", ids):
+        evidence.setdefault(e["story_id"], []).append(
+            {k: e[k] for k in ("kind", "provider", "url", "claim", "value", "excerpt", "observed_at")})
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["sensitive"], d["dated"] = bool(d["sensitive"]), bool(d["dated"])
+        d["primary_artist"] = artists.get(r["primary_artist_id"])
+        d["other_artists"] = [artists[i] for i in json.loads(r["other_artist_ids"] or "[]") if i in artists]
+        d["sources"] = sources.get(r["id"], [])
+        d["source_count"] = len({x["source_name"] for x in d["sources"]})
+        d["evidence"] = evidence.get(r["id"], [])
+        out.append(d)
+    return out
+
+
 @app.get("/api/watchlist")
 def get_watchlist(c=Depends(get_db)):
     """Watchlist artists with live play counts (never stored) and articles about them in the last 30 days."""

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type NewsArticle, type NewsArtistTag, type NewsHealth, type NewsSource } from '../api'
+import StoriesList from './StoriesList'
 import WatchlistPanel from './WatchlistPanel'
 import { fmtWhen } from '../App'
 
 // Music news (roadmap M1-M2): what the feeds published, read every 30 minutes, tagged with your watchlist artists.
-// Grouping into stories and scoring come later (M3-M5).
+// Stories group the articles (M3); scoring comes in M5.
 export default function NewsView({ refreshKey }: { refreshKey: number }) {
-  const [days, setDays] = useState(2)
+  const [view, setView] = useState<'stories' | 'articles'>('stories')
+  const [days, setDays] = useState(3)
   const [q, setQ] = useState('')
   const [source, setSource] = useState('')
   const [bySource, setBySource] = useState(false)
@@ -26,7 +28,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
     return (articles ?? []).filter((a) => (!source || a.source_key === source) &&
       (!mine || mentions || a.artists.some((t) => t.location === 'title')) &&
       (!ql || a.title.toLowerCase().includes(ql) || (a.excerpt ?? '').toLowerCase().includes(ql)))
-  }, [articles, q, source])
+  }, [articles, q, source, mine, mentions])
 
   const groups = useMemo(() => {
     const m = new Map<string, NewsArticle[]>()
@@ -42,7 +44,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       <p className="muted small">
         Headlines from {sources.length} music-news feeds, checked every 30 minutes
         {lastCheck ? ` (last check ${fmtWhen(lastCheck.started_at)}, ${lastCheck.events_fetched} new)` : ''}, tagged
-        with your watchlist artists. Grouping duplicate stories comes next; nothing here becomes an idea by itself.
+        with your watchlist artists and grouped into stories. Nothing here becomes an idea by itself.
       </p>
       {error && <div className="banner error">{error}</div>}
       {broken.length > 0 && (
@@ -53,13 +55,20 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       )}
 
       <div className="toolbar">
+        <button className={view === 'stories' ? 'tab active' : 'tab'} onClick={() => setView('stories')}>Stories</button>
+        <button className={view === 'articles' ? 'tab active' : 'tab'} onClick={() => setView('articles')}>All headlines</button>
+        <select value={days} onChange={(e) => setDays(+e.target.value)}>
+          {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
+        </select>
+      </div>
+
+      {view === 'stories' && <StoriesList refreshKey={refreshKey} days={days} />}
+      {view === 'articles' && <>
+      <div className="toolbar">
         <input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">All sources</option>
           {sources.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
-        </select>
-        <select value={days} onChange={(e) => setDays(+e.target.value)}>
-          {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
         </select>
         <label className="small" title="Only articles about your watchlist artists">
           <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> For you
@@ -82,6 +91,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
             </section>
           ))
         : shown.length > 0 && <ArticleTable articles={shown} showSource />}
+      </>}
 
       <WatchlistPanel refreshKey={refreshKey} />
 
@@ -128,7 +138,7 @@ function ArtistPill({ t }: { t: NewsArtistTag }) {
   const why = [CONFIDENCE[t.confidence], t.match === 'alias' ? 'matched an alias' : '', `tier: ${t.tier}`,
     t.plays ? `${t.plays} plays` : ''].filter(Boolean).join(' · ')
   return (
-    <span className={`pill${t.location === 'excerpt' ? ' muted' : ''}`} title={why}>
+    <span className={`pill trend${t.location === 'excerpt' ? ' muted' : ''}`} title={why}>
       {t.location === 'excerpt' ? 'mentions ' : ''}{t.name}{t.confidence === 'low' ? ' ?' : ''}{t.plays ? ` 🎧${t.plays}` : ''}
     </span>
   )

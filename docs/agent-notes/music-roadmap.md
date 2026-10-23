@@ -386,6 +386,42 @@ Part of advice step 04 ("story verification"), plus section 6 of it (group artic
 **Acceptance:** the tab shows stories (not articles), each with its sources, type, status and why it was
 classified that way.
 
+**Built 2026-10-23 on `feature/stories`**, stacked on `feature/watchlist` (`tracker/stories.py`, 30 new tests).
+Notes:
+
+- **Module name.** `tracker/stories.py`, not `music_news.py`.
+- **Types.** On top of the planned ones: `legal` and `sensitive` (death or health), both flagged sensitive;
+  `politics`, `brand_collab` (brand and media tie-ins, film roles), `lifestyle`, `anniversary`, `review`
+  (Pitchfork's reviews feed) and `roundup` ("new music this week" posts). These follow the user's M0 judgments.
+  The first rule that matches wins, and the order is deliberate: "accused of stealing a hook" is legal, not a
+  release.
+- **Summaries.** A summary is only read when the headline matched nothing, and it never produces a release type.
+  Summaries name songs and features in passing.
+- **Release status.** Rumor words win. A firm report from another article beats a rumor. The status only moves
+  forward. `scheduled` needs a catalog entry, which comes in M4.
+- **Release dates.** Only explicit "out / due / arriving March 6" dates are read. With no year given, the next
+  such date is used.
+  - A different date from another article marks the story `conflicting`. The first date is kept, and both are in
+    `story_evidence`.
+  - Verification is `unverified` (1 outlet) or `corroborated` (2+). `confirmed` needs a catalog or official
+    source (M4).
+- **Clustering.** Same primary artist (the watchlist artist named first in the headline) and same type family,
+  within 72 h; the same headline from another outlet always joins. Release stories use a 21-day window when both
+  name a title.
+  - On top of the plan, any other pair of headlines must share a meaningful word (stopwords and the artists'
+    names don't count). Without that, the same artist's partnership and film role merged, and so did an album and
+    a remix the artist only featured on.
+- **Rebuilds.**
+  - Stories are rebuilt from the last 30 days after every tag change, which takes about 10 ms.
+  - The key is `artist:family:first article`, so a story's id, `feedback` and `alert_id` survive rebuilds. A
+    story you acted on is kept even after its articles leave the window.
+  - Stories made only of undated pre-tracking items (`dated` = 0) are listed last.
+- **Dashboard.** The Music news tab opens on **Stories**. Each card shows kind, status, source count, a sensitive
+  or conflicting badge, artists with 🎧 plays, and the release title and date "as reported". "Sources and why"
+  shows the rule, every source, and each claim with its provider. **All headlines** is the M1/M2 article list.
+- **First real-data pass:** 29 stories from 49 tagged articles, 8 of them covered by 2 to 4 outlets. Every story
+  the user judged in M0 got the expected type.
+
 ### M4: Release metadata and verification (M)
 
 Advice step 03: "Test Apple Music and MusicBrainz against a small sample of artists and actual announcements,
@@ -474,12 +510,13 @@ stories that lack a Philadelphia connection." Plus section 6 (dashboard) and sec
 - **No:**
   - chart records with nothing to add;
   - birthdays, lifestyle and travel pieces;
-  - **politics (a hard no)**;
+  - **politics** ("rather not get political"). One politics-adjacent story was a yes, because the news fed a
+    running joke about the artist; the angle carried it;
   - older artists outside the niche;
   - fan reactions to someone else's lawsuit;
   - a routine album announcement with no hook. A hook would be label news, a big feature, years since the
     last album, a concept, or a vinyl.
-- So: add a `politics` story type that is never promoted. Weight `tour` and `brand_collab` up and `chart` and
+- So: add a `politics` story type with a heavy penalty (not a block; the angle can still win). Weight `tour` and `brand_collab` up and `chart` and
   `lifestyle` down. Show the possible angle on the card.
 
 **Acceptance:** a national story with no Philly date scores on its merits; the tab shows grouped stories with

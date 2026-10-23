@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import config, listening
+from . import config, listening, stories
 
 log = logging.getLogger(__name__)
 
@@ -231,7 +231,8 @@ def _matchable(conn):
 
 
 def rematch(conn, article_ids: list[int] | None = None) -> int:
-    """Rebuild article_artists for these articles (all of them when None). Returns how many links were made."""
+    """Rebuild article_artists for these articles (all of them when None), then the stories. Returns how many links
+    were made."""
     matcher = Matcher(_matchable(conn))
     if article_ids is None:
         conn.execute("DELETE FROM article_artists")
@@ -249,6 +250,7 @@ def rematch(conn, article_ids: list[int] | None = None) -> int:
                          (r["id"], h["artist_id"], h["match"], h["location"], h["confidence"]))
             links += 1
     conn.commit()
+    stories.rebuild(conn)  # tags changed, so the story groups may have too
     return links
 
 
