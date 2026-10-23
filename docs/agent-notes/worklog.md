@@ -182,3 +182,13 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/calendar` (P1-13): planner.py, `/api/calendar`, Calendar tab, series on posts. User asked to keep it
   separate from the other tabs and drop the busy-day/mix/repeat warnings (posting 2-3 a day is fine; plans are a
   shortlist). Not merged yet (user's call). 6 new tests (269).
+
+### 2026-10-23 early morning: music pillar M0 and M1
+- Roadmap merged (`041020b`). M0 coverage prototype collecting into gitignored `data/m0/` (14 feeds, every 30 min
+  until Oct 30, `PhillyEvents-M0Feeds`). First report: 46 watchlist articles → 34 stories, 25 of 335 core artists
+  in a headline, 0 of 17 Friday releases in feeds yet. User marked 24 stories Y/N; lessons in roadmap M5.
+- `feature/news-rss` (M1): `news_sources` + `articles` tables, `tracker/news.py` (conditional GETs, per-source
+  back-off 30/60/120 min, pipeline lock), `/api/news`, `/api/news/sources`, Music news tab (last). News runs kept
+  out of the Runs tab and the header's last run. Live read into a scratch DB: 343 articles, 0 failures, 15 s.
+  14 new tests (283).
+

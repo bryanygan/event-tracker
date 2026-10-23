@@ -3,12 +3,14 @@ import { api, STATIC, type Job, type Summary } from './api'
 import AlertsView from './views/AlertsView'
 import CalendarView from './views/CalendarView'
 import EventsView from './views/EventsView'
+import NewsView from './views/NewsView'
 import PostsView from './views/PostsView'
 import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 
-type Tab = 'queue' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs'
-const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs', 'calendar']
+type Tab = 'queue' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs' | 'news'
+// Calendar and Music news are separate nice-to-have tabs, last (music news merges into What to post later, roadmap M9)
+const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs', 'calendar', 'news']
 
 export default function App() {
   // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone
@@ -134,7 +136,7 @@ export default function App() {
       <nav>
         {TABS.map((t) => (
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-            {{ queue: 'What to post', calendar: 'Calendar', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs' }[t]}
+            {{ queue: 'What to post', calendar: 'Calendar', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs', news: 'Music news' }[t]}
             {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}
           </button>
         ))}
@@ -147,6 +149,7 @@ export default function App() {
         {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'events' && <EventsView refreshKey={refreshKey} />}
         {tab === 'runs' && <RunsView refreshKey={refreshKey} summary={summary} />}
+        {tab === 'news' && <NewsView refreshKey={refreshKey} />}
       </main>
     </div>
   )

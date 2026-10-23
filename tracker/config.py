@@ -286,3 +286,33 @@ JUNK_EVENT_PATTERNS = [
     r"\bparking\b", r"\bshuttle\b", r"\bupgrade\b", r"\bvip (package|experience)\b",
     r"\bhospitality\b", r"\bsuite\b", r"\blot [a-z0-9]\b", r"\bgift card\b",
 ]
+
+# Music news (tracker/news.py, docs/agent-notes/music-roadmap.md M1): public RSS/Atom feeds, read every 30 minutes
+# by the PhillyEvents-News task with conditional requests (most reads are a 304 with no body). Feed URLs are public.
+# terms: checked 2026-10-23: robots.txt allows the feed path and any crawl-delay is <= 10 s. Dropped then: Dancing
+# Astronaut (feed hangs past 40 s), HipHopDX (stale), Complex / Pigeons & Planes / Resident Advisor (no feed).
+# Reddit is not used (decided 2026-10-23: the rap feeds replace it). `poll_minutes` slows one site if needed.
+NEWS_TERMS_CHECKED = "robots.txt allows the feed, crawl-delay <= 10 s (checked 2026-10-23)"
+NEWS_SOURCES = [
+    {"key": "pitchfork-news", "name": "Pitchfork news", "url": "https://pitchfork.com/feed/feed-news/rss", "niches": ["indie", "rap", "pop"]},
+    {"key": "pitchfork-reviews", "name": "Pitchfork reviews", "url": "https://pitchfork.com/feed/feed-album-reviews/rss", "niches": ["indie", "rap", "pop"]},
+    {"key": "stereogum", "name": "Stereogum", "url": "https://www.stereogum.com/feed/", "niches": ["indie", "pop"]},
+    {"key": "fader", "name": "The FADER", "url": "https://www.thefader.com/feed", "niches": ["rap", "hyperpop", "rnb"]},
+    {"key": "rated-rnb", "name": "Rated R&B", "url": "https://ratedrnb.com/feed/", "niches": ["rnb"]},
+    {"key": "mixmag", "name": "Mixmag", "url": "https://mixmag.net/rss.xml", "niches": ["edm"]},  # no pubDate: fetched_at stands in
+    {"key": "line-of-best-fit", "name": "Line of Best Fit", "url": "https://www.thelineofbestfit.com/feed", "niches": ["indie", "pop"]},
+    {"key": "billboard", "name": "Billboard", "url": "https://www.billboard.com/feed/", "niches": ["pop", "rap", "rnb"]},
+    {"key": "xxl", "name": "XXL", "url": "https://www.xxlmag.com/feed/", "niches": ["rap"]},
+    {"key": "hotnewhiphop", "name": "HotNewHipHop", "url": "https://www.hotnewhiphop.com/feed", "niches": ["rap"]},
+    {"key": "allhiphop", "name": "AllHipHop", "url": "https://allhiphop.com/feed/", "niches": ["rap"]},
+    {"key": "the-source", "name": "The Source", "url": "https://thesource.com/feed/", "niches": ["rap"]},
+    {"key": "vibe", "name": "Vibe", "url": "https://www.vibe.com/feed/", "niches": ["rap", "rnb"]},
+    {"key": "uproxx-music", "name": "Uproxx Music", "url": "https://uproxx.com/music/feed/", "niches": ["rap", "pop", "indie"]},
+]
+NEWS_POLL_MINUTES = 30          # default per source; a source that keeps failing waits longer (NEWS_BACKOFF_MINUTES)
+NEWS_BACKOFF_MINUTES = (30, 60, 120)  # after 1, 2, 3+ failures in a row; back to normal on the next success
+NEWS_MAX_AGE_DAYS = 14          # items older than this (by the feed's own date) aren't stored
+NEWS_TIMEOUT = 25               # seconds per feed
+NEWS_MAX_BYTES = 5_000_000      # a feed bigger than this is refused (the largest seen is ~1 MB)
+NEWS_EXCERPT_CHARS = 300        # the feed's own summary, cut short; never the article body
+NEWS_USER_AGENT = "PhillyEventsTracker/0.1 (personal project; reads public music-news feeds every 30 minutes)"

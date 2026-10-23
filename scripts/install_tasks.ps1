@@ -1,7 +1,9 @@
-# Registers three Windows Task Scheduler tasks for the current user:
+# Registers four Windows Task Scheduler tasks for the current user:
 #   PhillyEvents-Pipeline   fetch + detect + draft at 6:30 AM and 4:30 PM
 #   PhillyEvents-Midday     quick fetch + detect at 11:30 AM (no LLM, no paid lookups); turn off with
 #                           Disable-ScheduledTask -TaskName PhillyEvents-Midday
+#   PhillyEvents-News       music-news feeds every 30 minutes at :10 and :40 (tracker/news.py; seconds, no LLM);
+#                           turn off with Disable-ScheduledTask -TaskName PhillyEvents-News
 #   PhillyEvents-Dashboard  local dashboard at http://127.0.0.1:8765, started at logon
 #
 # Both run windowless (pythonw), at below-normal priority, only while you're logged on,
@@ -45,6 +47,19 @@ Register-ScheduledTask -TaskName "PhillyEvents-Midday" -Action $middayAction `
     -Trigger (New-ScheduledTaskTrigger -Daily -At "11:30AM") `
     -Settings $middaySettings -Principal $principal -Description "Philly events: quick midday check, no drafts" -Force | Out-Null
 
+# Music news: conditional reads of public feeds, usually a few 304s. At :10 and :40 so it never starts with the 6:30,
+# 11:30 or 4:30 runs; if one is still going, the check skips (same lock) and the next one catches up.
+$newsSettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 5) `
+    -Priority 7 `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$newsAction = New-ScheduledTaskAction -Execute $pythonw -Argument "-m tracker.news" -WorkingDirectory $root
+$newsTrigger = New-ScheduledTaskTrigger -Once -At "00:10" -RepetitionInterval (New-TimeSpan -Minutes 30)
+Register-ScheduledTask -TaskName "PhillyEvents-News" -Action $newsAction -Trigger $newsTrigger `
+    -Settings $newsSettings -Principal $principal -Description "Philly events: music-news feeds every 30 minutes" -Force | Out-Null
+
 # Dashboard: always-on while logged in; restart if it crashes.
 $dashSettings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable -MultipleInstances IgnoreNew `
@@ -57,4 +72,4 @@ Register-ScheduledTask -TaskName "PhillyEvents-Dashboard" -Action $dashAction `
     -Settings $dashSettings -Principal $principal -Description "Philly events dashboard on 127.0.0.1:8765" -Force | Out-Null
 
 Start-ScheduledTask -TaskName "PhillyEvents-Dashboard"
-Write-Host "Installed. Dashboard: http://127.0.0.1:8765  (pipeline runs 6:30 AM and 4:30 PM, quick check 11:30 AM)"
+Write-Host "Installed. Dashboard: http://127.0.0.1:8765  (pipeline runs 6:30 AM and 4:30 PM, quick check 11:30 AM, music news every 30 min)"
