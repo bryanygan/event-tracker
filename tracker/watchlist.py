@@ -121,7 +121,8 @@ def add(conn, name: str, tier: str = "watch", aliases: list[str] | None = None) 
 
 
 def update(conn, artist_id: int, fields: dict) -> dict:
-    """Change tier, muted, aliases or common_word_override (None = automatic). Marks the artist as yours."""
+    """Change tier, muted, aliases or common_word_override (None = automatic), which marks the artist as yours;
+    or seen_live (you've seen them live)."""
     row = conn.execute("SELECT * FROM artist_identities WHERE id=?", (artist_id,)).fetchone()
     if row is None:
         raise KeyError(artist_id)
@@ -145,6 +146,9 @@ def update(conn, artist_id: int, fields: dict) -> dict:
                      (*sets.values(), artist_id))
         conn.commit()
         rematch(conn)
+    if "seen_live" in fields:  # music scoring only (music.py): nothing to rematch, and re-seeding never touches it
+        conn.execute("UPDATE artist_identities SET seen_live=? WHERE id=?", (int(bool(fields["seen_live"])), artist_id))
+        conn.commit()
     return dict(conn.execute("SELECT * FROM artist_identities WHERE id=?", (artist_id,)).fetchone())
 
 
@@ -305,6 +309,7 @@ def listing(conn, taste: listening.Taste | None = None) -> list[dict]:
     for r in conn.execute("SELECT * FROM artist_identities"):
         d = dict(r)
         d.update(aliases=json.loads(d["aliases"] or "[]"), muted=bool(d["muted"]), user_edited=bool(d["user_edited"]),
+                 seen_live=bool(d["seen_live"]),
                  common_word=_common(r), common_word_auto=bool(r["common_word"]),
                  ambiguous_name=bool(d["ambiguous_name"]), plays=taste.plays.get(r["key"], 0),
                  articles_30d=counts.get(r["id"], 0), bucket=taste.buckets.get(r["key"]))

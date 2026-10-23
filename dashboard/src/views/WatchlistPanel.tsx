@@ -87,6 +87,7 @@ export default function WatchlistPanel({ refreshKey }: { refreshKey: number }) {
             <table className="events">
               <thead>
                 <tr><th>Artist</th><th>Tier</th><th title="plays in the listening window">🎧</th><th title="articles in the last 30 days">News 30d</th>
+                  <th title="You've seen them live: their tour news scores higher">Seen live</th>
                   <th>Other spellings</th><th title="An ordinary word too? Then a headline needs a music word (album, tour…) to count">Common word</th><th>Mute</th></tr>
               </thead>
               <tbody>
@@ -104,6 +105,7 @@ export default function WatchlistPanel({ refreshKey }: { refreshKey: number }) {
                     </td>
                     <td>{r.plays || ''}</td>
                     <td>{r.articles_30d || ''}</td>
+                    <td><input type="checkbox" checked={r.seen_live} onChange={(e) => save(r, { seen_live: e.target.checked })} /></td>
                     <td>
                       <input defaultValue={r.aliases.join(', ')} placeholder="e.g. a nickname" key={r.aliases.join('|')}
                              onBlur={(e) => {

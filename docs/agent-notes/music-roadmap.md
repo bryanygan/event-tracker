@@ -531,6 +531,26 @@ stories that lack a Philadelphia connection." Plus section 6 (dashboard) and sec
 **Acceptance:** a national story with no Philly date scores on its merits; the tab shows grouped stories with
 feedback buttons; Send to queue creates a working alert.
 
+**Built 2026-10-23 on `feature/music-scoring`** (`tracker/music.py`, 13 new tests).
+- Score components (config.MUSIC_WEIGHTS): content potential 0.30 (story type, +seen-live / Philly date for tours,
+  +a second watchlist artist on a release), urgency 0.20 (news age or a release date within a week), your artists
+  0.15 (tier, plays/20 up to +15, feedback), confidence 0.15, search 0.10 (trend notes), momentum 0.10 (unknown
+  until M7, left out). Politics capped at 60 unless marked Interested; conflicting dates capped at 64.
+- Feedback (Interested / Not my lane / Already covered, click again to clear) is `stories.feedback`; every action
+  is also logged in `story_actions` with the score at the time. Interested/Not my lane move the artist (+10 / −25
+  each) and the story type (+5 / −10); a story's own button doesn't change its own relevance. Handled stories
+  sink in For you.
+- New `artist_identities.seen_live` (Seen live column in the Watchlist editor).
+- Send to queue: a `music_story` alert (key `music:<story key>`) whose facts are the sources, release title and
+  status, the release date with the outlets/catalogs that state it (all stated dates and no single one when they
+  conflict), and Philly dates from the events data. Post by: a day after the news, or release day. The queue
+  scores it with the music components, shows a 🎵 Music news pill and an Events / Music filter; the calendar
+  counts it as a music video in your lane. Drafting and slides for it are refused until M6.
+- `MUSIC_AUTO_SEND` exists (score ≥ 80, corroborated or confirmed, not sensitive) and is off.
+- Discover waits for M7. Checked against the M0 calls on a copy of the live DB: the 6 highest-scored stories were
+  all Y; average Y 64.6 vs N 56.4. The misses are the two Y's that won on a meme or shock angle (a politics story,
+  a lifestyle story), which the rules can't see: that's what Interested is for.
+
 ### M6: Drafting, formats, research and analytics (M)
 
 Advice step 05: "Reuse your current Claude/Ollama workflow, slideshow renderer, and post metrics. Track which

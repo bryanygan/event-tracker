@@ -44,6 +44,7 @@ export default function QueueView({ refreshKey, busy, job, summary, onJob, onCha
   const [queue, setQueue] = useState<Queue | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [filter, setFilter] = useState<Filter>('active')
+  const [pillar, setPillar] = useState<'all' | QueueItem['pillar']>('all')
   const load = () => {
     api.queue().then(setQueue)
     api.alerts(STATIC ? 'open' : 'all').then(setAlerts)
@@ -52,7 +53,7 @@ export default function QueueView({ refreshKey, busy, job, summary, onJob, onCha
   const changed = () => { load(); onChange() }
 
   if (!queue) return <p className="muted">Loading…</p>
-  const shown = queue.items.filter(FILTERS[filter])
+  const shown = queue.items.filter((i) => FILTERS[filter](i) && (pillar === 'all' || i.pillar === pillar))
   const c = queue.counts
 
   return (
@@ -68,10 +69,16 @@ export default function QueueView({ refreshKey, busy, job, summary, onJob, onCha
         <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
           {Object.keys(FILTERS).map((f) => <option key={f} value={f}>{f[0].toUpperCase() + f.slice(1)}</option>)}
         </select>
+        <select value={pillar} onChange={(e) => setPillar(e.target.value as typeof pillar)} title="Philly events, music news, or both">
+          <option value="all">Events + music</option>
+          <option value="events">Events</option>
+          <option value="music">Music news</option>
+        </select>
         <span className="muted small">
           {shown.length} ideas · ranked by an <strong>experimental</strong> opportunity score (rules {queue.rules_version}):
           audience, timing, story, Philly/your lane, readiness, and search demand from your trend notes (left out
-          rather than guessed when none match). It’s a hint for what to make next, not a view prediction.
+          rather than guessed when none match). Music news ideas have their own: the kind of story, urgency, your
+          artists and how well it’s sourced. It’s a hint for what to make next, not a view prediction.
         </span>
       </div>
       <TrendNotes onChange={changed} />
@@ -103,7 +110,7 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
     <section className={`card queue-card kind-${item.kind} band-${item.band ?? 'none'}`}>
       <div className="card-head">
         {item.band && <span className={`pill band ${item.band}`}>{BAND_LABEL[item.band]}</span>}
-        <span className="pill">{KIND_LABEL[item.kind]}</span>
+        <span className={item.pillar === 'music' ? 'pill trend' : 'pill'}>{item.pillar === 'music' ? '🎵 ' : ''}{KIND_LABEL[item.kind]}</span>
         <span className="pill">{STAGE_LABEL[item.stage]}</span>
         {item.post_by && !['expired', 'dismissed', 'posted', 'measured'].includes(item.stage) && (
           <span className={`pill ${timeLeft(item.post_by) === 'past' ? '' : 'due'}`} title={item.expires_at ? `stale after ${fmtWhen(item.expires_at)}` : ''}>
@@ -136,7 +143,7 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
       <details className="facts">
         <summary>
           Opportunity {item.score ?? '–'} <span className="muted">(experimental, {Math.round(item.coverage * 100)}% of signals known)</span>
-          {' · '}Notability {Math.round(item.notability)}
+          {item.pillar === 'events' && <>{' · '}Notability {Math.round(item.notability)}</>}
         </summary>
         <table>
           <tbody>

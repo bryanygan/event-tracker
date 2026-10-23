@@ -310,6 +310,7 @@ CREATE TABLE IF NOT EXISTS artist_identities (
     ids_checked_at TEXT,            -- last Deezer / MusicBrainz lookup
     itunes_id INTEGER,              -- iTunes artist id (tracker/catalog.py), found on the first catalog check
     releases_checked_at TEXT,       -- last catalog check (Deezer + iTunes), tracker/catalog.py
+    seen_live INTEGER NOT NULL DEFAULT 0,  -- you've seen them live (your call): their tour news scores higher (M5)
     created_at TEXT NOT NULL
 );
 
@@ -339,8 +340,8 @@ CREATE TABLE IF NOT EXISTS stories (
     release_date TEXT,              -- YYYY-MM-DD when an article states one (first stated; see verification)
     verification TEXT NOT NULL DEFAULT 'unverified',  -- unverified, corroborated (2+ sources), confirmed (M4), conflicting
     sensitive INTEGER NOT NULL DEFAULT 0,  -- deaths, arrests, lawsuits, health: never auto-promoted, no template hooks
-    dated INTEGER NOT NULL DEFAULT 1,
-    origin TEXT NOT NULL DEFAULT 'news',  -- news (from articles) or catalog (a release no feed covered, M4)  -- 0 = only undated items from before tracking began: time unknown, listed last
+    dated INTEGER NOT NULL DEFAULT 1,  -- 0 = only undated items from before tracking began: time unknown, listed last
+    origin TEXT NOT NULL DEFAULT 'news',  -- news (from articles) or catalog (a release no feed covered, M4)
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
     feedback TEXT,                  -- your call (M5): interested, not_my_lane, already_covered
@@ -368,6 +369,19 @@ CREATE TABLE IF NOT EXISTS story_evidence (
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_story_evidence_story ON story_evidence(story_id);
+
+-- Everything you did with a story (tracker/music.py, roadmap M5): feedback buttons and Send to queue. Kept when the
+-- story itself is rebuilt away; M9's "merge Music news into What to post" decision is measured from it.
+CREATE TABLE IF NOT EXISTS story_actions (
+    id INTEGER PRIMARY KEY,
+    story_id INTEGER,
+    story_key TEXT NOT NULL,
+    artist_id INTEGER,
+    story_type TEXT,
+    action TEXT NOT NULL,           -- interested, not_my_lane, already_covered, cleared, sent, auto_sent
+    score REAL,                     -- the story's music score when you acted
+    at TEXT NOT NULL
+);
 
 -- Catalog records per provider (tracker/catalog.py, roadmap M4), side by side so gaps and disagreements show.
 -- Only recent and upcoming releases are kept (catalog.KEEP_DAYS); nothing here is guessed.
@@ -429,7 +443,8 @@ _ADDED_COLUMNS = {
                "planned_for": "TEXT", "series": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
-    "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT"},  # catalog.py (M4)
+    "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
+                          "seen_live": "INTEGER NOT NULL DEFAULT 0"},  # music.py (M5)
     "stories": {"origin": "TEXT NOT NULL DEFAULT 'news'"},
 }
 # Run once, right after the column is added to an existing database.
