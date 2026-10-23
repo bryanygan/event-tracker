@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import logging
 
-from . import angles, detectors, llm, templates
+from . import angles, config, detectors, llm, templates
 from .store import now_iso
 
 log = logging.getLogger(__name__)
 
-MAX_DRAFTS_PER_RUN = 8  # ~1 min each with Ollama on the N95 (seconds with Claude); keeps a run under ~10 minutes
+MAX_DRAFTS_PER_RUN = 8  # ~1 min each with Ollama on the N95; keeps a run under ~10 minutes
+MAX_CLAUDE_DRAFTS_PER_RUN = 20  # seconds each with Claude; CLAUDE_DAILY_CAP still bounds the spend
 
 
 def draft_row(r, alert_facts: dict) -> dict:
@@ -92,17 +93,50 @@ def _save(conn, alert, facts: dict, out: dict, warnings: list[str], angle: str |
     return cur.lastrowid
 
 
-def draft_pending(conn, limit: int = MAX_DRAFTS_PER_RUN) -> list[int]:
+def draft_pending(conn, limit: int | None = None) -> list[int]:
     """Draft the highest-scoring alerts that don't have a draft yet."""
+    if limit is None:
+        limit = MAX_CLAUDE_DRAFTS_PER_RUN if llm.uses_claude() else MAX_DRAFTS_PER_RUN
     ids = [r["id"] for r in conn.execute(
         "SELECT id FROM alerts WHERE status='new' ORDER BY score DESC LIMIT ?", (limit,))]
-    if not ids:
-        return []
+    return _draft_all(conn, ids)
+
+
+def _draft_all(conn, ids: list[int], claude_only: bool = False) -> list[int]:
     made = []
+    if not ids:
+        return made
     with llm.model_session():
         for alert_id in ids:
+            # A draft can take two calls (a retry); stop before the cap would send the rest to Ollama
+            if claude_only and llm.claude_calls_today(conn) > config.CLAUDE_DAILY_CAP - 2:
+                log.info("Stopping at the Claude daily cap; %d alerts left", len(ids) - len(made))
+                break
+            if claude_only and llm._batch and llm._batch["claude_failed"]:  # Claude failed: don't redo the rest locally
+                log.warning("Claude failed; stopping with %d alerts left", len(ids) - len(made))
+                break
             try:
                 made.append(draft_alert(conn, alert_id))
             except Exception as exc:  # one bad generation shouldn't stop the rest
                 log.exception("Drafting alert %s failed: %s", alert_id, exc)
     return made
+
+
+def local_drafted(conn, now: str | None = None) -> list[int]:
+    """Live alerts whose newest draft came from the local model (written before Claude drafted), best first."""
+    now = now or now_iso()
+    return [r["id"] for r in conn.execute(
+        """SELECT a.id FROM alerts a
+           JOIN drafts d ON d.id = (SELECT MAX(id) FROM drafts WHERE alert_id = a.id)
+           WHERE a.status = 'drafted' AND (a.expires_at IS NULL OR a.expires_at > ?)
+             AND d.model NOT LIKE '%claude%' AND d.model != 'template'
+           ORDER BY a.score DESC""", (now,))]
+
+
+def redraft_local(conn) -> list[int]:
+    """One-off: new Claude drafts for alerts whose newest draft is a local-model one. The old drafts stay."""
+    if not llm.uses_claude():
+        raise SystemExit("Claude isn't set up (ANTHROPIC_API_KEY / DRAFT_PROVIDER); nothing to redraft with.")
+    ids = local_drafted(conn)
+    log.info("Redrafting %d alerts with Claude", len(ids))
+    return _draft_all(conn, ids, claude_only=True)

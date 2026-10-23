@@ -15,8 +15,14 @@ Rules that keep this defensible:
 - Results, including "none" and "ambiguous", are cached on the attraction for GENRE_RECHECK_DAYS.
 - Capped per run, and a failed lookup never fails the run.
 
+A third source, Deezer (the most common genre of the headliner's releases, fetchers/deezer.py), fills shows
+nothing else covers and overrides Ticketmaster when the two disagree across genre families: Ticketmaster
+filed a hyperpop act under Rock and a rock band under Dance/Electronic. Within a family (Pop vs Hip-Hop/Rap)
+Ticketmaster's label stays.
+
 The stored listing genre is never overwritten: the fill happens when events are read (scoring.upcoming_events),
-and every event says where its genre came from in `genre_source` ("listing", "artist", "tm_search" or None).
+and every event says where its genre came from in `genre_source` ("listing", "artist", "tm_search", "deezer"
+or None).
 """
 from __future__ import annotations
 
@@ -36,7 +42,8 @@ TZ = ZoneInfo(config.TIMEZONE)
 _SKIP = [re.compile(p, re.I) for p in config.GENRE_LOOKUP_SKIP_PATTERNS]
 
 SOURCE_LABEL = {"listing": "from the listing", "artist": "Ticketmaster's genre for the artist",
-                "tm_search": "matched by name on Ticketmaster (inferred)"}
+                "tm_search": "matched by name on Ticketmaster (inferred)",
+                "deezer": "the most common genre of the artist's Deezer releases"}
 
 
 def usable(genre: str | None) -> bool:
@@ -44,20 +51,32 @@ def usable(genre: str | None) -> bool:
 
 
 def fill(row: dict) -> None:
-    """Set row['genre'] / ['subgenre'] / ['genre_source'] from the listing, else the headliner attraction.
-    `row` is an EVENT_VIEW_SQL row (has headliner_genre, headliner_subgenre, headliner_genre_source)."""
+    """Set row['genre'] / ['subgenre'] / ['genre_source'] from the listing, else the headliner attraction,
+    else Deezer; Deezer also replaces a listing or artist genre from a different family (config.GENRE_FAMILIES).
+    `row` is an EVENT_VIEW_SQL row (has headliner_genre, headliner_subgenre, headliner_genre_source,
+    headliner_deezer_genre). A replaced label is kept in row['ticketmaster_genre']."""
     if usable(row.get("genre")):
         row["genre_source"] = "listing"
         if not usable(row.get("subgenre")):
             row["subgenre"] = None
+    else:
+        row["genre"], row["genre_source"] = None, None
+        if usable(row.get("headliner_genre")):
+            row["genre"] = row["headliner_genre"]
+            row["subgenre"] = row["headliner_subgenre"] if usable(row.get("headliner_subgenre")) else None
+            row["genre_source"] = row.get("headliner_genre_source") or "artist"
+        elif not usable(row.get("subgenre")):
+            row["subgenre"] = None
+    deezer = row.get("headliner_deezer_genre")
+    if not deezer or row.get("segment") not in (None, "Music"):  # a play's headliner may share a musician's name
         return
-    row["genre"], row["genre_source"] = None, None
-    if usable(row.get("headliner_genre")):
-        row["genre"] = row["headliner_genre"]
-        row["subgenre"] = row["headliner_subgenre"] if usable(row.get("headliner_subgenre")) else None
-        row["genre_source"] = row.get("headliner_genre_source") or "artist"
-    elif not usable(row.get("subgenre")):
-        row["subgenre"] = None
+    if row["genre"] is None:
+        row["genre"], row["subgenre"], row["genre_source"] = deezer, None, "deezer"
+        return
+    family, other = config.GENRE_FAMILIES.get(row["genre"]), config.GENRE_FAMILIES.get(deezer)
+    if family and other and family != other and deezer not in config.DEEZER_FILL_ONLY:
+        row["ticketmaster_genre"] = row["genre"]
+        row["genre"], row["subgenre"], row["genre_source"] = deezer, None, "deezer"
 
 
 def lookup_candidates(conn, limit: int, now: datetime | None = None) -> list[dict]:

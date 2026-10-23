@@ -147,8 +147,10 @@ export type EventRow = {
   genre: string | null
   subgenre: string | null
   // listing = the show's own listing; artist = Ticketmaster's genre for the headliner;
-  // tm_search = venue-calendar act matched by name on Ticketmaster (inferred). See tracker/genres.py.
-  genre_source?: 'listing' | 'artist' | 'tm_search' | null
+  // tm_search = venue-calendar act matched by name on Ticketmaster (inferred);
+  // deezer = the artist's Deezer releases (fills a gap, or replaces a wrong Ticketmaster label). See tracker/genres.py.
+  genre_source?: 'listing' | 'artist' | 'tm_search' | 'deezer' | null
+  ticketmaster_genre?: string | null  // Ticketmaster's label when Deezer's replaced it
   price_min: number | null
   price_max: number | null
   onsale_start: string | null

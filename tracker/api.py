@@ -480,7 +480,7 @@ def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, 
     rows.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     keep = ["id", "name", "headliner", "support", "local_date", "local_time", "status", "venue_name", "genre",
             "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "popularity", "fans", "my_plays", "niche",
-            "first_seen", "genre_source"]
+            "first_seen", "genre_source", "ticketmaster_genre"]
     return [{k: e.get(k) for k in keep} for e in rows[:limit]]
 
 

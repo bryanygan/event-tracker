@@ -43,6 +43,7 @@ SELECT e.*, v.name AS venue_name, v.city AS venue_city, v.state AS venue_state, 
        a.last_area_show_date, a.last_area_show_venue, a.last_area_show_acts,
        a.tm_upcoming_total,
        a.genre AS headliner_genre, a.subgenre AS headliner_subgenre, a.genre_source AS headliner_genre_source,
+       a.deezer_genre AS headliner_deezer_genre,
        (SELECT group_concat(a2.name, ', ') FROM event_attractions ea2
           JOIN attractions a2 ON a2.id = ea2.attraction_id
           WHERE ea2.event_id = e.id AND ea2.position > 0) AS support

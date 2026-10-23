@@ -134,8 +134,10 @@
 
 ## Genres (2026-10-22)
 
-- Ticketmaster's own listing genre is sometimes wrong (Alter Bridge listed as Dance/Electronic). The fill never
-  overrides a listing genre, so those stay; only missing genres are filled.
+- Ticketmaster's own listing genre is sometimes wrong (Alter Bridge listed as Dance/Electronic, 2hollis as Rock).
+  Since 2026-10-22 Deezer's release genre replaces it across genre families (decisions.md "Deezer genres").
+  Deezer's "Alternative" covers indie pop too, so it only fills, never replaces (DEEZER_FILL_ONLY).
+- Alert facts pick up a corrected genre on the next run's refresh; a redraft before that still sees the old one.
 - Tests that re-ingest with `store.upsert_events` must send the whole listing again: shows left out are marked
   removed (that's the real behavior), which silently drops them from `upcoming_events`.
 
