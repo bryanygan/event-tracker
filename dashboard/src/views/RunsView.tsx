@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react'
-import { api, type RemoteEdits, type Run } from '../api'
+import { api, type RemoteEdits, type Run, type Summary } from '../api'
 import { fmtWhen } from '../App'
 
-export default function RunsView({ refreshKey }: { refreshKey: number }) {
+export default function RunsView({ refreshKey, summary }: { refreshKey: number; summary: Summary | null }) {
   const [runs, setRuns] = useState<Run[]>([])
   const [phone, setPhone] = useState<RemoteEdits | null>(null)
   useEffect(() => {
     api.runs().then(setRuns)
     api.remoteEdits().then(setPhone).catch(() => setPhone(null))
   }, [refreshKey])
+  const d = summary?.drafting
   return (
     <div className="table-wrap">
+      {d && (
+        <p className="muted small">
+          {d.enabled
+            ? <>Drafts by {d.model}: {d.today} of {d.cap} calls today · {d.month_calls} this month, ${d.month_cost_usd.toFixed(d.month_cost_usd < 1 ? 3 : 2)}.
+                Over the cap or on an API error, Ollama writes them.</>
+            : <>Drafts by Ollama ({summary?.model}). Add ANTHROPIC_API_KEY to .env to use Claude.</>}
+        </p>
+      )}
       <table className="events">
         <thead><tr><th>#</th><th>Started</th><th>Took</th><th>Events</th><th>API calls</th><th>Result</th></tr></thead>
         <tbody>

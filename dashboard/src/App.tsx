@@ -144,7 +144,7 @@ export default function App() {
         {tab === 'alerts' && <AlertsView refreshKey={refreshKey} busy={!!job?.running} job={job} onJob={setJob} onChange={refresh} />}
         {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'events' && <EventsView refreshKey={refreshKey} />}
-        {tab === 'runs' && <RunsView refreshKey={refreshKey} />}
+        {tab === 'runs' && <RunsView refreshKey={refreshKey} summary={summary} />}
       </main>
     </div>
   )

@@ -84,7 +84,7 @@ def test_draft_replaces_flagged_hook_with_fallback(tmp_path, monkeypatch):
     detectors.save_alerts(conn, [{"key": "k", "kind": "presale_soon", "title": "t", "score": 1, "facts": PRESALE}])
     bad = {"hook": "Zach Bryan presale opens Tue, May 26", "hashtags": ["#philly"], "model": "m"}
     monkeypatch.setattr(llm, "generate",
-                        lambda facts, model=None, script=None, caption=None: {**bad, "script": script, "caption": caption})
+                        lambda facts, model=None, script=None, caption=None, conn=None: {**bad, "script": script, "caption": caption})
     d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
     assert d["hook"] == "Set an alarm: Zach Bryan tickets drop Thu"
     assert d["caption"].startswith("Zach Bryan tickets 🎟️ Eagles Presale: Thu, Oct 22")
@@ -96,7 +96,7 @@ def test_hook_missing_exact_artist_name_falls_back(tmp_path, monkeypatch):
     conn = db.connect(tmp_path / "t.db")
     f = {**PRESALE, "artist": "THROWN"}
     detectors.save_alerts(conn, [{"key": "k", "kind": "presale_soon", "title": "t", "score": 1, "facts": f}])
-    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None:
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None, conn=None:
                         {"hook": "THROW tickets drop Fri", "hashtags": [], "model": "m", "script": script, "caption": caption})
     d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
     assert d["hook"] == "Set an alarm: THROWN tickets drop Thu"

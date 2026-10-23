@@ -89,7 +89,8 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
 | P2-15 phone editing | Live 2026-10-22 (`d9b0fac`): REMOTE_HOST route added to the user's existing tunnel (the ttspotslideshow one) + its own Access app ("Admin Only"); user's first 3 phone edits audited ok |
 | P1-12 midday check | Live 2026-10-22 (`PhillyEvents-Midday`, 11:30 AM): `--midday`, no LLM/lookups/publish; one-run-at-a-time lock |
-| Draft progress bar | Built 2026-10-22 on `feature/draft-progress`: job carries alert_id/step/estimate/elapsed; bar + step under the card's buttons, scroll to the new draft |
+| Draft progress bar | Live 2026-10-22: job carries alert_id/step/estimate/elapsed; bar + step under the card's buttons, scroll to the new draft |
+| Claude drafts | Built 2026-10-22 on `feature/claude-drafts`: Haiku 5.5 writes drafts when ANTHROPIC_API_KEY is set; Ollama fallback; `llm_calls` cost log; queue cards get a "✓ Posted" button |
 | P1-13, P2-14 | Not started |
 
 P0-01..05 and P0-07 merged into `main` 2026-10-21 (user approved); those branches are deleted.

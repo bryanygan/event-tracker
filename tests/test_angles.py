@@ -64,7 +64,7 @@ def test_templated_format_with_angle_needs_no_model(conn, monkeypatch):
 def test_llm_format_keeps_the_chosen_hook_and_gets_the_angle(conn, monkeypatch):
     seen = {}
 
-    def fake_generate(facts, model=None, script=None, caption=None, angle=None):
+    def fake_generate(facts, model=None, script=None, caption=None, angle=None, conn=None):
         seen["angle"] = angle
         return {"hook": angle["hook"], "script": "Two shows this weekend.", "caption": "Save this.",
                 "hashtags": ["#philly"], "model": "fake"}

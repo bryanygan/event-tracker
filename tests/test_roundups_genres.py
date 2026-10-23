@@ -267,7 +267,7 @@ def test_drafting_from_picks_keeps_to_the_picks(conn, monkeypatch):
     detectors.save_alerts(conn, [{"key": "w", "kind": "weekend", "title": "t", "score": 60, "facts": LANE_FACTS}])
     seen = {}
 
-    def fake_generate(facts, model=None, script=None, caption=None, angle=None):
+    def fake_generate(facts, model=None, script=None, caption=None, angle=None, conn=None):
         seen["facts"], seen["prompt"] = facts, llm.build_prompt(facts)
         return {"hook": angle["hook"], "script": "Nova Vale, Kilo Moon and Singer Four.", "caption": "Save this.",
                 "hashtags": ["#philly"], "model": "fake"}

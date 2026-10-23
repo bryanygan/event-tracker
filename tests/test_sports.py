@@ -86,7 +86,7 @@ def test_big_game_hook_may_name_the_opponent_and_long_hooks_fall_back(tmp_path, 
     detectors.save_alerts(c, [{"key": "a", "kind": "big_game", "title": "t", "score": 1, "facts": facts},
                               {"key": "b", "kind": "big_game", "title": "t", "score": 1, "facts": facts}])
     hooks = iter(["Bucks in town Saturday. Let's go", "Sixers " + "really " * 15 + "big game"])
-    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None: {
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None, conn=None: {
         "hook": next(hooks), "hashtags": ["#philly", "#SixersVsBucks", "#seahawksvsjets", "#NBA"], "model": "m",
         "script": script, "caption": caption})
     first = c.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(c, 1),)).fetchone()

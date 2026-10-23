@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, STATIC, type Alert, type Job, type Queue, type QueueItem, type Stage, type Summary } from '../api'
 import { fmtWhen } from '../App'
 import { AlertCard, KIND_LABEL } from './AlertsView'
+import { PostForm } from './PostsView'
 import TrendNotes, { TrendPills } from './TrendNotes'
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -92,6 +93,7 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
 }) {
   const [open, setOpen] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
+  const [logging, setLogging] = useState(false)
   const [note, setNote] = useState(item.note ?? '')
   const patch = async (fields: Parameters<typeof api.updateAlert>[1]) => { await api.updateAlert(item.alert_id, fields); onChange() }
   const snoozeDay = () => patch({ snoozed_until: new Date(Date.now() + 864e5).toISOString() })
@@ -165,11 +167,17 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
             ? <button className="ghost" onClick={() => patch({ snoozed_until: null })}>Back to queue</button>
             : <button className="ghost" onClick={snoozeDay} title="hide for 24 hours">Later</button>}
           <button className="ghost" onClick={() => setEditingNote(true)}>{item.note ? 'Edit note' : 'Note'}</button>
+          {!logging && <button className="ghost" onClick={() => setLogging(true)}
+                               title="log the video so the queue knows it's done (add the TikTok link for 24h/7d numbers)">
+            {item.posts.length ? '✓ Posted again' : '✓ Posted'}
+          </button>}
           {item.stage === 'dismissed'
             ? <button className="ghost" onClick={() => patch({ status: item.draft ? 'drafted' : 'new' })}>Restore</button>
             : <button className="ghost" onClick={() => patch({ status: 'dismissed' })}>Dismiss</button>}
         </>}
       </div>
+      {logging && <PostForm alertId={item.alert_id} draftId={item.draft?.id} hook={item.draft?.hook ?? ''}
+                            onDone={() => { setLogging(false); onChange() }} onCancel={() => setLogging(false)} />}
       {open && alert && (
         <div className="embedded">
           <AlertCard alert={alert} busy={busy} job={job}

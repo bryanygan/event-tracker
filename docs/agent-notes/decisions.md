@@ -314,6 +314,24 @@ conflicts, no lag; every feature works the same on the phone).
   the process dies, so it can't go stale.
 - Why: the 2hollis Philly date (Fillmore, 2027-02-16) wasn't in Ticketmaster's area search at 6:30 AM on
   2026-10-22; it was there by ~4 PM. The user found it by hand. The 4:30 run picks such shows up; 11:30 halves the gap.
-- User: "we can ditch the philly-events.pages.dev website since events.prin.cloud is up and running." Deleted the
+- User: "we can ditch the philly-events.pages.dev website since [the tunnel hostname] is up and running." Deleted the
   Pages project and its Access app ("Philly Events dashboard"; the "(editing)" app is the live one) and blanked
   PAGES_PROJECT. `tracker/publish.py` and the static build stay as an optional, off-by-default feature.
+
+## Drafts by Claude Haiku, Ollama as fallback (2026-10-22)
+- User asked whether their Claude Pro / ChatGPT Plus subscriptions could write drafts. Subscriptions don't include
+  the API; scripting the chat apps is against their terms. The API is ~$0.0005/draft on Haiku 5.5, ~$0.15/month.
+- `llm._chat`: Claude (`CLAUDE_MODEL`, effort low, JSON-schema output) when ANTHROPIC_API_KEY is set and under
+  CLAUDE_DAILY_CAP; on any API error or over the cap, Ollama (started on demand). Same prompt, same check_facts,
+  same retry: facts still only come from data. Each Claude call is logged in `llm_calls` (tokens, cost, error);
+  the Runs tab shows today's calls and the month's spend.
+- Why: better hooks than qwen2.5:3b, seconds instead of ~1 min, and no ~3 GB Ollama in RAM (the mini PC ran low
+  on memory during the 4:30 run on 2026-10-22).
+- anthropic==1.12.0 pinned (2.x and 1.13+ were under two weeks old).
+- Trial on a DB copy (13 drafts, 6 alerts, $0.026 total): Haiku 5.5 1-7 s, $0.0001-0.0005 per draft, 0 fact
+  warnings, 0 retries; it used support acts, presale times and every listed show, where qwen wrote empty captions
+  and wrong dates (Meek Mill hook said Thu for a Fri sale). Sonnet 5.5 read a little more natural but cost ~20x and
+  ran past 45 s on long roundups. Haiku low vs medium effort: same cost and speed, so medium (the model's default).
+  Haiku wrote #philllyevents once: HOUSE_TAGS snaps such typos at 0.92 (0.82 turned #phillypop into #phillyhiphop).
+- Once a Claude call fails inside a batch (model_session), the rest of the batch goes straight to Ollama, started
+  once; otherwise every draft would wait out the API timeout and start/stop Ollama itself.
