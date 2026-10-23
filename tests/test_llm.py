@@ -84,6 +84,12 @@ def test_clean_hashtags_fixes_artist_typos_and_punctuation():
     assert tags == ["#philly", "#CalvinHarris", "#RockinPhilly", "#tiktok"]
 
 
+def test_clean_hashtags_fixes_house_tag_typos_but_not_real_tags():
+    facts = {"artist": "Nova Vale", "shows": [{"artist": "Nova Vale"}]}
+    tags = llm.clean_hashtags(["#philllyevents", "#phillypop", "#PhillyEDM", "#philadephia", "#phillymusic"], facts)
+    assert tags == ["#philly", "#phillyevents", "#phillypop", "#PhillyEDM", "#philadelphia", "#phillymusic"]
+
+
 def test_presale_prompt_for_general_onsale_says_no_code():
     p = llm.build_prompt({"format": "presale", "artist": "X", "sale_name": "General public on-sale",
                           "sale_opens": "Thu", "shows": []})

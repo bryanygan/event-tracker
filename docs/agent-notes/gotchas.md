@@ -162,3 +162,8 @@
 - `tracker.remote --setup` takes the team domain from `.env` (CF_ACCESS_TEAM_DOMAIN); the Pages-redirect fallback is gone with the Pages site. Run it from the main
   folder (it needs PAGES_PROJECT from `.env`).
 - Tests blank REMOTE_* in conftest; `tests/test_remote.py` signs its own tokens with throwaway RSA keys.
+- Claude drafts: tests must never call the API. conftest blanks ANTHROPIC_API_KEY and sets DRAFT_PROVIDER=ollama;
+  tests that want Claude fake `anthropic.Anthropic`. Fakes of `llm.generate` must accept `conn=`.
+- Trying prompts or models on real alerts: copy the DB first (sqlite backup to the scratchpad, TRACKER_DB=copy) so
+  test drafts and llm_calls rows don't land in the live queue.
+

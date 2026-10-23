@@ -19,6 +19,7 @@ def conn(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(config, "DRAFT_PROVIDER", "claude")
     monkeypatch.setattr(config, "CLAUDE_MODEL", "claude-haiku-5-5")
+    monkeypatch.setattr(config, "CLAUDE_EFFORT", "medium")
     monkeypatch.setattr(llm, "ollama_session", nullcontext)
     return db.connect(tmp_path / "t.db")
 
@@ -56,7 +57,7 @@ def test_claude_writes_the_draft_and_logs_its_cost(conn, monkeypatch):
     assert out["hashtags"][0] == "#philly" and out["caption"] == "Who's going?"  # same cleanup as Ollama
     assert not ollama
     req = sent[0]
-    assert req["system"] == llm.SYSTEM_PROMPT and req["output_config"]["effort"] == "low"
+    assert req["system"] == llm.SYSTEM_PROMPT and req["output_config"]["effort"] == "medium"
     assert req["output_config"]["format"]["schema"]["additionalProperties"] is False
     assert "FACTS (the only things you may state)" in req["messages"][0]["content"]
     row = conn.execute("SELECT * FROM llm_calls").fetchone()
@@ -74,6 +75,25 @@ def test_api_failure_falls_back_to_ollama_and_counts(conn, monkeypatch):
     assert out["model"] == config.OLLAMA_MODEL and out["hook"] == "from ollama" and ollama == [config.OLLAMA_MODEL]
     row = conn.execute("SELECT * FROM llm_calls").fetchone()
     assert row["error"] == "overloaded" and row["cost_usd"] is None
+
+
+def test_after_a_failure_the_batch_uses_ollama_started_once(conn, monkeypatch):
+    sent, ollama, starts = [], [], []
+    fake_claude(monkeypatch, error=RuntimeError("overloaded"), sent=sent)
+    fake_ollama(monkeypatch, ollama)
+
+    def session():
+        starts.append(1)
+        return nullcontext()
+    monkeypatch.setattr(llm, "ollama_session", session)
+    with llm.model_session():
+        for _ in range(3):
+            assert llm.generate(FACTS["new_tour"], conn=conn)["model"] == config.OLLAMA_MODEL
+        assert llm._batch["ollama"]
+    assert len(sent) == 1 and len(ollama) == 3 and len(starts) == 1
+    assert llm._batch is None
+    llm.generate(FACTS["new_tour"], conn=conn)  # a new call outside the batch tries Claude again
+    assert len(sent) == 2
 
 
 def test_daily_cap_switches_to_ollama_without_calling_claude(conn, monkeypatch):

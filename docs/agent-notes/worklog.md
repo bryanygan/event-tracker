@@ -172,3 +172,4 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Merged `feature/draft-progress` (`6cb1523`), dashboard restarted.
 - `feature/claude-drafts`: Claude Haiku drafting with Ollama fallback, daily cap and cost log (decisions.md); a
   "✓ Posted" button on queue cards (the only "Log as posted" was inside the opened draft). 5 new tests (252).
+- Claude trial on a DB copy (see decisions.md); CLAUDE_EFFORT=medium, HOUSE_TAGS typo fix, batch fallback. 254 tests.

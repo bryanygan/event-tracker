@@ -21,7 +21,7 @@ import re
 import shutil
 import subprocess
 import time
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -187,10 +187,37 @@ def uses_claude() -> bool:
     return config.DRAFT_PROVIDER == "claude" and bool(config.ANTHROPIC_API_KEY)
 
 
+# While a Claude model_session() is open: once a call fails, the rest of the batch goes straight to Ollama,
+# which is started once and kept up until the session ends (not started and stopped per draft). One batch runs
+# at a time per process (the dashboard's job lock, the pipeline's run lock), so module state is enough.
+_batch: dict | None = None
+
+
+@contextmanager
 def model_session():
-    """What a batch of drafts needs running: nothing for Claude (a fallback to Ollama starts it on demand),
+    """What a batch of drafts needs running: nothing for Claude (Ollama is started only if a call falls back),
     Ollama otherwise."""
-    return nullcontext() if uses_claude() else ollama_session()
+    global _batch
+    if not uses_claude():
+        with ollama_session():
+            yield
+        return
+    with ExitStack() as stack:
+        _batch = {"stack": stack, "claude_failed": False, "ollama": False}
+        try:
+            yield
+        finally:
+            _batch = None
+
+
+def _fallback_ollama():
+    """Ollama for a Claude fallback: kept up for the rest of the batch, or just for this call outside one."""
+    if _batch is None:
+        return ollama_session()
+    if not _batch["ollama"]:
+        _batch["stack"].enter_context(ollama_session())
+        _batch["ollama"] = True
+    return nullcontext()
 
 
 def _kill_orphan_runners() -> None:
@@ -276,6 +303,10 @@ def _artist_names(facts: dict) -> list[str]:
     return [n for n in dict.fromkeys(names) if n]
 
 
+# The page's usual tags, so a typo like #philllyevents (Haiku, 2026-10-22) is fixed like a misspelled artist
+HOUSE_TAGS = ["phillyevents", "phillyconcerts", "phillymusic", "philadelphia", "phillyweekend", "thingstodoinphilly"]
+
+
 def clean_hashtags(raw: list, facts: dict) -> list[str]:
     """Strip punctuation, dedupe, force #philly, and snap misspelled artist tags to the real name
     (the model wrote #calvinnharris and #elderbroom in testing)."""
@@ -291,6 +322,11 @@ def clean_hashtags(raw: list, facts: dict) -> list[str]:
             close = difflib.get_close_matches(low, list(artist_tags), n=1, cutoff=0.82)
             if close:
                 body = artist_tags[close[0]]
+            elif low not in HOUSE_TAGS:
+                # stricter for these short ones: 0.82 turned #phillypop into #phillyhiphop
+                close = difflib.get_close_matches(low, HOUSE_TAGS, n=1, cutoff=0.92)
+                if close:
+                    body = close[0]
         tag = "#" + body
         if tag.lower() not in (x.lower() for x in tags):
             tags.append(tag)
@@ -347,7 +383,7 @@ def _claude_chat(conn, model: str, prompt: str, schema: dict) -> dict:
             model=model,
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            output_config={"effort": "low", "format": {"type": "json_schema",
+            output_config={"effort": config.CLAUDE_EFFORT, "format": {"type": "json_schema",
                                                         "schema": {**schema, "additionalProperties": False}}},
             messages=[{"role": "user", "content": prompt}],
         )
@@ -372,14 +408,18 @@ def _chat(conn, model: str | None, prompt: str, schema: dict) -> tuple[dict, str
     """The model's JSON reply and which model wrote it. Claude when configured and under today's cap (the cap
     needs `conn`); Ollama otherwise, or when the Claude call fails. An explicit `model` picks Ollama."""
     if model is None and uses_claude() and conn is not None:
-        if claude_calls_today(conn) < config.CLAUDE_DAILY_CAP:
+        if _batch and _batch["claude_failed"]:
+            pass  # already failed this batch; don't wait out another timeout per draft
+        elif claude_calls_today(conn) < config.CLAUDE_DAILY_CAP:
             try:
                 return _claude_chat(conn, config.CLAUDE_MODEL, prompt, schema), config.CLAUDE_MODEL
             except Exception as exc:
                 log.warning("Claude draft failed, falling back to Ollama: %s", exc)
+                if _batch:
+                    _batch["claude_failed"] = True
         else:
             log.warning("Claude daily cap (%d calls) reached; drafting with Ollama", config.CLAUDE_DAILY_CAP)
-        with ollama_session():  # model_session() didn't start it on the Claude path
+        with _fallback_ollama():  # model_session() didn't start it on the Claude path
             return _ollama_chat(config.OLLAMA_MODEL, prompt, schema), config.OLLAMA_MODEL
     model = model or config.OLLAMA_MODEL
     return _ollama_chat(model, prompt, schema), model

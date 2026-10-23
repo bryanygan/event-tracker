@@ -328,3 +328,10 @@ conflicts, no lag; every feature works the same on the phone).
 - Why: better hooks than qwen2.5:3b, seconds instead of ~1 min, and no ~3 GB Ollama in RAM (the mini PC ran low
   on memory during the 4:30 run on 2026-10-22).
 - anthropic==1.12.0 pinned (2.x and 1.13+ were under two weeks old).
+- Trial on a DB copy (13 drafts, 6 alerts, $0.026 total): Haiku 5.5 1-7 s, $0.0001-0.0005 per draft, 0 fact
+  warnings, 0 retries; it used support acts, presale times and every listed show, where qwen wrote empty captions
+  and wrong dates (Meek Mill hook said Thu for a Fri sale). Sonnet 5.5 read a little more natural but cost ~20x and
+  ran past 45 s on long roundups. Haiku low vs medium effort: same cost and speed, so medium (the model's default).
+  Haiku wrote #philllyevents once: HOUSE_TAGS snaps such typos at 0.92 (0.82 turned #phillypop into #phillyhiphop).
+- Once a Claude call fails inside a batch (model_session), the rest of the batch goes straight to Ollama, started
+  once; otherwise every draft would wait out the API timeout and start/stop Ollama itself.

@@ -15,7 +15,7 @@ export default function RunsView({ refreshKey, summary }: { refreshKey: number; 
       {d && (
         <p className="muted small">
           {d.enabled
-            ? <>Drafts by {d.model}: {d.today} of {d.cap} calls today · {d.month_calls} this month, ${d.month_cost_usd.toFixed(2)}.
+            ? <>Drafts by {d.model}: {d.today} of {d.cap} calls today · {d.month_calls} this month, ${d.month_cost_usd.toFixed(d.month_cost_usd < 1 ? 3 : 2)}.
                 Over the cap or on an API error, Ollama writes them.</>
             : <>Drafts by Ollama ({summary?.model}). Add ANTHROPIC_API_KEY to .env to use Claude.</>}
         </p>

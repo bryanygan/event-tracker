@@ -43,6 +43,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 DRAFT_PROVIDER = os.getenv("DRAFT_PROVIDER", "").strip().lower() or ("claude" if ANTHROPIC_API_KEY else "ollama")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5").strip()
+CLAUDE_EFFORT = os.getenv("CLAUDE_EFFORT", "medium").strip()  # low | medium | high; medium cost the same as low in testing
 CLAUDE_DAILY_CAP = int(os.getenv("CLAUDE_DAILY_CAP", "40"))  # model calls per ET day (~$0.0005 each on Haiku)
 # USD per million tokens (input, output), for the cost shown on the Runs tab. Haiku's is for prompts under 100K.
 CLAUDE_PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.00, 10.00), "claude-opus-5-5": (4.00, 20.00)}
