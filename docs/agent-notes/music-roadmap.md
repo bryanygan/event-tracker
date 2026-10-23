@@ -281,6 +281,23 @@ stories, add article timestamps, and retain source URLs."
 
 **Acceptance:** an hour of feeds lands in the DB with no duplicates; a 304 costs nothing; the tab shows them.
 
+**Built 2026-10-23 on `feature/news-rss`** (`tracker/news.py`, `tracker/fetchers/news_rss.py`, 14 new tests).
+Differences from the plan above, all small:
+
+- Parser: stdlib `xml.etree` (the 14 feeds are clean), with a regex fallback for RSS `<item>` blocks. Feeds over
+  5 MB are refused (largest seen ~1 MB).
+- The 14-day age limit applies on every read, not only the first. Items from a source's first read are marked
+  `first_read`. Undated ones (all of Mixmag's) say "before tracking" and sort after dated articles.
+- Feed dates later than "now" are capped at the time we first saw the item. Line of Best Fit stamps posts about
+  an hour ahead.
+- Dedupe within a source is by guid, or by URL if the guid changed. Cross-source duplicates are left for M3
+  clustering (`title_hash` is stored for it).
+- The task runs at **:10 and :40**, so it never starts at the same minute as the 6:30 / 11:30 / 4:30 runs.
+  Runs are recorded in `runs` as source `news`. The Runs tab and the header's "Last run" **leave them out** (48 a
+  day would bury the pipeline's runs), and the Music news tab lists the latest checks instead.
+- The read-only snapshot has no news yet: `publish.py` doesn't export it, and the static app shows an empty tab.
+- First live read (scratch DB): 14 sources, 343 articles, 0 failures, 15 s.
+
 ### M2: Personalized artist watchlist and identity (M)
 
 Advice step 02: "Seed it from `LISTENING_DB`, then add editable watchlist artists and adjacent-artist
@@ -410,6 +427,33 @@ stories that lack a Philadelphia connection." Plus section 6 (dashboard) and sec
 - Trend notes (`trends.py`) match music stories too, so a sound or search trend you noticed boosts the story.
 - "Already covered" also checks logged posts: a story about an artist you posted about recently gets the same
   caveat the queue gives events today.
+
+**M0 judgments (2026-10-23), the target for these weights.** The user marked 24 watchlist headlines Y/N
+(13 Y, 11 N). The full table with reasons is in the gitignored `data/m0/report.md`.
+
+- **Play count didn't predict a yes.** The most-played artist got both a Y and an N, and an artist with very
+  few plays got a Y. The question that decided it was "can I add an angle or insight?". So music relevance
+  should be a modest component, and content potential should carry more weight.
+- **Strong yes:**
+  - a tour by an artist the user has seen live (it branches into setlists, what to expect, the crowd);
+  - a nostalgic act paired with a nostalgic brand or product (top priority);
+  - a shock or funny hook;
+  - a news item that feeds a long-running meme about the artist;
+  - trending fan drama;
+  - a legal case the user can explain as a fan;
+  - "new music this week" roundups.
+- **Yes, but only as an engagement or ragebait angle:** anniversaries of landmark albums, and album
+  announcements by big names past their peak.
+- **No:**
+  - chart records with nothing to add;
+  - birthdays, lifestyle and travel pieces;
+  - **politics (a hard no)**;
+  - older artists outside the niche;
+  - fan reactions to someone else's lawsuit;
+  - a routine album announcement with no hook. A hook would be label news, a big feature, years since the
+    last album, a concept, or a vinyl.
+- So: add a `politics` story type that is never promoted. Weight `tour` and `brand_collab` up and `chart` and
+  `lifestyle` down. Show the possible angle on the card.
 
 **Acceptance:** a national story with no Philly date scores on its merits; the tab shows grouped stories with
 feedback buttons; Send to queue creates a working alert.

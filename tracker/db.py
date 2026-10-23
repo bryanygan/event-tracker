@@ -252,6 +252,44 @@ CREATE TABLE IF NOT EXISTS remote_edits (
     status INTEGER NOT NULL         -- HTTP status the dashboard answered with
 );
 
+-- Music news (tracker/news.py): public feeds, read with conditional requests. Seeded from config.NEWS_SOURCES.
+-- A failing source keeps its articles (same rule as venue calendars).
+CREATE TABLE IF NOT EXISTS news_sources (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,       -- config key, e.g. "pitchfork-news"
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'rss',  -- rss (youtube / official later, roadmap M8)
+    url TEXT NOT NULL,
+    niches TEXT,                    -- JSON list, e.g. ["rap", "rnb"]
+    enabled INTEGER NOT NULL DEFAULT 1,  -- 0 once it's removed from config (its articles stay)
+    poll_minutes INTEGER NOT NULL DEFAULT 30,
+    etag TEXT,                      -- for If-None-Match
+    last_modified TEXT,             -- for If-Modified-Since
+    last_fetched_at TEXT,           -- UTC ISO, any outcome
+    last_ok_at TEXT,                -- last 200 or 304
+    last_not_modified_at TEXT,      -- last 304 (nothing new, no body)
+    last_error TEXT,                -- NULL once it works again
+    failures INTEGER NOT NULL DEFAULT 0,  -- in a row; sets the back-off (config.NEWS_BACKOFF_MINUTES)
+    terms_note TEXT                 -- what the site allows and when that was checked
+);
+
+CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY,
+    source_id INTEGER NOT NULL REFERENCES news_sources(id),
+    guid TEXT NOT NULL,
+    url TEXT,
+    title TEXT NOT NULL,
+    excerpt TEXT,                   -- the feed's own summary, cut short (no article bodies)
+    published_at TEXT,              -- UTC ISO from the feed; NULL when the feed has none (fetched_at stands in)
+    fetched_at TEXT NOT NULL,       -- UTC ISO: first time we saw it
+    categories TEXT,                -- JSON list from the feed
+    title_hash TEXT,                -- normalized title, for clustering across sources later (roadmap M3)
+    first_read INTEGER NOT NULL DEFAULT 0,  -- 1 = already in the feed the first time we read the source
+    UNIQUE (source_id, guid)
+);
+CREATE INDEX IF NOT EXISTS idx_articles_seen ON articles(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(source_id, url);
+
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,

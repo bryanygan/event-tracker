@@ -291,6 +291,20 @@ export type Job = {
   alert_id?: number | null; step?: string | null; estimate?: number | null; elapsed?: number | null
 }
 
+// Music news (tracker/news.py, roadmap M1): feed articles and source health. Not in the read-only snapshot yet.
+export type NewsArticle = {
+  id: number; url: string | null; title: string; excerpt: string | null
+  published_at: string | null; fetched_at: string; seen_at: string; categories: string[]
+  first_read: boolean // already in the feed the first time it was read (its time may be "when we started")
+  source_key: string; source_name: string
+}
+export type NewsSource = {
+  key: string; name: string; url: string; enabled: boolean; niches: string[]; poll_minutes: number
+  last_fetched_at: string | null; last_ok_at: string | null; last_not_modified_at: string | null
+  last_error: string | null; failures: number; terms_note: string | null; articles: number; last_24h: number
+}
+export type NewsHealth = { sources: NewsSource[]; checks: Run[] }
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
   if (!res.ok) {
@@ -356,6 +370,8 @@ const staticApi = {
   createTrend: readOnly,
   updateTrend: readOnly,
   deleteTrend: readOnly,
+  news: (_days: number) => Promise.resolve<NewsArticle[]>([]),
+  newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
 }
 
 const liveApi = {
@@ -400,6 +416,8 @@ const liveApi = {
   updateTrend: (id: number, fields: TrendInput) =>
     req(`/api/trends/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
   deleteTrend: (id: number) => req(`/api/trends/${id}`, { method: 'DELETE' }),
+  news: (days: number) => req<NewsArticle[]>(`/api/news?days=${days}`),
+  newsSources: () => req<NewsHealth>('/api/news/sources'),
 }
 
 export const api: typeof liveApi = STATIC ? { ...staticApi, publish: readOnly } : liveApi

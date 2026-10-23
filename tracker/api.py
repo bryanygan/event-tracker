@@ -137,7 +137,7 @@ def job_status():
 @app.get("/api/summary")
 def summary(c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date().isoformat()
-    last = c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+    last = c.execute("SELECT * FROM runs WHERE source != 'news' ORDER BY id DESC LIMIT 1").fetchone()
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).replace(microsecond=0).isoformat()  # same format as posted_at
     return {
         "upcoming_events": c.execute("SELECT COUNT(*) FROM events WHERE active=1 AND local_date>=?",
@@ -510,8 +510,44 @@ def genres(c=Depends(get_db)):
 
 
 @app.get("/api/runs")
-def runs(limit: int = 20, c=Depends(get_db)):
-    return [dict(r) for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,))]
+def runs(limit: int = 20, source: str | None = None, c=Depends(get_db)):
+    """Pipeline runs. The 30-minute news checks are left out unless asked for (source=news): the Music news tab
+    shows them, and 48 a day would bury the pipeline's own runs."""
+    where, args = ("source = ?", (source,)) if source else ("source != 'news'", ())
+    return [dict(r) for r in c.execute(f"SELECT * FROM runs WHERE {where} ORDER BY id DESC LIMIT ?", (*args, limit))]
+
+
+@app.get("/api/news")
+def news_articles(days: int = 3, source: str | None = None, limit: int = 500, c=Depends(get_db)):
+    """Recent music-news articles, newest first (tracker/news.py). `seen_at` is the feed's date, or when we first
+    read it if the feed has none."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
+    rows = c.execute("""SELECT a.id, a.url, a.title, a.excerpt, a.published_at, a.fetched_at, a.categories,
+                               a.first_read, s.key AS source_key, s.name AS source_name,
+                               COALESCE(a.published_at, a.fetched_at) AS seen_at
+                        FROM articles a JOIN news_sources s ON s.id = a.source_id
+                        WHERE COALESCE(a.published_at, a.fetched_at) >= ? AND (? IS NULL OR s.key = ?)
+                        -- undated items from a source's first read could be any age: after the dated ones
+                        ORDER BY (a.published_at IS NULL AND a.first_read), seen_at DESC, a.id DESC
+                        LIMIT ?""", (since, source, source, limit))
+    return [{**dict(r), "categories": json.loads(r["categories"] or "[]"), "first_read": bool(r["first_read"])}
+            for r in rows]
+
+
+@app.get("/api/news/sources")
+def news_sources(c=Depends(get_db)):
+    """Feed health for the Sources panel, plus the latest news checks."""
+    day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).replace(microsecond=0).isoformat()
+    rows = c.execute("""SELECT s.*, COUNT(a.id) AS articles,
+                               SUM(COALESCE(a.published_at, a.fetched_at) >= ?) AS last_24h
+                        FROM news_sources s LEFT JOIN articles a ON a.source_id = s.id
+                        GROUP BY s.id ORDER BY s.enabled DESC, s.name""", (day_ago,))
+    sources = [{k: r[k] for k in ("key", "name", "url", "enabled", "poll_minutes", "last_fetched_at", "last_ok_at",
+                                  "last_not_modified_at", "last_error", "failures", "terms_note", "articles")}
+               | {"enabled": bool(r["enabled"]), "niches": json.loads(r["niches"] or "[]"),
+                  "last_24h": r["last_24h"] or 0}
+               for r in rows]
+    return {"sources": sources, "checks": runs(limit=10, source="news", c=c)}
 
 
 @app.get("/api/remote-edits")
