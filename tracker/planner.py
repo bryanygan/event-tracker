@@ -81,9 +81,9 @@ def calendar(conn, now: datetime | None = None, start: date | None = None, days:
             continue
         w = weeks[day - timedelta(days=day.weekday())]
         w["formats"][fmt] += 1
-        if lane in ("lane", "other"):
+        if lane in ("lane", "other", "music"):  # "music": a music-news story, about a watchlist artist
             w["music"] += 1
-            w["lane"] += lane == "lane"
+            w["lane"] += lane in ("lane", "music")
     mix = [{"week": m.isoformat(), "label": f"Week of {fmt_date(m.isoformat())}", "formats": dict(weeks[m]["formats"]),
             "lane": weeks[m]["lane"], "music": weeks[m]["music"]} for m in sorted(weeks)]
 

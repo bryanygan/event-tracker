@@ -135,6 +135,24 @@ OPPORTUNITY_WEIGHTS = {
     "search": 0.10,      # search demand / trends: from your trend notes (trends.py); unknown when none match
     "ready": 0.05,       # facts complete, draft written and clean
 }
+# Music stories (tracker/music.py, roadmap M5): their own score, since a national story has no Philly date to judge.
+# From your M0 judgments (2026-10-23): the angle decided a yes, not how much you play the artist, so content potential
+# carries the most weight and your artists a modest share. Momentum is unknown until M7 and left out, like search.
+MUSIC_RULES_VERSION = "2026-10-23.M5"
+MUSIC_WEIGHTS = {
+    "content": 0.30,     # the kind of story and its hook (brand tie-in, tour, roundup over chart notes)
+    "urgency": 0.20,     # fresh news, or a release date coming up
+    "relevance": 0.15,   # watchlist tier, your plays, your feedback buttons
+    "confidence": 0.15,  # catalog-confirmed > two outlets > one source; rumors and conflicts score low
+    "search": 0.10,      # your trend notes (trends.py)
+    "momentum": 0.10,    # M7: unknown until then
+}
+MUSIC_POLITICS_CAP = 60    # politics: a heavy penalty, not a block (a meme angle won once); Interested lifts it
+MUSIC_CONFLICT_CAP = 64    # sources disagree on a date: never "strong" until it's sorted out
+# Automatic Send to queue for stories that clear both bars. Off until M9: while Music news is its own tab, you
+# decide what reaches What to post. Sensitive stories are never sent automatically.
+MUSIC_AUTO_SEND = False
+MUSIC_AUTO_SEND_MIN = 80
 NEWS_FRESH_HOURS = 24      # announcements: post within a day...
 NEWS_EXPIRES_DAYS = 7      # ...and after a week it's not news anymore
 RECENT_POST_DAYS = 14      # warn when you already posted about the same artist this recently
@@ -154,6 +172,7 @@ CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM l
 SERIES_FOR_FORMAT = {
     "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
     "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
+    "music_story": "Music news",
 }
 # How often a series usually runs. The Series table marks one "behind" when its last post is older than this.
 SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}

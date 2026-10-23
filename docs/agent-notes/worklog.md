@@ -204,4 +204,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - M4 bake-off (22 artists; decisions.md): kept Deezer + iTunes Search, MusicBrainz for ids only. `feature/catalog`:
   `releases`, catalog polling in the news job (16 artists/check), catalog evidence (scheduled/released, confirmed or
   conflicting), catalog-only stories in a New releases view, guest spots as "featured on". 15 new tests (341).
-
+- Merged `feature/catalog` (`e9730f7`), dashboard restarted, live DB migrated (catalogs fill from the next checks).
+- `feature/music-scoring` (M5): `tracker/music.py` (story score, feedback, Send to queue, auto-send off),
+  `story_actions`, `seen_live`; For you / New releases / All headlines with score pills, angle, reasons, caveats
+  and the buttons; queue pillar filter and music path in `opportunities.py`. On a live-DB copy the top 6 stories
+  were all ones the user had marked Y in M0. 13 new tests (354).

@@ -4,8 +4,8 @@ import StoriesList from './StoriesList'
 import WatchlistPanel from './WatchlistPanel'
 import { fmtWhen } from '../App'
 
-// Music news (roadmap M1-M2): what the feeds published, read every 30 minutes, tagged with your watchlist artists.
-// Stories group the articles (M3); scoring comes in M5.
+// Music news (roadmap M1-M5): what the feeds published, read every 30 minutes, tagged with your watchlist artists,
+// grouped into stories (M3), checked against the release catalogs (M4) and scored for you (M5).
 export default function NewsView({ refreshKey }: { refreshKey: number }) {
   const [view, setView] = useState<'stories' | 'releases' | 'articles'>('stories')
   const [days, setDays] = useState(3)
@@ -44,7 +44,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       <p className="muted small">
         Headlines from {sources.length} music-news feeds, checked every 30 minutes
         {lastCheck ? ` (last check ${fmtWhen(lastCheck.started_at)}, ${lastCheck.events_fetched} new)` : ''}, tagged
-        with your watchlist artists and grouped into stories. Nothing here becomes an idea by itself.
+        with your watchlist artists and grouped into stories. Nothing here becomes an idea until you press Send to queue.
       </p>
       {error && <div className="banner error">{error}</div>}
       {broken.length > 0 && (
@@ -55,7 +55,8 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       )}
 
       <div className="toolbar">
-        <button className={view === 'stories' ? 'tab active' : 'tab'} onClick={() => setView('stories')}>Stories</button>
+        <button className={view === 'stories' ? 'tab active' : 'tab'} onClick={() => setView('stories')}
+                title="Stories about your watchlist artists, best first">For you</button>
         <button className={view === 'releases' ? 'tab active' : 'tab'} onClick={() => setView('releases')}
                 title="Releases by your watchlist artists that no feed covered, from Deezer and Apple Music (iTunes)">New releases</button>
         <button className={view === 'articles' ? 'tab active' : 'tab'} onClick={() => setView('articles')}>All headlines</button>

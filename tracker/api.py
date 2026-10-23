@@ -23,8 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, drafts, listening, llm, opportunities, planner, posts, publish, remote, slides,
-               trends, watchlist)
+from . import (angles, config, context, db, drafts, listening, llm, music, opportunities, planner, posts, publish, remote,
+               slides, trends, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -306,6 +306,8 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
     if not row:
         raise HTTPException(404)
     facts = json.loads(row["facts"])
+    if facts.get("format") == "music_story":
+        raise HTTPException(400, "Drafting music stories comes with roadmap M6")
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
 
@@ -550,20 +552,22 @@ def news_articles(days: int = 3, source: str | None = None, mine: bool = False, 
 
 
 @app.get("/api/news/stories")
-def news_stories(days: int = 7, origin: str | None = None, c=Depends(get_db)):
-    """Watchlist stories (tracker/stories.py), newest activity first, each with its sources and evidence.
-    `origin`: news (from articles) or catalog (releases no feed covered, tracker/catalog.py)."""
+def news_stories(days: int = 7, origin: str | None = None, sort: str = "score", c=Depends(get_db)):
+    """Watchlist stories (tracker/stories.py), each with its sources, evidence and music score (tracker/music.py).
+    `origin`: news (from articles) or catalog (releases no feed covered, tracker/catalog.py). `sort`: score (For you:
+    unhandled stories first, best first) or recent (newest activity first)."""
     if origin not in (None, "news", "catalog"):
         raise HTTPException(400, "origin must be news or catalog")
+    if sort not in ("score", "recent"):
+        raise HTTPException(400, "sort must be score or recent")
     since = (datetime.now(timezone.utc) - timedelta(days=days)).replace(microsecond=0).isoformat()
     # Stories made only of undated items from before tracking began have an unknown time: after the dated ones
     rows = c.execute("""SELECT * FROM stories WHERE last_seen >= ? AND (? IS NULL OR origin = ?)
                         ORDER BY dated DESC, last_seen DESC, id DESC""", (since, origin, origin)).fetchall()
     if not rows:
         return []
-    taste = listening.load()
-    artists = {r["id"]: {"id": r["id"], "name": r["name"], "tier": r["tier"], "plays": taste.plays.get(r["key"], 0)}
-               for r in c.execute("SELECT id, name, key, tier FROM artist_identities")}
+    ctx = music.context(c)
+    artists = {i: {k: a[k] for k in ("id", "name", "tier", "plays", "seen_live")} for i, a in ctx["artists"].items()}
     ids = [r["id"] for r in rows]
     marks = ",".join("?" * len(ids))
     sources: dict[int, list] = {}
@@ -580,14 +584,41 @@ def news_stories(days: int = 7, origin: str | None = None, c=Depends(get_db)):
     out = []
     for r in rows:
         d = dict(r)
-        d["sensitive"], d["dated"] = bool(d["sensitive"]), bool(d["dated"])
         d["primary_artist"] = artists.get(r["primary_artist_id"])
         d["other_artists"] = [artists[i] for i in json.loads(r["other_artist_ids"] or "[]") if i in artists]
         d["sources"] = sources.get(r["id"], [])
         d["source_count"] = len({x["source_name"] for x in d["sources"]})
+        d["sensitive"], d["dated"] = bool(d["sensitive"]), bool(d["dated"])
         d["evidence"] = evidence.get(r["id"], [])
+        d.update(music.evaluate(d, ctx))
         out.append(d)
+    if sort == "score":
+        out.sort(key=music.rank_key)
     return out
+
+
+class StoryFeedback(BaseModel):
+    feedback: str | None  # interested, not_my_lane, already_covered; null clears it
+
+
+@app.post("/api/news/stories/{story_id}/feedback")
+def story_feedback(story_id: int, body: StoryFeedback, c=Depends(get_db)):
+    try:
+        music.set_feedback(c, story_id, body.feedback)
+    except KeyError:
+        raise HTTPException(404)
+    except music.MusicError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "feedback": body.feedback}
+
+
+@app.post("/api/news/stories/{story_id}/send", status_code=201)
+def story_send(story_id: int, c=Depends(get_db)):
+    """Send to queue: a music_story idea built from the story's evidence (nothing posts by itself)."""
+    try:
+        return {"alert_id": music.send(c, story_id)}
+    except KeyError:
+        raise HTTPException(404)
 
 
 @app.get("/api/watchlist")
@@ -612,7 +643,7 @@ def add_watchlist(body: WatchlistAdd, c=Depends(get_db)):
 
 @app.patch("/api/watchlist/{artist_id}")
 def patch_watchlist(artist_id: int, body: dict, c=Depends(get_db)):
-    allowed = {"tier", "muted", "aliases", "common_word_override"}
+    allowed = {"tier", "muted", "aliases", "common_word_override", "seen_live"}
     if not body or set(body) - allowed:
         raise HTTPException(400, f"can change: {', '.join(sorted(allowed))}")
     try:

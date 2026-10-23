@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import catalog, config, db, store, stories, watchlist
+from . import catalog, config, db, music, store, stories, watchlist
 from .fetchers import news_rss
 
 log = logging.getLogger("tracker.news")
@@ -136,6 +136,7 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
         except Exception as exc:  # the feeds are the job; never lose them over a catalog problem
             log.warning("Catalog check failed: %s", exc)
             releases = {"artists": 0, "new": 0, "error": str(exc)}
+        music.auto_send(conn)  # off unless config.MUSIC_AUTO_SEND (M9)
         store.finish_run(conn, run_id, fetched=new, api_calls=len(results), ok=True,
                          error=("failed: " + ", ".join(failed)) if failed else None)
     except Exception as exc:

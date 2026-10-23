@@ -12,6 +12,7 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   status_change: 'Status change',
   team_week: 'Home games this week',
   big_game: 'Big game',
+  music_story: 'Music news',
 }
 
 // Phones: start long lists (angles) collapsed so a card stays about one screen tall
@@ -173,6 +174,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
   // Roundups: the "my N picks" cut (best by notability), starred in the facts table
   const picks = ((alert.facts.picks as ShowFacts[] | undefined) ?? []).map((s) => `${s.artist}|${s.date}`)
   const [latest, ...older] = alert.drafts
+  const music = alert.kind === 'music_story' // drafting and slides for music stories come with roadmap M6
 
   return (
     <section className={`card kind-${alert.kind}`}>
@@ -235,7 +237,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       <div ref={latestRef}>
         {done === 'ok' && <div className="draft-done" role="status">✓ New draft ready</div>}
         {latest ? <DraftView key={latest.id} draft={latest} alertId={alert.id} onChange={onDraftChange} />
-          : <p className="muted">No draft yet.</p>}
+          : <p className="muted">{music ? 'Drafting music stories comes with roadmap M6; the facts above are the story’s sources.' : 'No draft yet.'}</p>}
       </div>
       {older.length > 0 && (
         <button className="link" onClick={() => setShowOlder(!showOlder)}>
@@ -248,10 +250,10 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       {done === 'failed' && <div className="warn" role="status">Drafting failed: {job?.error}</div>}
       {startError && <div className="warn" role="status">Couldn't start the draft: {startError}</div>}
       <div className="actions">
-        {!STATIC && <button onClick={() => draft()} disabled={busy || sending}>
+        {!STATIC && !music && <button onClick={() => draft()} disabled={busy || sending}>
           {mine || sending ? 'Drafting…' : latest ? 'New draft' : 'Write draft'}
         </button>}
-        <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
+        {!music && <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>}
         {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}

@@ -34,7 +34,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -196,7 +196,8 @@ export type QueueItem = {
   series: string | null // your series, else the format's default
   series_set: string | null // the series you typed (null = the default)
   format: string
-  lane: 'lane' | 'other' | 'sports'
+  lane: 'lane' | 'other' | 'sports' | 'music'
+  pillar: 'events' | 'music' // music: a music-news story you sent to the queue (tracker/music.py)
 }
 
 // Editorial calendar (tracker/planner.py)
@@ -308,20 +309,27 @@ export type WatchArtist = {
   id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual'; aliases: string[]; muted: boolean
   user_edited: boolean; common_word: boolean; common_word_auto: boolean; common_word_override: number | null
   ambiguous_name: boolean; mbid: string | null; deezer_id: number | null; attraction_id: string | null
-  plays: number; articles_30d: number; bucket: string | null
+  plays: number; articles_30d: number; bucket: string | null; seen_live: boolean
 }
-export type StoryArtist = { id: number; name: string; tier: WatchTier; plays: number }
+export type StoryArtist = { id: number; name: string; tier: WatchTier; plays: number; seen_live: boolean }
+export type StoryFeedback = 'interested' | 'not_my_lane' | 'already_covered'
 export type Story = {
   id: number; key: string; story_type: string; rule: string | null; title: string
   primary_artist: StoryArtist | null; other_artists: StoryArtist[]
   release_title: string | null; release_status: 'rumored' | 'teased' | 'announced' | 'scheduled' | 'released' | null
   release_date: string | null; verification: 'unverified' | 'corroborated' | 'confirmed' | 'conflicting'
-  sensitive: boolean; dated: boolean; origin: 'news' | 'catalog'; first_seen: string; last_seen: string; feedback: string | null; alert_id: number | null
+  sensitive: boolean; dated: boolean; origin: 'news' | 'catalog'; first_seen: string; last_seen: string
+  feedback: StoryFeedback | null; alert_id: number | null
   sources: { id: number; title: string; url: string | null; source_name: string; seen_at: string }[]
   source_count: number
   evidence: { kind: string; provider: string; url: string | null; claim: string; value: string; excerpt: string | null; observed_at: string }[]
+  // Music score (tracker/music.py, M5): the queue's layout, with its own components
+  score: number | null; band: QueueItem['band']; coverage: number; components: QueueItem['components']
+  reasons: string[]; caveats: string[]; angle: string | null; rules_version: string
+  philly_shows: { date: string; venue: string | null; url: string | null; headliner: boolean }[]
+  trend_notes: TrendMatch[]
 }
-export type WatchPatch = Partial<{ tier: WatchTier; muted: boolean; aliases: string[]; common_word_override: boolean | null }>
+export type WatchPatch = Partial<{ tier: WatchTier; muted: boolean; aliases: string[]; common_word_override: boolean | null; seen_live: boolean }>
 export type NewsSource = {
   key: string; name: string; url: string; enabled: boolean; niches: string[]; poll_minutes: number
   last_fetched_at: string | null; last_ok_at: string | null; last_not_modified_at: string | null
@@ -397,7 +405,9 @@ const staticApi = {
   news: (_days: number, _mine = false) => Promise.resolve<NewsArticle[]>([]),
   newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
   watchlist: () => Promise.resolve<WatchArtist[]>([]),
-  stories: (_days: number, _origin?: Story['origin']) => Promise.resolve<Story[]>([]),
+  stories: (_days: number, _origin?: Story['origin'], _sort?: 'score' | 'recent') => Promise.resolve<Story[]>([]),
+  storyFeedback: readOnly,
+  sendStory: readOnly,
   addWatch: readOnly,
   updateWatch: readOnly,
 }
@@ -447,8 +457,11 @@ const liveApi = {
   news: (days: number, mine = false) => req<NewsArticle[]>(`/api/news?days=${days}${mine ? '&mine=true' : ''}`),
   newsSources: () => req<NewsHealth>('/api/news/sources'),
   watchlist: () => req<WatchArtist[]>('/api/watchlist'),
-  stories: (days: number, origin?: Story['origin']) =>
-    req<Story[]>(`/api/news/stories?days=${days}${origin ? `&origin=${origin}` : ''}`),
+  stories: (days: number, origin?: Story['origin'], sort: 'score' | 'recent' = 'score') =>
+    req<Story[]>(`/api/news/stories?days=${days}&sort=${sort}${origin ? `&origin=${origin}` : ''}`),
+  storyFeedback: (id: number, feedback: StoryFeedback | null) =>
+    req<{ ok: boolean }>(`/api/news/stories/${id}/feedback`, { method: 'POST', body: JSON.stringify({ feedback }) }),
+  sendStory: (id: number) => req<{ alert_id: number }>(`/api/news/stories/${id}/send`, { method: 'POST' }),
   addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
     req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
   updateWatch: (id: number, fields: WatchPatch) =>
