@@ -1,4 +1,7 @@
-"""Turn an alert's facts into a TikTok draft with a local Ollama model.
+"""Turn an alert's facts into a TikTok draft with Claude (when ANTHROPIC_API_KEY is set) or a local Ollama model.
+
+Both get the same prompt and the same checks; Ollama is the fallback when Claude is over its daily cap or the
+API call fails. Claude calls are logged in `llm_calls` (tokens, cost) for the Runs tab.
 
 Guardrails:
 - The model only sees the alert's `facts` JSON. It writes the hook, script, caption, hashtags.
@@ -18,12 +21,14 @@ import re
 import shutil
 import subprocess
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
 from . import config
+from .store import now_iso
 
 log = logging.getLogger(__name__)
 
@@ -178,6 +183,16 @@ def _stop_tree(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+def uses_claude() -> bool:
+    return config.DRAFT_PROVIDER == "claude" and bool(config.ANTHROPIC_API_KEY)
+
+
+def model_session():
+    """What a batch of drafts needs running: nothing for Claude (a fallback to Ollama starts it on demand),
+    Ollama otherwise."""
+    return nullcontext() if uses_claude() else ollama_session()
+
+
 def _kill_orphan_runners() -> None:
     """Runners left behind when a previous run was killed before it could clean up (its children survive).
     Only called when Ollama isn't serving, so no live session owns these processes."""
@@ -290,14 +305,94 @@ HOOK_ONLY_SCHEMA = {
 }
 
 
+def _ollama_chat(model: str, prompt: str, schema: dict) -> dict:
+    resp = requests.post(f"{config.OLLAMA_URL}/api/chat", timeout=600, json={
+        "model": model,
+        "stream": False,
+        "format": schema,
+        "keep_alive": "2m",
+        "options": {"temperature": 0.8, "num_ctx": 4096, "num_predict": 700},
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+    })
+    resp.raise_for_status()
+    return json.loads(resp.json()["message"]["content"])
+
+
+def claude_calls_today(conn, now: datetime | None = None) -> int:
+    from .context import _et_day_utc
+    return conn.execute("SELECT COUNT(*) FROM llm_calls WHERE at >= ? AND at < ?",
+                        _et_day_utc(now or datetime.now(timezone.utc))).fetchone()[0]
+
+
+def claude_usage(conn, now: datetime | None = None) -> dict:
+    """Calls today against the cap, and this month's cost, for the Runs tab."""
+    now = now or datetime.now(timezone.utc)
+    month = now.strftime("%Y-%m")
+    row = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS cost FROM llm_calls WHERE at LIKE ?",
+                       (month + "%",)).fetchone()
+    return {"enabled": uses_claude(), "model": config.CLAUDE_MODEL, "today": claude_calls_today(conn, now),
+            "cap": config.CLAUDE_DAILY_CAP, "month_calls": row["n"], "month_cost_usd": round(row["cost"], 4)}
+
+
+def _claude_chat(conn, model: str, prompt: str, schema: dict) -> dict:
+    """One Claude call with the reply constrained to the draft schema. Logged (tokens, cost) even on failure."""
+    import anthropic
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=60.0)
+    usage, error = None, None
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            system=SYSTEM_PROMPT,
+            output_config={"effort": "low", "format": {"type": "json_schema",
+                                                        "schema": {**schema, "additionalProperties": False}}},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        usage = resp.usage
+        if resp.stop_reason != "end_turn":
+            raise RuntimeError(f"Claude stopped early ({resp.stop_reason})")
+        return json.loads(next(b.text for b in resp.content if b.type == "text"))
+    except Exception as exc:
+        error = str(exc)[:500]
+        raise
+    finally:
+        if conn is not None:
+            price_in, price_out = config.CLAUDE_PRICES.get(model, (0.0, 0.0))
+            tin, tout = (usage.input_tokens, usage.output_tokens) if usage else (None, None)
+            cost = (tin * price_in + tout * price_out) / 1e6 if usage else None
+            conn.execute("INSERT INTO llm_calls (at, model, input_tokens, output_tokens, cost_usd, error) "
+                         "VALUES (?,?,?,?,?,?)", (now_iso(), model, tin, tout, cost, error))
+            conn.commit()
+
+
+def _chat(conn, model: str | None, prompt: str, schema: dict) -> tuple[dict, str]:
+    """The model's JSON reply and which model wrote it. Claude when configured and under today's cap (the cap
+    needs `conn`); Ollama otherwise, or when the Claude call fails. An explicit `model` picks Ollama."""
+    if model is None and uses_claude() and conn is not None:
+        if claude_calls_today(conn) < config.CLAUDE_DAILY_CAP:
+            try:
+                return _claude_chat(conn, config.CLAUDE_MODEL, prompt, schema), config.CLAUDE_MODEL
+            except Exception as exc:
+                log.warning("Claude draft failed, falling back to Ollama: %s", exc)
+        else:
+            log.warning("Claude daily cap (%d calls) reached; drafting with Ollama", config.CLAUDE_DAILY_CAP)
+        with ollama_session():  # model_session() didn't start it on the Claude path
+            return _ollama_chat(config.OLLAMA_MODEL, prompt, schema), config.OLLAMA_MODEL
+    model = model or config.OLLAMA_MODEL
+    return _ollama_chat(model, prompt, schema), model
+
+
 def generate(facts: dict, model: str | None = None, script: str | None = None,
-             caption: str | None = None, angle: dict | None = None) -> dict:
-    """Call Ollama once and return the parsed draft dict. Raises on failure.
+             caption: str | None = None, angle: dict | None = None, conn=None) -> dict:
+    """Call the model once and return the parsed draft dict. Raises on failure.
 
     With a templated `script` and `caption` (presale/status formats), the model only writes the
-    hook and hashtags.
+    hook and hashtags. `conn` lets Claude be used (cap + cost log); without it, or with an explicit Ollama
+    `model`, it's Ollama.
     """
-    model = model or config.OLLAMA_MODEL
     prompt = build_prompt(facts)
     if angle:  # the creator picked a framing; the hook is fixed and the model writes around it
         prompt += (f"\n\nANGLE: {angle['label']}. {angle['pitch']}\nThe hook is already chosen: \"{angle['hook']}\". "
@@ -307,19 +402,7 @@ def generate(facts: dict, model: str | None = None, script: str | None = None,
                    "(the first line on screen, leading into this script) and hashtags.\n"
                    f"SCRIPT: {script}\n"
                    'Return JSON: {"hook": str, "hashtags": [str]}')
-    resp = requests.post(f"{config.OLLAMA_URL}/api/chat", timeout=600, json={
-        "model": model,
-        "stream": False,
-        "format": HOOK_ONLY_SCHEMA if script else DRAFT_SCHEMA,
-        "keep_alive": "2m",
-        "options": {"temperature": 0.8, "num_ctx": 4096, "num_predict": 700},
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-    })
-    resp.raise_for_status()
-    out = json.loads(resp.json()["message"]["content"])
+    out, model = _chat(conn, model, prompt, HOOK_ONLY_SCHEMA if script else DRAFT_SCHEMA)
     for key in ("hook", "script", "caption"):
         out[key] = fill_placeholders(str(out.get(key, "")), facts)
     # Captions often arrive as "text #tag #tag" or only tags: move tags to the hashtag list.

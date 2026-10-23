@@ -246,6 +246,17 @@ CREATE TABLE IF NOT EXISTS remote_edits (
     path TEXT NOT NULL,
     status INTEGER NOT NULL         -- HTTP status the dashboard answered with
 );
+
+-- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
+CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,               -- UTC ISO
+    model TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cost_usd REAL,
+    error TEXT                      -- set when the call failed (it still counts against the cap)
+);
 """
 
 

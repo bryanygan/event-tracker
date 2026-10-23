@@ -10,7 +10,7 @@ from .store import now_iso
 
 log = logging.getLogger(__name__)
 
-MAX_DRAFTS_PER_RUN = 8  # ~1 min each on the N95; keeps a run under ~10 minutes
+MAX_DRAFTS_PER_RUN = 8  # ~1 min each with Ollama on the N95 (seconds with Claude); keeps a run under ~10 minutes
 
 
 def draft_row(r, alert_facts: dict) -> dict:
@@ -51,12 +51,13 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
                "hashtags": angles.template_hashtags(facts), "model": "template"}
         progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
-    out = llm.generate(facts, model=model, script=script, caption=caption, **({"angle": chosen} if chosen else {}))
+    out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+                       **({"angle": chosen} if chosen else {}))
     progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
         progress("Second try: the first draft didn't match the facts", extra_generation=True)
-        retry = llm.generate(facts, model=model, script=script, caption=caption)
+        retry = llm.generate(facts, model=model, script=script, caption=caption, conn=conn)
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
             out, warnings = retry, retry_warnings
@@ -98,7 +99,7 @@ def draft_pending(conn, limit: int = MAX_DRAFTS_PER_RUN) -> list[int]:
     if not ids:
         return []
     made = []
-    with llm.ollama_session():
+    with llm.model_session():
         for alert_id in ids:
             try:
                 made.append(draft_alert(conn, alert_id))

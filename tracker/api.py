@@ -86,8 +86,8 @@ _job_lock = threading.Lock()
 _job = {"name": None, "started": None, "error": None, "finished": None,
         "alert_id": None, "step": None, "estimate": None}  # draft jobs: which alert, what's happening, ~seconds
 _job_t0 = 0.0
-# How long one model generation took last time, so the progress bar's estimate matches this PC
-_gen_seconds = {"last": 60.0}
+# How long one model generation took last time (per provider), so the progress bar's estimate matches this PC
+_gen_seconds = {"ollama": 60.0, "claude": 8.0}
 OLLAMA_START_SECONDS = 15
 
 
@@ -145,7 +145,8 @@ def summary(c=Depends(get_db)):
         "open_alerts": c.execute("SELECT COUNT(*) FROM alerts WHERE status!='dismissed'").fetchone()[0],
         "pending_drafts": c.execute("SELECT COUNT(*) FROM drafts WHERE status='pending'").fetchone()[0],
         "last_run": dict(last) if last else None,
-        "model": config.OLLAMA_MODEL,
+        "model": config.CLAUDE_MODEL if llm.uses_claude() else config.OLLAMA_MODEL,
+        "drafting": llm.claude_usage(c),
         "has_tm_key": bool(config.TICKETMASTER_API_KEY),
         # None = Pages not configured (UI hides the publish button); {} = configured, never published
         "publish": (publish.last_status() or {}) if publish.configured() else None,
@@ -293,27 +294,28 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
 
     use_llm = drafts.needs_llm(facts, angle)
-    cold = use_llm and not llm.ollama_up()
+    provider = "claude" if llm.uses_claude() else "ollama"
+    cold = use_llm and provider == "ollama" and not llm.ollama_up()
     retried = []
 
     def progress(step: str, extra_generation: bool = False):
         _job["step"] = step
         if extra_generation:  # the fact-check retry: one more generation
             retried.append(step)
-            _job["estimate"] = (_job["estimate"] or 0) + _gen_seconds["last"]
+            _job["estimate"] = (_job["estimate"] or 0) + _gen_seconds[provider]
 
     def work():
         with closing(conn()) as job_conn:
             if use_llm:
-                with llm.ollama_session():
+                with llm.model_session():
                     progress("Writing the draft")
                     started = time.monotonic()
                     drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
                     if not retried:  # remember a clean single generation's time for the next estimate
-                        _gen_seconds["last"] = min(max(time.monotonic() - started, 10.0), 300.0)
+                        _gen_seconds[provider] = min(max(time.monotonic() - started, 2.0), 300.0)
             else:  # templated format + chosen angle: no model, done in a moment
                 drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
-    estimate = (OLLAMA_START_SECONDS if cold else 0) + _gen_seconds["last"] if use_llm else 2
+    estimate = (OLLAMA_START_SECONDS if cold else 0) + _gen_seconds[provider] if use_llm else 2
     return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else ""), work,
                       alert_id=alert_id, step="Starting the model" if cold else "Writing the draft",
                       estimate=round(estimate))

@@ -253,6 +253,8 @@ export type Summary = {
   source_problems?: { source: string; error: string }[]
   posts_this_week: number
   metrics_due: number
+  // Claude drafting: calls today against the daily cap, and this month's spend (enabled=false: Ollama only)
+  drafting?: { enabled: boolean; model: string; today: number; cap: number; month_calls: number; month_cost_usd: number }
 }
 
 export type Job = {

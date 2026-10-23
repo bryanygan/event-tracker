@@ -317,3 +317,14 @@ conflicts, no lag; every feature works the same on the phone).
 - User: "we can ditch the philly-events.pages.dev website since events.prin.cloud is up and running." Deleted the
   Pages project and its Access app ("Philly Events dashboard"; the "(editing)" app is the live one) and blanked
   PAGES_PROJECT. `tracker/publish.py` and the static build stay as an optional, off-by-default feature.
+
+## Drafts by Claude Haiku, Ollama as fallback (2026-10-22)
+- User asked whether their Claude Pro / ChatGPT Plus subscriptions could write drafts. Subscriptions don't include
+  the API; scripting the chat apps is against their terms. The API is ~$0.0005/draft on Haiku 5.5, ~$0.15/month.
+- `llm._chat`: Claude (`CLAUDE_MODEL`, effort low, JSON-schema output) when ANTHROPIC_API_KEY is set and under
+  CLAUDE_DAILY_CAP; on any API error or over the cap, Ollama (started on demand). Same prompt, same check_facts,
+  same retry: facts still only come from data. Each Claude call is logged in `llm_calls` (tokens, cost, error);
+  the Runs tab shows today's calls and the month's spend.
+- Why: better hooks than qwen2.5:3b, seconds instead of ~1 min, and no ~3 GB Ollama in RAM (the mini PC ran low
+  on memory during the 4:30 run on 2026-10-22).
+- anthropic==1.12.0 pinned (2.x and 1.13+ were under two weeks old).

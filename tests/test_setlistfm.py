@@ -126,7 +126,7 @@ def test_comeback_draft_carries_a_verify_note(tmp_path, monkeypatch):
     conn = db.connect(tmp_path / "d.db")
     a = _presale_alert(conn, "2019-11-19")
     detectors.save_alerts(conn, [a])
-    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None: {
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None, conn=None: {
         "hook": "Hozier is back in Philly", "hashtags": [], "model": "m", "script": script, "caption": caption})
     d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
     assert any("setlist.fm" in w for w in json.loads(d["warnings"]))

@@ -169,3 +169,6 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Draft progress bar on `feature/draft-progress` (user asked for visual confirmation on "New draft"). Also fixed
   the latest DraftView not being keyed by draft id, so its text could stay on the old draft after a new one loaded.
   `llm._ollama_up` is now public `ollama_up`. 3 new tests (247).
+- Merged `feature/draft-progress` (`6cb1523`), dashboard restarted.
+- `feature/claude-drafts`: Claude Haiku drafting with Ollama fallback, daily cap and cost log (decisions.md); a
+  "✓ Posted" button on queue cards (the only "Log as posted" was inside the opened draft). 5 new tests (252).

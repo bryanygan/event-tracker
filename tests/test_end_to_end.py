@@ -17,7 +17,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(llm, "ollama_session", nullcontext)
     monkeypatch.setattr(deezer, "enrich_headliners", lambda conn: 0)
 
-    def fake_generate(facts, model=None, script=None, caption=None):
+    def fake_generate(facts, model=None, script=None, caption=None, conn=None):
         return {"hook": "Philly, listen up", "script": script or f"{facts['format']} script", "caption": caption or "Save this",
                 "hashtags": ["#philly"], "model": "fake"}
     monkeypatch.setattr(llm, "generate", fake_generate)
@@ -97,7 +97,7 @@ def test_draft_retries_once_when_flagged(tmp_path, monkeypatch):
                                   "facts": {"format": "weekend", "weekend": "Fri, Oct 23", "shows": []}}])
     outputs = iter([{"hook": "Oct 31 at 9pm!", "script": "", "caption": "", "hashtags": [], "model": "m"},
                     {"hook": "Fri, Oct 23 is it", "script": "", "caption": "", "hashtags": [], "model": "m"}])
-    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None: next(outputs))
+    monkeypatch.setattr(llm, "generate", lambda facts, model=None, script=None, caption=None, conn=None: next(outputs))
     d = conn.execute("SELECT * FROM drafts WHERE id=?", (drafts.draft_alert(conn, 1),)).fetchone()
     assert d["hook"] == "Fri, Oct 23 is it" and json.loads(d["warnings"]) == []
 
