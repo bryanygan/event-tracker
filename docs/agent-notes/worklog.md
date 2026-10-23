@@ -173,3 +173,5 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/claude-drafts`: Claude Haiku drafting with Ollama fallback, daily cap and cost log (decisions.md); a
   "✓ Posted" button on queue cards (the only "Log as posted" was inside the opened draft). 5 new tests (252).
 - Claude trial on a DB copy (see decisions.md); CLAUDE_EFFORT=medium, HOUSE_TAGS typo fix, batch fallback. 254 tests.
+- `feature/cleanup`: Deezer release genres check Ticketmaster's (decisions.md), 20 drafts per run with Claude,
+  `--redraft-local` for the old Ollama drafts. 8 new tests (262).

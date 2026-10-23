@@ -95,6 +95,28 @@ NON_GENRES = {"Undefined", "Other", "Miscellaneous", "Music"}
 # Venue-calendar acts have no genre; look them up as Ticketmaster attractions (exact name, unambiguous only).
 GENRE_LOOKUPS_PER_RUN = 40         # TM calls per run (a run itself uses ~4); unfilled acts wait for the next run
 GENRE_RECHECK_DAYS = 30            # retry "not found" / ambiguous names after this long
+# Deezer's genre for an artist: the most common genre across their releases, in Ticketmaster's words.
+# Ticketmaster's own label is sometimes plainly wrong (a hyperpop act as Rock, a rock band as Dance/Electronic).
+DEEZER_GENRES = {
+    "Pop": "Pop", "Rap/Hip Hop": "Hip-Hop/Rap", "R&B": "R&B", "Soul & Funk": "R&B", "Dance": "Dance/Electronic",
+    "Electro": "Dance/Electronic", "Rock": "Rock", "Alternative": "Alternative", "Metal": "Metal",
+    "Country": "Country", "Folk": "Folk", "Jazz": "Jazz", "Blues": "Blues", "Reggae": "Reggae",
+    "Reggaeton": "Latin", "Latin Music": "Latin", "Salsa": "Latin", "Cumbia": "Latin",
+    "Traditional Mexicano": "Latin", "Brazilian Music": "Latin", "Classical": "Classical", "Christian": "Religious",
+}
+DEEZER_GENRE_MIN_RELEASES = 3      # releases with a usable genre before Deezer's genre counts
+DEEZER_GENRE_MIN_SHARE = 0.6       # ...and this share of them must agree
+# Deezer's genre replaces Ticketmaster's only across these families: Pop vs Hip-Hop/Rap for a crossover act is
+# a judgment call (Ticketmaster's stays), Rock vs Pop is a wrong label. A genre in no family is never replaced.
+GENRE_FAMILIES = {
+    "Pop": "pop", "Hip-Hop/Rap": "pop", "R&B": "pop", "Dance/Electronic": "pop",
+    "Rock": "rock", "Alternative": "rock", "Metal": "rock",
+    "Country": "country", "Folk": "country", "Jazz": "jazz", "Blues": "jazz", "Latin": "latin",
+    "Reggae": "reggae", "Classical": "classical", "Religious": "religious",
+}
+# Deezer genres too broad to overrule Ticketmaster (they still fill a show with no genre). Deezer files indie pop
+# (bedroom-pop acts Ticketmaster calls Pop) under Alternative; checked on the live data 2026-10-22.
+DEEZER_FILL_ONLY = {"Alternative"}
 # Calendar "headliners" that are really event names: never look these up (a namesake would match).
 GENRE_LOOKUP_SKIP_PATTERNS = [r"\bopen mic\b", r"\bkaraoke\b", r"\btrivia\b", r"\bnight\b", r"\bparty\b",
                               r"\bshowcase\b", r"\bjam\b", r"\bbingo\b", r"\bbrunch\b", r"\bcomedy\b", r"\bdj set\b",

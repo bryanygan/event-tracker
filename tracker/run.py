@@ -183,8 +183,15 @@ def main(argv=None):
     p.add_argument("--from-cache", action="store_true", help="replay last raw Ticketmaster pull (no API calls)")
     p.add_argument("--no-drafts", action="store_true", help="skip LLM drafting")
     p.add_argument("--midday", action="store_true", help="quick check: no drafts, web lookups or publish")
+    p.add_argument("--redraft-local", action="store_true",
+                   help="one-off: new Claude drafts for live alerts whose newest draft came from Ollama")
     args = p.parse_args(argv)
     setup_logging()
+    if args.redraft_local:
+        with closing(db.connect()) as conn:
+            made = drafts.redraft_local(conn)
+        log.info("Redrafted %d alerts with Claude", len(made))
+        return
     started = datetime.now()
     try:
         result = run(from_cache=args.from_cache, make_drafts=not args.no_drafts, midday=args.midday)

@@ -6,6 +6,12 @@ const GENRE_SOURCE: Record<string, string> = {
   listing: 'genre from the listing',
   artist: "Ticketmaster's genre for the artist (the listing had none)",
   tm_search: 'inferred: this venue-calendar act matched a Ticketmaster artist by exact name',
+  deezer: "inferred: the most common genre of the artist's releases on Deezer",
+}
+
+function genreTitle(e: { genre_source?: string | null; ticketmaster_genre?: string | null }): string {
+  const base = GENRE_SOURCE[e.genre_source ?? ''] ?? ''
+  return e.ticketmaster_genre ? `${base} (Ticketmaster says ${e.ticketmaster_genre})` : base
 }
 
 export default function EventsView({ refreshKey }: { refreshKey: number }) {
@@ -53,8 +59,8 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
                   {e.support && <div className="muted small">w/ {e.support}</div>}
                 </td>
                 <td>{e.venue_name}</td>
-                <td title={GENRE_SOURCE[e.genre_source ?? ''] ?? ''}>
-                  {e.genre_source === 'tm_search' && e.genre ? <span className="muted">≈ </span> : null}
+                <td title={genreTitle(e)}>
+                  {(e.genre_source === 'tm_search' || e.genre_source === 'deezer') && e.genre ? <span className="muted">≈ </span> : null}
                   {e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}
                 </td>
                 <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>

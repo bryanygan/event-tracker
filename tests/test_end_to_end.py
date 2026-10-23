@@ -60,6 +60,8 @@ def test_deezer_enrichment_picks_exact_match_with_most_fans(tmp_path):
         {"id": 2, "name": "Mt. Joy", "nb_fan": 120},
         {"id": 3, "name": "mt. joy", "nb_fan": 250_000},
     ]})
+    responses.get(deezer.ALBUMS_URL.format(3), json={"data": []})
+    responses.get(deezer.GENRES_URL, json={"data": []})
     assert deezer.enrich_headliners(conn, deezer.DeezerClient(min_interval=0)) == 1
     row = conn.execute("SELECT * FROM attractions WHERE name='Mt. Joy'").fetchone()
     assert (row["fans"], row["popularity"]) == (250_000, 68)

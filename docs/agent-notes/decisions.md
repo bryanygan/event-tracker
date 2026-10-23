@@ -335,3 +335,19 @@ conflicts, no lag; every feature works the same on the phone).
   Haiku wrote #philllyevents once: HOUSE_TAGS snaps such typos at 0.92 (0.82 turned #phillypop into #phillyhiphop).
 - Once a Claude call fails inside a batch (model_session), the rest of the batch goes straight to Ollama, started
   once; otherwise every draft would wait out the API timeout and start/stop Ollama itself.
+
+## Deezer genres, bigger Claude batches, redraft command (2026-10-22, `feature/cleanup`)
+
+- Spotify returns no genres to development-mode apps, so the genre check uses Deezer: the most common genre of
+  the headliner's releases (`/artist/{id}/albums`, one extra call per matched artist, cached with the 14-day fan
+  refresh). It needs 3+ releases with a known genre and a 60% share, mapped to Ticketmaster's words
+  (config.DEEZER_GENRES).
+- It replaces Ticketmaster's label only across families (config.GENRE_FAMILIES: Pop/Hip-Hop/R&B/Dance is one,
+  Rock/Alternative/Metal another...), never for non-Music segments, and never with "Alternative". It fills shows
+  with no genre at all. The replaced label shows on the Events tab's genre tooltip (`ticketmaster_genre`).
+- Trial on a DB copy (250 headliners): 26 shows change, e.g. 2hollis Rock -> Pop, Alter Bridge Dance/Electronic
+  -> Rock, Zach Bryan Rock -> Country, MercyMe Rock -> Religious. With "Alternative" allowed to replace, Lizzy
+  McAlpine, Wasia Project and almost monday left Pop (and the lane), hence DEEZER_FILL_ONLY.
+- Drafts per run: 20 with Claude (8 with Ollama). `python -m tracker.run --redraft-local` writes Claude drafts
+  for live alerts whose newest draft came from Ollama; it stops near the daily cap or after a Claude failure
+  rather than redrafting locally.

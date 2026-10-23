@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS attractions (
     history_checked_at TEXT,
     genre_source TEXT,              -- NULL = Ticketmaster's classification; 'tm_search' = matched by name (genres.py)
     genre_checked_at TEXT,          -- last Ticketmaster name lookup for a venue-calendar act
+    deezer_genre TEXT,              -- most common genre of their Deezer releases, in TM's words; NULL = unclear
+    deezer_genre_checked_at TEXT,
     first_seen TEXT NOT NULL
 );
 
@@ -282,7 +284,8 @@ _ADDED_COLUMNS = {
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",
-                    "genre_source": "TEXT", "genre_checked_at": "TEXT"},  # genres.py: NULL source = Ticketmaster's own
+                    "genre_source": "TEXT", "genre_checked_at": "TEXT",  # genres.py: NULL source = Ticketmaster's own
+                    "deezer_genre": "TEXT", "deezer_genre_checked_at": "TEXT"},  # fetchers/deezer.py
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT"},
     "drafts": {"facts": "TEXT", "angle": "TEXT"},
