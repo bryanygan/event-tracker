@@ -139,11 +139,56 @@ DRAFT_SCHEMA = {
 
 # ---------- Ollama process management ----------
 
+class LowMemory(RuntimeError):
+    """Not enough free RAM to load the local model without squeezing Homebridge and the rest of the PC."""
+
+
 def ollama_up() -> bool:
     try:
         return requests.get(f"{config.OLLAMA_URL}/api/version", timeout=2).ok
     except requests.RequestException:
         return False
+
+
+def free_memory_mb() -> int | None:
+    """Available physical RAM in MB, or None if it can't be read (then the guard doesn't block)."""
+    if os.name != "nt":
+        return None
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    status = MemoryStatus()
+    status.dwLength = ctypes.sizeof(MemoryStatus)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None
+    return int(status.ullAvailPhys // (1024 * 1024))
+
+
+def _model_loaded() -> bool:
+    """Is the local model already in RAM (someone else's Ollama session)? Then using it costs nothing more."""
+    try:
+        resp = requests.get(f"{config.OLLAMA_URL}/api/ps", timeout=2)
+        return resp.ok and any(m.get("name", "").startswith(config.OLLAMA_MODEL)
+                               for m in resp.json().get("models", []))
+    except (requests.RequestException, ValueError):
+        return False
+
+
+def check_memory(up: bool | None = None) -> None:
+    """Raise LowMemory if loading the local model now would leave too little RAM for everything else."""
+    up = ollama_up() if up is None else up
+    if up and _model_loaded():
+        return
+    free = free_memory_mb()
+    if free is not None and free < config.OLLAMA_MIN_FREE_MB:
+        raise LowMemory(f"Only {free / 1000:.1f} GB of memory free; the local model needs "
+                        f"{config.OLLAMA_MIN_FREE_MB / 1000:.1f} GB, so it wasn't started")
 
 
 def _ollama_exe() -> str | None:
@@ -156,9 +201,12 @@ def _ollama_exe() -> str | None:
 
 @contextmanager
 def ollama_session():
-    """Make sure Ollama is reachable for the duration; stop it after if we started it."""
+    """Make sure Ollama is reachable for the duration; stop it after if we started it. Raises LowMemory
+    (before starting anything) when the PC is short on RAM."""
     proc = None
-    if not ollama_up():
+    up = ollama_up()
+    check_memory(up)
+    if not up:
         exe = _ollama_exe()
         if not exe:
             raise RuntimeError("Ollama isn't running and ollama.exe wasn't found")
@@ -213,15 +261,19 @@ _batch: dict | None = None
 @contextmanager
 def model_session():
     """What a batch of drafts needs running: nothing for Claude (Ollama is started only if a call falls back),
-    Ollama otherwise."""
+    Ollama otherwise. If the PC is short on memory, the batch still runs: each call that needs Ollama raises
+    LowMemory (templated formats then draft from their template), without retrying the start per draft."""
     global _batch
-    if not uses_claude():
-        with ollama_session():
-            yield
-        return
     with ExitStack() as stack:
-        _batch = {"stack": stack, "claude_failed": False, "ollama": False}
+        _batch = {"stack": stack, "claude_failed": False, "ollama": False, "low_memory": None}
         try:
+            if not uses_claude():
+                try:
+                    stack.enter_context(ollama_session())
+                    _batch["ollama"] = True
+                except LowMemory as exc:
+                    log.warning("%s", exc)
+                    _batch["low_memory"] = exc
             yield
         finally:
             _batch = None
@@ -231,8 +283,15 @@ def _fallback_ollama():
     """Ollama for a Claude fallback: kept up for the rest of the batch, or just for this call outside one."""
     if _batch is None:
         return ollama_session()
+    if _batch["low_memory"]:
+        raise _batch["low_memory"]
     if not _batch["ollama"]:
-        _batch["stack"].enter_context(ollama_session())
+        try:
+            _batch["stack"].enter_context(ollama_session())
+        except LowMemory as exc:
+            log.warning("%s", exc)
+            _batch["low_memory"] = exc
+            raise
         _batch["ollama"] = True
     return nullcontext()
 
@@ -456,6 +515,8 @@ def _chat(conn, model: str | None, prompt: str, schema: dict, system: str = SYST
             log.warning("Claude daily cap (%d calls) reached; drafting with Ollama", config.CLAUDE_DAILY_CAP)
         with _fallback_ollama():  # model_session() didn't start it on the Claude path
             return _ollama_chat(config.OLLAMA_MODEL, prompt, schema, system), config.OLLAMA_MODEL
+    if _batch and _batch["low_memory"]:
+        raise _batch["low_memory"]
     model = model or config.OLLAMA_MODEL
     return _ollama_chat(model, prompt, schema, system), model
 

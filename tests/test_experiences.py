@@ -159,6 +159,14 @@ def test_one_idea_per_notable_experience_starting_soon(local_conn):
     draft = {"hook": "Holiday Market season", "script": script, "caption": templates.caption_for(a["facts"])}
     assert llm.check_facts(draft, a["facts"]) == []
     assert "Market" in templates.hook_names(a["facts"])
+    assert a["title"].startswith("Nova Vale Holiday Market — Sat, Nov 14 – Thu, Dec 31 at ")
+
+
+def test_title_skips_a_venue_that_is_just_the_events_name(local_conn):
+    local_conn.execute("""UPDATE venues SET name = 'Nova Vale Holiday Market'
+                          WHERE id = (SELECT venue_id FROM events WHERE name = 'Nova Vale Holiday Market')""")
+    a = detectors.detect_experiences(local_conn, WED)[0]
+    assert a["title"] == "Nova Vale Holiday Market — Sat, Nov 14 – Thu, Dec 31"
 
 
 def test_free_and_cheap_need_the_facts_to_say_so():

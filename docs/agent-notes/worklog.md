@@ -239,3 +239,11 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   comedians already on sale. Real run on a DB copy: 164 comedy shows, 84 new games, 18 experiences, 5 new ideas;
   two Haiku drafts clean. Built in a git worktree (`../events-tracker-p214`) so the main folder stayed on `main`.
   27 new tests (415).
+- Merged P2-14 (`b8a4529`). The 4:30 PM run started 15 min before the merge, so it ran the old code; a preview
+  run from `main` on a DB copy matched the branch run (10 TM calls, 164 comedy, 18 local, 5 ideas). One fix: an
+  experience title repeated the name as its venue ("Open Streets: West Walnut … at Open Streets: West Walnut").
+- `feature/health-guards`: Ollama low-memory guard (`llm.check_memory`, `OLLAMA_MIN_FREE_MB` 3500 via
+  GlobalMemoryStatusEx, no new dependency; skipped when the model is already loaded). A short batch doesn't
+  crash or retry the start per draft: templated formats draft from their template, the rest stay "new". Source
+  health (`tracker/health.py`, `/api/health`, a Sources table on the Runs tab; the banner now covers every
+  source plus stopped scheduled runs), read only from runs/source_runs/news_sources. 11 new tests (426).

@@ -297,6 +297,16 @@ export type Run = {
   error: string | null
 }
 
+// Is each source still working? (tracker/health.py)
+export type SourceCheck = {
+  group: string
+  name: string
+  last_ok: string | null
+  found: number | null
+  what: string
+  problem: string | null
+}
+
 // Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py)
 export type RemoteEdits = {
   enabled: boolean
@@ -446,6 +456,7 @@ const staticApi = {
   deleteManualEvent: readOnly,
   genres: () => snapshot<string[]>('genres'),
   runs: () => snapshot<Run[]>('runs'),
+  health: () => Promise.resolve<SourceCheck[]>([]),
   remoteEdits: () => Promise.resolve<RemoteEdits>({ enabled: false, host: null, edits: [] }),
   triggerRun: readOnly,
   posts: () => snapshot<Post[]>('posts'),
@@ -505,6 +516,7 @@ const liveApi = {
   deleteManualEvent: (id: number) => req(`/api/manual-events/${id}`, { method: 'DELETE' }),
   genres: () => req<string[]>('/api/genres'),
   runs: () => req<Run[]>('/api/runs'),
+  health: () => req<SourceCheck[]>('/api/health'),
   remoteEdits: () => req<RemoteEdits>('/api/remote-edits'),
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
