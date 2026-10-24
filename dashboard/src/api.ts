@@ -11,6 +11,11 @@ export type ShowFacts = {
   status?: string
   url?: string
   support?: string
+  kind?: 'game' | 'comedy' | 'experience'
+  dates?: string      // multi-day experiences: "Sat, Nov 14 – Thu, Dec 31"
+  end?: string
+  category?: string
+  listed_by?: string  // where an experience came from (provenance)
 }
 
 export type Draft = {
@@ -34,7 +39,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'experience' | 'things_to_do' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -169,7 +174,30 @@ export type EventRow = {
   my_plays: number
   niche: boolean
   first_seen: string
+  segment: string | null      // Music, Sports, Arts & Theatre (comedy), Experience
+  end_date: string | null     // last day of a multi-day experience
+  source: string | null       // ccd, drwc, manual, a venue key; null = Ticketmaster
 }
+
+export type EventKind = '' | 'music' | 'sports' | 'comedy' | 'local'
+
+// Events you add yourself (tracker/manual_events.py): every fact is yours, nothing is looked up
+export type ManualEvent = {
+  id: number
+  name: string
+  category: string | null
+  start_date: string
+  end_date: string | null
+  start_time: string | null
+  venue: string
+  city: string | null
+  price_min: number | null
+  price_max: number | null
+  url: string | null
+  notes: string | null
+  created_at: string
+}
+export type ManualEventInput = Partial<Omit<ManualEvent, 'id' | 'created_at'>> & { free?: boolean }
 
 export type Stage = 'new' | 'shortlisted' | 'review' | 'needs_refresh' | 'approved' | 'filmed' | 'posted' |
   'measured' | 'snoozed' | 'expired' | 'dismissed'
@@ -203,7 +231,7 @@ export type QueueItem = {
   series: string | null // your series, else the format's default
   series_set: string | null // the series you typed (null = the default)
   format: string
-  lane: 'lane' | 'other' | 'sports' | 'music'
+  lane: 'lane' | 'other' | 'sports' | 'music' | 'local'
   pillar: 'events' | 'music' // music: a music story you sent, or a music roundup (tracker/music_formats.py)
 }
 
@@ -405,13 +433,17 @@ const staticApi = {
   rebuildSlides: readOnly,
   resetSlides: readOnly,
   updateDraft: readOnly,
-  events: ({ q = '', genre = '', days = 60 }: { q?: string; genre?: string; days?: number }) =>
+  events: ({ q = '', genre = '', days = 60 }: { q?: string; genre?: string; kind?: EventKind; days?: number }) =>
     snapshot<EventRow[]>('events').then((all) => {
       const end = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10)
       const ql = q.toLowerCase()
       return all.filter((e) => e.local_date <= end && (!genre || e.genre === genre) &&
         (!ql || [e.name, e.headliner, e.venue_name].some((s) => s?.toLowerCase().includes(ql))))
     }),
+  manualEvents: () => Promise.resolve({ events: [] as ManualEvent[], categories: [] as string[] }),
+  createManualEvent: readOnly,
+  updateManualEvent: readOnly,
+  deleteManualEvent: readOnly,
   genres: () => snapshot<string[]>('genres'),
   runs: () => snapshot<Run[]>('runs'),
   remoteEdits: () => Promise.resolve<RemoteEdits>({ enabled: false, host: null, edits: [] }),
@@ -463,8 +495,14 @@ const liveApi = {
     req<{ context: WebContext; usage: ContextUsage }>(`/api/alerts/${id}/context${refresh ? '?refresh=true' : ''}`, { method: 'POST' }),
   updateDraft: (id: number, fields: Partial<Pick<Draft, 'status' | 'notes' | 'hook' | 'script' | 'caption' | 'hashtags'>>) =>
     req(`/api/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
-  events: (params: { q?: string; genre?: string; days?: number }) =>
+  events: (params: { q?: string; genre?: string; kind?: EventKind; days?: number }) =>
     req<EventRow[]>('/api/events?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v ?? '')]))),
+  manualEvents: () => req<{ events: ManualEvent[]; categories: string[] }>('/api/manual-events'),
+  createManualEvent: (fields: ManualEventInput) =>
+    req<{ id: number }>('/api/manual-events', { method: 'POST', body: JSON.stringify(fields) }),
+  updateManualEvent: (id: number, fields: ManualEventInput) =>
+    req(`/api/manual-events/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  deleteManualEvent: (id: number) => req(`/api/manual-events/${id}`, { method: 'DELETE' }),
   genres: () => req<string[]>('/api/genres'),
   runs: () => req<Run[]>('/api/runs'),
   remoteEdits: () => req<RemoteEdits>('/api/remote-edits'),

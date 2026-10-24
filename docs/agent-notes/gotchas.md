@@ -185,3 +185,21 @@
 - **Any new keyed API must be blanked in tests/conftest.py.** LAST_FM_API_KEY wasn't (M7), so every test that ran
   `news.run` made live Last.fm/Deezer/ListenBrainz calls from the main folder (where `.env` exists) but not from the
   dev worktree (no `.env`), which hid it. A suite that suddenly takes minutes is a sign.
+
+## Philly experiences (P2-14, 2026-10-24)
+
+- **A new Ticketmaster feed's first read is a baseline.** `run.new_feed_ids` marks events from a team or comedy
+  that the DB has never stored, so they don't log "new" changes (31 "just announced" comedians otherwise). Adding a
+  team to `SPORTS_TEAMS` later works the same way.
+- **"Free" only from an experience listing or from you.** `fmt_price(..., free_ok=is_experience(e))`: Ticketmaster
+  has $0-$0 listings that are gaps, which now state no price. `check_facts` flags "free"/"cheap"/"under $X" unless
+  the facts say so ("feel free" and names like "Free Nationals" pass).
+- **Experience events can start in the past.** `EVENT_VIEW_SQL` keeps an event while `COALESCE(end_date,
+  local_date) >= today`, and the store's "removed" check uses the same date. Code that assumes `local_date >= today`
+  for every upcoming event is wrong for a running market.
+- **Recurring listings:** Center City District lists every date separately. `collapse_tribe` merges back-to-back
+  days (gap <= 2) into a range and shows a weekly/monthly series as its next date only (a range would claim every
+  day in between).
+- **Hand-added events sync on save** through `store.upsert_events(..., protected_prefixes=("",))`: a one-event batch
+  must not mark everything else removed. Their notes never reach facts.
+- `tests/conftest.py` blanks `EXPERIENCE_SOURCES`, or the end-to-end tests would read the real sites.

@@ -10,6 +10,7 @@ Tweak the weights here; everything downstream just reads `score`.
 from __future__ import annotations
 
 import math
+import re
 from datetime import date
 
 from . import config, genres, listening
@@ -51,7 +52,7 @@ FROM events e
 LEFT JOIN venues v ON v.id = e.venue_id
 LEFT JOIN event_attractions ea ON ea.event_id = e.id AND ea.position = 0
 LEFT JOIN attractions a ON a.id = ea.attraction_id
-WHERE e.active = 1 AND e.local_date >= ?
+WHERE e.active = 1 AND COALESCE(e.end_date, e.local_date) >= ?  -- a market that opened last week is still on
 """
 
 
@@ -59,14 +60,50 @@ def is_game(e: dict) -> bool:
     return e.get("segment") == "Sports"
 
 
-def game_score(opponent: str | None, local_date: str) -> float:
+def is_comedy(e: dict) -> bool:
+    return e.get("segment") == "Arts & Theatre" and e.get("genre") == "Comedy"
+
+
+def is_experience(e: dict) -> bool:
+    """Markets, festivals, seasonal events and hand-added ones (P2-14)."""
+    return e.get("segment") == "Experience"
+
+
+def is_music(e: dict) -> bool:
+    return e.get("segment") in (None, "Music")
+
+
+def is_marquee(team: str | None, opponent: str | None) -> bool:
+    t = config.SPORTS_TEAMS.get(team) or {}
+    return bool(t.get("every_game_big")) or opponent in t.get("marquee", ())
+
+
+def game_score(opponent: str | None, local_date: str, team: str | None = None) -> float:
     """Home games: base + marquee opponent + weekend. (Fan counts mean nothing for a team.)"""
     s = config.SPORTS_BASE_SCORE
-    if opponent in config.MARQUEE_OPPONENTS:
+    if is_marquee(team, opponent):
         s += config.MARQUEE_BONUS
     if date.fromisoformat(local_date).weekday() >= 4:
         s += config.WEEKEND_GAME_BONUS
     return float(min(s, 100))
+
+
+_BIG = [re.compile(p, re.I) for p in config.EXPERIENCE_BIG_WORDS]
+_SMALL = [re.compile(p, re.I) for p in config.EXPERIENCE_SMALL_WORDS]
+_SOURCE_BASE = {s["key"]: s["base"] for s in config.EXPERIENCE_SOURCES}
+
+
+def experience_score(e: dict) -> float:
+    """A source's typical listing, up for the names that make videos (market, festival, fireworks) and down for
+    the routine ones (happy hour, trivia). What you added yourself scores high: you picked it."""
+    if e.get("source") == "manual":
+        return float(config.EXPERIENCE_MANUAL_SCORE)
+    s = _SOURCE_BASE.get(e.get("source"), 50)
+    if any(p.search(e["name"]) for p in _BIG):
+        s += config.EXPERIENCE_BIG_BONUS
+    if any(p.search(e["name"]) for p in _SMALL):
+        s -= config.EXPERIENCE_SMALL_PENALTY
+    return float(max(0, min(s, 100)))
 
 
 def upcoming_events(conn, today: str) -> list[dict]:
@@ -77,7 +114,17 @@ def upcoming_events(conn, today: str) -> list[dict]:
         r["headliner"] = r["headliner"] or r["name"]
         if is_game(r):
             r["opponent"] = (r["support"] or "").split(", ")[0] or None  # home team first, opponent second
-            r["score"] = game_score(r["opponent"], r["local_date"])
+            r["score"] = game_score(r["opponent"], r["local_date"], r["headliner"])
+            r["my_plays"], r["niche"], r["taste_bonus"] = 0, False, 0
+            r["genre_source"] = "listing"
+            continue
+        if is_experience(r):
+            r["score"] = experience_score(r)
+            r["my_plays"], r["niche"], r["taste_bonus"] = 0, False, 0
+            r["genre_source"] = "listing"
+            continue
+        if is_comedy(r):  # venue + tour size only: a comedian's name can match a musician's plays or fans
+            r["score"] = score(None, r["venue_tier"], r["tm_upcoming_total"])
             r["my_plays"], r["niche"], r["taste_bonus"] = 0, False, 0
             r["genre_source"] = "listing"
             continue

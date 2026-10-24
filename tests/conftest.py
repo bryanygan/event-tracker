@@ -26,6 +26,7 @@ def no_real_services(monkeypatch, tmp_path):
         monkeypatch.setattr(config, name, "")
     monkeypatch.setattr(config, "REMOTE_EMAILS", set())
     monkeypatch.setattr(config, "RUN_LOCK", tmp_path / "pipeline.lock")  # never contend with a real run
+    monkeypatch.setattr(config, "EXPERIENCE_SOURCES", [])  # or read Center City District / the waterfront (P2-14)
     from tracker import api, listening
     monkeypatch.setattr(listening, "_cache", {})
     monkeypatch.setattr(api, "LOCAL_HOSTS", api.LOCAL_HOSTS | {"testserver"})  # TestClient's Host header

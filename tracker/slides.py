@@ -52,7 +52,8 @@ THEMES = {"Hip-Hop/Rap": "ember", "R&B": "plum", "Pop": "rose", "Dance/Electroni
           "Rock": "steel", "Alternative": "steel", "Metal": "steel", "Punk": "steel"}
 
 _KICKERS = {"weekend": "PHILLY THIS WEEKEND", "status_change": "SHOW UPDATE",
-            "team_week": "HOME GAMES THIS WEEK", "big_game": "BIG GAME"}
+            "team_week": "HOME GAMES THIS WEEK", "big_game": "BIG GAME", "experience": "PHILLY PLANS",
+            "things_to_do": "THINGS TO DO IN PHILLY"}
 _CTAS = {
     "presale": ("Save this so you don't miss it", "Follow for Philly ticket drops"),
     "new_tour": ("Who's going?", "Follow for Philly announcements"),
@@ -61,6 +62,8 @@ _CTAS = {
     "status_change": ("Share this with anyone going", "Check your email or Ticketmaster for details"),
     "team_week": ("Which game are you going to?", "Follow for Philly game days"),
     "big_game": ("Who's going?", "Follow for Philly game days"),
+    "experience": ("Save this for later", "Follow for things to do in Philly"),
+    "things_to_do": ("Send this to your group chat", "Follow for Philly weekend plans"),
 }
 
 
@@ -119,6 +122,10 @@ def _title(facts: dict, shows: list[dict]) -> dict:
     elif fmt == "big_game":
         headline = _name(first) or artist
         sub = " · ".join(b for b in (first.get("date"), first.get("time")) if b)
+    elif fmt == "experience":
+        sub = " · ".join(b for b in (first.get("dates") or first.get("date"), first.get("venue")) if b)
+    elif fmt == "things_to_do":
+        headline, sub = f"{n} things to do this weekend", facts.get("weekend", "")
     elif not artist and facts.get("genre"):
         headline = f"{facts['genre']} in Philly"
     note = "Last Philly show: setlist.fm (crowd-sourced)" if year else ""
@@ -135,7 +142,7 @@ def _show(facts: dict, s: dict) -> dict:
         extra.append(f"with {s['support']}")
     if s.get("price"):
         extra.append(str(s["price"]))
-    return {"date": s.get("date") or "", "time": s.get("time") or "", "artist": _name(s),
+    return {"date": s.get("dates") or s.get("date") or "", "time": s.get("time") or "", "artist": _name(s),
             "venue": s.get("venue") or "", "extra": " · ".join(extra)}
 
 

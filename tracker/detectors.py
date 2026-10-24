@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import config, listening
-from .scoring import is_game, upcoming_events
+from .scoring import is_comedy, is_experience, is_game, is_marquee, is_music, upcoming_events
 from .store import now_iso
 
 TZ = ZoneInfo(config.TIMEZONE)
@@ -59,11 +59,15 @@ def et_iso(d: date | str, hour: int, minute: int = 0) -> str:
     return datetime(d.year, d.month, d.day, hour, minute, tzinfo=TZ).astimezone(timezone.utc).isoformat()
 
 
-def fmt_price(lo, hi) -> str | None:
+def fmt_price(lo, hi, free_ok: bool = False) -> str | None:
+    """`free_ok`: a 0 price is a real "free" (a market's listing said so, or you did). Elsewhere a 0 is a gap in a
+    ticket listing ($0-$0 on two Ticketmaster shows, 2026-10-24), so it states no price at all."""
     def money(x):  # $45, but $59.50 stays exact
         return f"${x:,.0f}" if float(x).is_integer() else f"${x:,.2f}"
     if lo is None:
         return None
+    if lo == 0 and not hi:
+        return "Free" if free_ok else None
     if hi and hi != lo:
         return f"{money(lo)}–{money(hi)}"
     return money(lo)
@@ -79,14 +83,25 @@ def event_facts(e: dict) -> dict:
         "venue": e["venue_name"],
         "city": e["venue_city"],
         "genre": e["genre"],
-        "price": fmt_price(e["price_min"], e["price_max"]),
+        "price": fmt_price(e["price_min"], e["price_max"], free_ok=is_experience(e)),
         "status": e["status"],
         "url": e["url"],
         "support": e.get("support"),
     }
     if is_game(e):  # "Sixers vs. Cavaliers" reads better than "Philadelphia 76ers" in a roundup
         f.update(artist=matchup(e), opponent=e.get("opponent"), kind="game", support=None, genre=e["subgenre"])
+    elif is_comedy(e):
+        f.update(kind="comedy")  # stand-up, not a concert: prompts and slides say "show", never "concert"
+    elif is_experience(e):
+        f.update(kind="experience", artist=e["name"], category=e["genre"], genre=None, support=None,
+                 listed_by=SOURCE_NAMES.get(e.get("source")))
+        if e.get("end_date") and e["end_date"] != e["local_date"]:
+            f.update(end=fmt_date(e["end_date"]), dates=f"{fmt_date(e['local_date'])} – {fmt_date(e['end_date'])}")
     return {k: v for k, v in f.items() if v}
+
+
+# Where an experience came from, for the dashboard's "verify" line (provenance, P2-14)
+SOURCE_NAMES = {**{s["key"]: s["name"] for s in config.EXPERIENCE_SOURCES}, "manual": "you (added by hand)"}
 
 
 def team_short(name: str) -> str:
@@ -94,8 +109,15 @@ def team_short(name: str) -> str:
 
 
 def opponent_short(name: str | None) -> str:
-    """'Cleveland Cavaliers' -> 'Cavaliers' (NBA nicknames are the last word, incl. 'Trail Blazers' -> 'Blazers')."""
-    return (name or "TBA").split()[-1]
+    """'Cleveland Cavaliers' -> 'Cavaliers': nicknames are the last word ('Trail Blazers' -> 'Blazers'), except the
+    two-word ones in config ('Blue Jackets'). Soccer clubs go by name without FC/CF/SC ('Inter Miami CF' -> 'Inter
+    Miami', 'Toronto FC' -> 'Toronto')."""
+    words = (name or "TBA").split()
+    club = [w for w in words if w not in ("FC", "CF", "SC")]
+    if len(club) < len(words):
+        return " ".join(club) or "TBA"
+    two = " ".join(words[-2:])
+    return two if two in config.TWO_WORD_NICKNAMES else words[-1]
 
 
 def matchup(e: dict) -> str:
@@ -151,7 +173,8 @@ def detect_new_tours(conn: sqlite3.Connection, run_id: int, today: str) -> list[
         return []
     by_artist: dict[str, list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today):
-        if e["id"] in new_ids and e["headliner_id"] and not is_game(e):  # schedule releases aren't tours
+        # schedule releases aren't tours; markets and festivals get their own alert (detect_experiences)
+        if e["id"] in new_ids and e["headliner_id"] and not is_game(e) and not is_experience(e):
             by_artist[e["headliner_id"]].append(e)
 
     alerts = []
@@ -293,7 +316,7 @@ def picks_facts(events: list[dict]) -> dict:
     seen, top = set(), []
     # one pick per artist (a two-night run is one pick, at its best-scoring night); games aren't concert
     # picks and their scores aren't on the music scale
-    for e in ranked([e for e in events if not is_game(e)]):
+    for e in ranked([e for e in events if is_music(e)]):
         if e["headliner"] not in seen:
             seen.add(e["headliner"])
             top.append(e)
@@ -329,10 +352,16 @@ def detect_weekend(conn: sqlite3.Connection, today: date) -> list[dict]:
     if today.weekday() < 2:
         return []
     fri, sun = upcoming_weekend(today)
-    picks, per_genre = [], defaultdict(int)
+    picks, per_genre, games = [], defaultdict(int), 0
     for e in upcoming_events(conn, today.isoformat()):  # already sorted by score
         if not (fri.isoformat() <= e["local_date"] <= sun.isoformat()) or e["status"] == "cancelled":
             continue
+        if not (is_music(e) or is_game(e)):  # comedy and markets go in "things to do" (detect_things_to_do)
+            continue
+        if is_game(e):  # five teams can fill a weekend; this is a concert roundup with a game or two
+            if games >= config.WEEKEND_MAX_GAMES:
+                continue
+            games += 1
         g = e["genre"] or "Other"
         if per_genre[g] >= 2:  # keep the mix varied
             continue
@@ -412,7 +441,7 @@ def detect_stacked_months(conn: sqlite3.Connection, today: date) -> list[dict]:
     buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today.isoformat()):
         ym = e["local_date"][:7]
-        if is_game(e):
+        if not is_music(e):
             continue  # "stacked month" is a music format
         # A placeholder label never makes a "stacked" genre (upcoming_events already drops them; belt and braces)
         if (ym in (this_month, next_month) and e["genre"] and e["genre"] not in config.NON_GENRES
@@ -459,7 +488,9 @@ def detect_status_changes(conn: sqlite3.Connection, run_id: int, today: str) -> 
     for c in conn.execute(
             "SELECT * FROM changes WHERE run_id=? AND kind IN ('status','date')", (run_id,)):
         e = events.get(c["event_id"])
-        if not e or e["score"] < config.NEW_TOUR_MIN_SCORE:
+        # experiences: "check your email for your tickets" doesn't fit a free market, and a series' first date
+        # moves on its own; their own alert's facts show the change instead
+        if not e or e["score"] < config.NEW_TOUR_MIN_SCORE or is_experience(e):
             continue
         if c["kind"] == "status" and c["new_value"] not in ("cancelled", "postponed", "rescheduled"):
             continue
@@ -489,7 +520,8 @@ def detect_team_week(conn: sqlite3.Connection, today: date) -> list[dict]:
     by_team: dict[str, list[dict]] = defaultdict(list)
     for e in upcoming_events(conn, today.isoformat()):
         if is_game(e) and e["local_date"] <= sunday.isoformat() and e["status"] != "cancelled":
-            by_team[e["headliner"]].append(e)
+            if not (config.SPORTS_TEAMS.get(e["headliner"]) or {}).get("every_game_big"):  # those get one per game
+                by_team[e["headliner"]].append(e)
     alerts = []
     for team, games in by_team.items():
         games.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
@@ -513,18 +545,19 @@ def detect_team_week(conn: sqlite3.Connection, today: date) -> list[dict]:
 
 
 def detect_big_games(conn: sqlite3.Connection, today: date) -> list[dict]:
-    """A marquee opponent visiting within BIG_GAME_WINDOW_DAYS. One alert per game."""
+    """A marquee opponent visiting within BIG_GAME_WINDOW_DAYS (or any home game of an every_game_big team, the
+    Eagles). One alert per game."""
     horizon = (today + timedelta(days=config.BIG_GAME_WINDOW_DAYS)).isoformat()
     alerts = []
     for e in upcoming_events(conn, today.isoformat()):
         if not is_game(e) or e["local_date"] > horizon or e["status"] == "cancelled":
             continue
-        if e.get("opponent") not in config.MARQUEE_OPPONENTS:
+        if not is_marquee(e["headliner"], e.get("opponent")):
             continue
         alerts.append({
             "key": f"big_game:{e['id']}",
             "kind": "big_game",
-            "title": f"Big game: {matchup(e)} — {fmt_date(e['local_date'])}",
+            "title": f"{'Big game' if _marquee_opponent(e) else 'Game day'}: {matchup(e)} — {fmt_date(e['local_date'])}",
             "score": e["score"],
             "facts": {
                 "format": "big_game",
@@ -540,6 +573,96 @@ def detect_big_games(conn: sqlite3.Connection, today: date) -> list[dict]:
     return alerts
 
 
+def _marquee_opponent(e: dict) -> bool:
+    return e.get("opponent") in (config.SPORTS_TEAMS.get(e["headliner"]) or {}).get("marquee", ())
+
+
+def _weekend_overlap(e: dict, fri: date, sun: date) -> bool:
+    return e["local_date"] <= sun.isoformat() and (e.get("end_date") or e["local_date"]) >= fri.isoformat()
+
+
+def detect_experiences(conn: sqlite3.Connection, today: date, only_ids=None) -> list[dict]:
+    """One idea per notable market, festival or seasonal event starting within EXPERIENCE_ALERT_DAYS (or on now),
+    and every event you added yourself, whenever it is. `only_ids`: just these events (right after you add one)."""
+    horizon = (today + timedelta(days=config.EXPERIENCE_ALERT_DAYS)).isoformat()
+    alerts = []
+    for e in upcoming_events(conn, today.isoformat()):
+        if not is_experience(e) or e["status"] in ("cancelled", "postponed"):
+            continue
+        if only_ids is not None and e["id"] not in only_ids:
+            continue
+        if e.get("source") != "manual" and (e["score"] < config.EXPERIENCE_MIN_SCORE or e["local_date"] > horizon):
+            continue
+        show = event_facts(e)
+        start = date.fromisoformat(e["local_date"])
+        alerts.append({
+            "key": f"experience:{e['id']}:{e['local_date'][:4]}",  # a series' first date can move; its year doesn't
+            "kind": "experience",
+            "title": f"{e['name']} — {show.get('dates') or show['date']} at {e['venue_name']}",
+            "score": e["score"],
+            "facts": {
+                "format": "experience",
+                "artist": e["name"],
+                "category": e["genre"],
+                "show": show,
+            },
+            "event_ids": [e["id"]],
+            # a one-day thing: the evening before; a run of days: its first day (still useful all through)
+            "post_by": et_iso(start, 12) if show.get("end") else et_iso(start - timedelta(days=1), 18),
+            "expires_at": et_iso(e.get("end_date") or e["local_date"], 23, 59),
+        })
+    return alerts
+
+
+def detect_things_to_do(conn: sqlite3.Connection, today: date) -> list[dict]:
+    """'Things to do in Philly this weekend': markets, festivals and comedy first, then the best game and a couple of
+    concerts (the music roundup covers the rest). Created from Wednesday on, like the weekend roundup."""
+    if today.weekday() < 2:
+        return []
+    fri, sun = upcoming_weekend(today)
+    local, comedy, games, concerts = [], [], [], []
+    for e in upcoming_events(conn, today.isoformat()):
+        if e["status"] in ("cancelled", "postponed") or not _weekend_overlap(e, fri, sun):
+            continue
+        if is_experience(e):
+            if e["score"] >= config.THINGS_TO_DO_MIN_SCORE:
+                local.append(e)
+        elif e["local_date"] < fri.isoformat():
+            continue
+        elif is_comedy(e):
+            comedy.append(e)
+        elif is_game(e):
+            games.append(e)
+        elif is_music(e) and e["score"] >= config.NEW_TOUR_MIN_SCORE:
+            concerts.append(e)
+    seen: set = set()
+
+    def best(evs: list[dict], n: int) -> list[dict]:  # one entry per act or listing, best first
+        return [e for e in ranked(evs) if not (e["headliner"] in seen or seen.add(e["headliner"]))][:n]
+
+    picks = (best(local, config.THINGS_TO_DO_MAX) + best(comedy, config.THINGS_TO_DO_COMEDY)
+             + best(games, config.THINGS_TO_DO_GAMES) + best(concerts, config.THINGS_TO_DO_CONCERTS))
+    picks = picks[:config.THINGS_TO_DO_MAX]
+    if len(picks) < config.THINGS_TO_DO_MIN or not any(is_experience(e) or is_comedy(e) for e in picks):
+        return []  # without markets or comedy it's just the music roundup again
+    picks.sort(key=lambda e: (max(e["local_date"], fri.isoformat()), e["local_time"] or ""))
+    n_local, n_comedy = sum(is_experience(e) for e in picks), sum(is_comedy(e) for e in picks)
+    return [{
+        "key": f"things_to_do:{fri.isoformat()}",
+        "kind": "things_to_do",
+        "title": f"Things to do this weekend: {len(picks)} picks ({n_local} local, {n_comedy} comedy)",
+        "score": round(sum(e["score"] for e in picks) / len(picks), 1),
+        "facts": {
+            "format": "things_to_do",
+            "weekend": f"{fmt_date(fri.isoformat())} – {fmt_date(sun.isoformat())}",
+            "shows": [event_facts(e) for e in picks],
+        },
+        "event_ids": [e["id"] for e in picks],
+        "post_by": et_iso(fri, 12),
+        "expires_at": et_iso(fri + timedelta(days=1), 18),
+    }]
+
+
 def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     local_today = now.astimezone(TZ).date()
@@ -552,6 +675,8 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
         + detect_status_changes(conn, run_id, today)
         + detect_team_week(conn, local_today)
         + detect_big_games(conn, local_today)
+        + detect_experiences(conn, local_today)
+        + detect_things_to_do(conn, local_today)
     )
     alerts += detect_lane_weekend(conn, local_today, alerts)  # needs the others to avoid repeating them
     return alerts

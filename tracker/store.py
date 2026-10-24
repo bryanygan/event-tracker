@@ -55,13 +55,15 @@ def is_first_run(conn, source: str) -> bool:
 
 
 def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, baseline: bool,
-                  baseline_prefixes: tuple[str, ...] = (), protected_prefixes: tuple[str, ...] = ()) -> dict:
+                  baseline_prefixes: tuple[str, ...] = (), protected_prefixes: tuple[str, ...] = (),
+                  baseline_ids: frozenset[str] | set[str] = frozenset()) -> dict:
     """Insert/update events and record changes. Returns counts per change kind.
 
     With baseline=True (first ever run) we store everything but log no 'new' changes,
     otherwise every existing show in Philly would look like a fresh announcement.
     `baseline_prefixes`: the same, for event ids from a source seen for the first time (a new venue calendar).
     `protected_prefixes`: ids from a source that failed this run; don't mark them "removed".
+    `baseline_ids`: like baseline_prefixes, for single events (a Ticketmaster feed read for the first time).
     """
     ts = now_iso()
     counts: dict[str, int] = {}
@@ -97,8 +99,8 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
 
         old = conn.execute("SELECT * FROM events WHERE id=?", (ev["id"],)).fetchone()
         cols = ["name", "url", "image_url", "local_date", "local_time", "status", "segment", "genre",
-                "subgenre", "price_min", "price_max", "currency", "onsale_start", "onsale_end"]
-        values = [ev[c] for c in cols]
+                "subgenre", "price_min", "price_max", "currency", "onsale_start", "onsale_end", "end_date", "source"]
+        values = [ev.get(c) for c in cols]  # end_date/source: only multi-day listings and non-TM sources set them
         venue_id = v["id"] if v else None
 
         if old is None:
@@ -107,7 +109,8 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
                     VALUES (?, {", ".join("?" * len(cols))}, ?, ?, ?, ?, 1)""",
                 [ev["id"], *values, venue_id, ts, ts, ts],
             )
-            if not baseline and not (baseline_prefixes and ev["id"].startswith(baseline_prefixes)):
+            if not baseline and not (baseline_prefixes and ev["id"].startswith(baseline_prefixes)) \
+                    and ev["id"] not in baseline_ids:
                 log_change(ev["id"], "new", None, ev["name"])
         else:
             changed = False
@@ -147,7 +150,7 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
         gone = conn.execute(
             # local_date > today, not >=: tonight's shows drop out of the feeds once they start (TM only
             # returns events that haven't started), which isn't a cancellation. Found 2026-10-21 at 8:37 PM.
-            f"SELECT id FROM events WHERE active=1 AND local_date > ? AND id NOT IN ({placeholders})",
+            f"SELECT id FROM events WHERE active=1 AND COALESCE(end_date, local_date) > ? AND id NOT IN ({placeholders})",
             [today, *seen_ids],
         ).fetchall()
         for row in gone:

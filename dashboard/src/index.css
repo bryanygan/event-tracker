@@ -238,3 +238,12 @@ input.grow { flex: 1; }
   display: flex; gap: 10px; align-items: center; padding: 10px 0;
 }
 .pill-warn { background: var(--warn-bg); color: var(--warn-text); }
+
+/* Your events (ManualEvents.tsx): a compact grid form that wraps to one column on phones */
+.manual-events summary { cursor: pointer; }
+.manual-events table { margin: 10px 0; }
+.manual-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin-top: 10px; }
+.manual-form h3, .manual-form .wide, .manual-form p, .manual-form > div { grid-column: 1 / -1; }
+.manual-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.9em; }
+.manual-form label.inline { flex-direction: row; align-items: center; gap: 6px; }
+.manual-form input, .manual-form select { min-width: 0; }

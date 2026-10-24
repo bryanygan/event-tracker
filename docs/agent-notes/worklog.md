@@ -230,3 +230,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   YouTube classification and `confirmed` official evidence in stories; event cards show the acts' recent music
   stories. conftest now blanks LAST_FM_API_KEY / YOUTUBE_*: the suite had been calling Last.fm, Deezer and
   ListenBrainz live since M7 (389 tests now run in 13 s instead of ~4 min). 18 new tests (389).
+- Merged M8 (`b9221ec`); YOUTUBE_API_KEY added by the user, first live read took the 3 outlets (6 units).
+- P2-14 survey (`experience-sources.md`, 36 sites), then `feature/experience-sources`: Flyers/Eagles/Phillies/Union
+  (per-team classification, rivals, league tags, emoji), stand-up from TM's comedy feed, Center City District
+  (Events Calendar API) and Delaware River Waterfront (iCal) as "Experience" events, events you add by hand
+  (`manual_events`, Events tab form), `experience` and `things_to_do` ideas, "free"/"cheap" fact checks. A feed's
+  first read is a baseline (`new_feed_ids`): the first real run otherwise raised 31 "just announced" ideas for
+  comedians already on sale. Real run on a DB copy: 164 comedy shows, 84 new games, 18 experiences, 5 new ideas;
+  two Haiku drafts clean. Built in a git worktree (`../events-tracker-p214`) so the main folder stayed on `main`.
+  27 new tests (415).

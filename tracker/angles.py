@@ -119,8 +119,8 @@ def angles_for(facts: dict) -> list[dict]:
     elif fmt == "team_week":
         n = len(facts.get("shows", []))
         out += [
-            _angle("news", "Home week", f"The {artist} are home {n} times this week",
-                   "Quick schedule with opponents and tip-off times.", "slideshow", "Save the schedule."),
+            _angle("news", "Home week", f"The {artist} are home {'once' if n == 1 else f'{n} times'} this week",
+                   "Quick schedule with opponents and start times.", "slideshow", "Save the schedule."),
             _angle("fan", "Pick a game", f"Which {artist} game are you going to?",
                    "Ask, list the games, let fans argue in the comments.", "face-to-camera", "Comment your pick."),
         ]
@@ -135,8 +135,30 @@ def angles_for(facts: dict) -> list[dict]:
                           f"Only the {k} biggest shows, best first. Shorter and more saveable than the full list.",
                           "slideshow", "Save this and tell me what I missed."))
 
+    if fmt == "experience":
+        s = facts["show"]
+        when = f"through {s['end']}" if s.get("end") else s["date"]
+        out += [
+            _angle("news", "Coming up", f"{artist}: {when}" if len(artist.split()) <= 6 else f"Save the date: {when}",
+                   "What, when, where. Film it there if you can; the facts don't say what's inside.", "footage",
+                   "Save this for later."),
+            _angle("utility", "Plans sorted", "Your Philly plans for this one, sorted",
+                   "Date, time, place and price (only if listed) on screen. Made to be saved and sent.", "slideshow",
+                   "Send this to whoever you're going with."),
+        ]
+    elif fmt == "things_to_do":
+        n = len(facts.get("shows", []))
+        out += [
+            _angle("news", "This weekend", f"{n} things to do in Philly this weekend",
+                   "One line each, day and place on screen. Lead with the market or festival.", "slideshow",
+                   "Save this for the weekend."),
+            _angle("fan", "Bored in Philly", "No excuse to stay home in Philly this weekend",
+                   "Broad 'things to do' energy: something for everyone, not just concert people.", "footage",
+                   "Send this to your group chat."),
+        ]
+
     if fmt == "big_game":
-        nick = facts["opponent"].split()[-1]
+        nick = templates.nickname(facts["opponent"])
         out += [
             _angle("news", "Big game", f"The {nick} are coming to Philly",
                    "Matchup, date, time, arena. No records or injuries unless you check them yourself.",
@@ -166,6 +188,11 @@ def template_hashtags(facts: dict) -> list[str]:
     if facts.get("format") in ("team_week", "big_game"):
         return templates.game_hashtags(facts)
     shows = facts.get("shows") or ([facts["show"]] if facts.get("show") else [])
+    if facts.get("format") in ("experience", "things_to_do"):
+        names = [facts.get("artist")] if facts.get("format") == "experience" else []
+        tags = ["#philly", "#ThingsToDoInPhilly", "#PhillyEvents"] + ["#" + "".join(ch for ch in n if ch.isalnum())
+                                                                     for n in names if n and len(n) <= 30]
+        return list(dict.fromkeys(tags))
     names = [facts.get("artist")] + [s.get("venue") for s in shows[:1]]
     tags = ["#philly", "#PhillyConcerts"] + ["#" + "".join(ch for ch in n if ch.isalnum()) for n in names if n]
     return list(dict.fromkeys(tags))

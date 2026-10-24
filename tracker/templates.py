@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 from . import config
 
-TEMPLATED_FORMATS = {"presale", "status_change", "team_week", "big_game"}
+TEMPLATED_FORMATS = {"presale", "status_change", "team_week", "big_game", "experience"}
 
 _OPENERS = ["Heads up Philly.", "Philly, set an alarm.", "Quick ticket alert, Philly."]
 _CLOSERS = ["Don't sleep on this one.", "Save this so you don't miss it.", "Tag who you're going with."]
@@ -142,6 +142,8 @@ def script_for(facts: dict) -> str | None:
         return team_week_script(facts)
     if fmt == "big_game":
         return big_game_script(facts)
+    if fmt == "experience":
+        return experience_script(facts)
     return None
 
 
@@ -150,8 +152,19 @@ def hook_names(facts: dict) -> list[str]:
     game the opponent ("The Bucks are coming to Philly" is a fine hook)."""
     names = [facts["artist"], *(config.SPORTS_TEAMS.get(facts.get("team"), {}).get("aliases", []))]
     if facts.get("opponent"):
-        names.append(facts["opponent"].split()[-1])
+        names.append(nickname(facts["opponent"]))
+    if facts.get("format") == "experience":  # "Winterfest is back" for "Opening Weekend: ... RiverRink Winterfest"
+        names += [w for w in re.findall(r"[A-Za-z][\w'&-]+", facts["artist"]) if len(w) >= 5 and w[0].isupper()]
     return names
+
+
+def nickname(team: str) -> str:
+    from .detectors import opponent_short  # detectors doesn't import templates; kept local to stay that way
+    return opponent_short(team)
+
+
+def _team(facts: dict) -> dict:
+    return config.SPORTS_TEAMS.get(facts.get("team")) or {}
 
 
 MAX_HOOK_WORDS = 12  # the model once crammed a whole week's schedule into the hook
@@ -162,8 +175,8 @@ def game_hashtags(facts: dict) -> list[str]:
     (#seahawksvsjets, #ClevelandVikings, #NBAPlayoffs in October)."""
     team = facts["artist"]
     opponents = [facts.get("opponent")] if facts.get("opponent") else [g.get("opponent") for g in facts.get("shows", [])]
-    tags = ["#philly", f"#{team}", "#NBA", "#PhillySports"]
-    tags += [f"#{team}Vs{o.split()[-1]}" for o in opponents if o][:3]
+    tags = ["#philly", f"#{team}", f"#{_team(facts).get('league', 'NBA')}", "#PhillySports"]
+    tags += [f"#{team}Vs{nickname(o).replace(' ', '')}" for o in opponents if o][:3]
     return list(dict.fromkeys(tags))
 
 
@@ -192,10 +205,38 @@ def team_week_script(facts: dict) -> str:
 
 def big_game_script(facts: dict) -> str:
     g, team, opp = facts["show"], facts["artist"], facts["opponent"]
-    nickname = opp.split()[-1]
-    lines = [f"The {nickname} are coming to Philly.",
+    lines = [f"The {nickname(opp)} are coming to Philly.",
              f"The {team} host the {opp} {_game_when(g)} at {g.get('venue', 'TBA')}.",
              "Tickets are on Ticketmaster. Who's going?"]
+    return speakable(" ".join(lines))
+
+
+_EXP_CLOSERS = ["Save this for later.", "Send this to whoever you're going with.", "Tag who you're bringing."]
+
+
+def experience_when(s: dict) -> str:
+    """'from Saturday, Nov 14 through Thursday, Dec 31' / 'Saturday, Nov 14 at 7 PM'."""
+    if s.get("end"):
+        return f"from {s['date']} through {s['end']}"
+    return _game_when(s)
+
+
+def _place(s: dict, name: str) -> str | None:
+    """The venue, unless the listing's "venue" is just the event's own name (Open Streets: West Walnut)."""
+    v = s.get("venue")
+    return None if not v or v.casefold() == name.casefold() else v
+
+
+def experience_script(facts: dict) -> str:
+    """Markets, festivals, hand-added events: what, when, where, and the price only if the listing gave one.
+    The facts carry no description, so nothing about what's there (vendors, food, rides) is said."""
+    s, name = facts["show"], facts["artist"]
+    lines = [f"{name} is happening {experience_when(s)}" + (f" at {_place(s, name)}." if _place(s, name) else ".")]
+    if s.get("price") == "Free":
+        lines.append("It's free.")
+    elif s.get("price"):
+        lines.append(f"Tickets are {s['price']}.")
+    lines.append(_pick(_EXP_CLOSERS, name))
     return speakable(" ".join(lines))
 
 
@@ -210,7 +251,9 @@ def fallback_hook(facts: dict) -> str:
     if fmt == "team_week":
         return f"{facts['artist']} home games this week"
     if fmt == "big_game":
-        return f"The {facts['opponent'].split()[-1]} are coming to Philly"
+        return f"The {nickname(facts['opponent'])} are coming to Philly"
+    if fmt == "experience":
+        return "Add this to your Philly plans" if len(facts["artist"].split()) > 6 else f"{facts['artist']} in Philly"
     return f"Update on the {facts['artist']} Philly show"
 
 
@@ -222,13 +265,18 @@ def caption_for(facts: dict) -> str:
     script or paired the wrong time with the wrong sale ("show opens Friday" for a Thursday presale)."""
     artist = facts["artist"]
     if facts.get("format") == "team_week":
-        games = " · ".join(f"{g['date'].split(',')[0]} vs {g.get('opponent', 'TBA').split()[-1]}"
+        games = " · ".join(f"{g['date'].split(',')[0]} vs {nickname(g.get('opponent') or 'TBA')}"
                            + (f" {g['time']}" if g.get("time") else "") for g in facts["shows"])
-        return f"{artist} at home this week 🏀 {games}. {_pick(_CTAS[:2], artist + facts['week'])}"
+        return f"{artist} at home this week {_team(facts).get('emoji', '🏟️')} {games}. {_pick(_CTAS[:2], artist + facts['week'])}"
     if facts.get("format") == "big_game":
         g = facts["show"]
-        return (f"{g['artist']} 🏀 {_game_when(g)} at {g.get('venue', 'TBA')}. "
+        return (f"{g['artist']} {_team(facts).get('emoji', '🏟️')} {_game_when(g)} at {g.get('venue', 'TBA')}. "
                 f"{_pick(_CTAS[:2], g['artist'] + g['date'])}")
+    if facts.get("format") == "experience":
+        s = facts["show"]
+        when = f"{s['date']} – {s['end']}" if s.get("end") else _game_when(s)
+        price = " Free." if s.get("price") == "Free" else f" {s['price']}." if s.get("price") else ""
+        return f"{artist} 📍 {_place(s, artist) or s.get('city') or 'Philly'} · {when}.{price} {_pick(_CTAS[:2], artist + 'cap')}"
     if facts.get("format") == "presale":
         sales = facts.get("all_sales") or [{"name": facts["sale_name"], "opens": facts["sale_opens"]}]
         first = sales[0]

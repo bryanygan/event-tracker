@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { api, type EventRow } from '../api'
+import { api, type EventKind, type EventRow } from '../api'
+import ManualEvents from './ManualEvents'
+
+const KINDS: [EventKind, string][] = [['', 'All kinds'], ['music', 'Concerts'], ['sports', 'Games'],
+  ['comedy', 'Comedy'], ['local', 'Markets, festivals & more']]
+// Where a non-Ticketmaster listing came from (provenance, P2-14)
+const SOURCE_LABEL: Record<string, string> = { ccd: 'Center City District', drwc: 'Delaware River Waterfront',
+  manual: 'added by you' }
 
 // Where a genre came from (tracker/genres.py); shown as a tooltip, with ≈ for name-matched guesses
 const GENRE_SOURCE: Record<string, string> = {
@@ -17,6 +24,8 @@ function genreTitle(e: { genre_source?: string | null; ticketmaster_genre?: stri
 export default function EventsView({ refreshKey }: { refreshKey: number }) {
   const [q, setQ] = useState('')
   const [genre, setGenre] = useState('')
+  const [kind, setKind] = useState<EventKind>('')
+  const [added, setAdded] = useState(0)  // bumped when you add/edit one of your events
   const [days, setDays] = useState(30)
   const [mine, setMine] = useState(false)
   const [genres, setGenres] = useState<string[]>([])
@@ -24,16 +33,20 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
 
   useEffect(() => { api.genres().then(setGenres) }, [refreshKey])
   useEffect(() => {
-    const t = setTimeout(() => api.events({ q, genre, days }).then(setEvents), 200) // debounce typing
+    const t = setTimeout(() => api.events({ q, genre, kind, days }).then(setEvents), 200) // debounce typing
     return () => clearTimeout(t)
-  }, [q, genre, days, refreshKey])
+  }, [q, genre, kind, days, refreshKey, added])
 
   const newCutoff = Date.now() - 3 * 24 * 3600 * 1000
   const shown = (events ?? []).filter((e) => !mine || e.my_plays > 0)
   return (
     <>
+      <ManualEvents onChange={() => setAdded((n) => n + 1)} />
       <div className="toolbar">
         <input placeholder="Search artist or venue" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)}>
+          {KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
         <select value={genre} onChange={(e) => setGenre(e.target.value)}>
           <option value="">All genres</option>
           {genres.map((g) => <option key={g}>{g}</option>)}
@@ -52,18 +65,19 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
           <tbody>
             {shown.map((e) => (
               <tr key={e.id}>
-                <td className="nowrap">{fmtDate(e.local_date)}{e.local_time ? ` ${fmtTime(e.local_time)}` : ''}</td>
+                <td className="nowrap">{fmtDate(e.local_date)}{e.end_date ? ` – ${fmtDate(e.end_date)}` : ''}{e.local_time ? ` ${fmtTime(e.local_time)}` : ''}</td>
                 <td>
                   {e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.headliner}</a> : e.headliner}
                   {new Date(e.first_seen).getTime() > newCutoff && <span className="pill new">new</span>}
                   {e.support && <div className="muted small">w/ {e.support}</div>}
+                  {e.source && SOURCE_LABEL[e.source] && <div className="muted small">listed by {SOURCE_LABEL[e.source]}</div>}
                 </td>
                 <td>{e.venue_name}</td>
                 <td title={genreTitle(e)}>
                   {(e.genre_source === 'tm_search' || e.genre_source === 'deezer') && e.genre ? <span className="muted">≈ </span> : null}
                   {e.genre}{e.subgenre ? <span className="muted small"> · {e.subgenre}</span> : null}
                 </td>
-                <td className="nowrap">{e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
+                <td className="nowrap">{e.price_min === 0 && !e.price_max ? (e.segment === 'Experience' ? 'Free' : '') : e.price_min != null ? `$${e.price_min}${e.price_max && e.price_max !== e.price_min ? `–${e.price_max}` : ''}` : ''}</td>
                 <td className="nowrap">{e.fans != null ? fmtFans(e.fans) : ''}</td>
                 <td className="nowrap" title={e.niche ? 'in your genre lane' : ''}>{e.my_plays ? e.my_plays : e.niche ? '·' : ''}</td>
                 <td>{Math.round(e.score)}</td>

@@ -87,6 +87,26 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_date ON events(local_date);
 
+-- Events you add yourself (P2-14): every fact here is typed by you, never looked up. Each run copies the
+-- active ones into `events` as "man:<id>" (segment Experience), so they're ideas like any other.
+CREATE TABLE IF NOT EXISTS manual_events (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT,
+    start_date TEXT NOT NULL,       -- YYYY-MM-DD
+    end_date TEXT,                  -- last day, for multi-day events
+    start_time TEXT,                -- HH:MM or NULL
+    venue TEXT NOT NULL,
+    city TEXT,
+    price_min REAL,                 -- NULL = not stated; 0 only when you ticked "free"
+    price_max REAL,
+    url TEXT,
+    notes TEXT,                     -- for you; never shown to the model
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    archived INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS event_attractions (
     event_id TEXT REFERENCES events(id),
     attraction_id TEXT REFERENCES attractions(id),
@@ -468,6 +488,8 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS won't add them to an
 # existing database, so add any that are missing. (Old unused columns are left in place.)
 _ADDED_COLUMNS = {
+    # P2-14: last day of a multi-day event (a market open for six weeks), and which source listed it
+    "events": {"end_date": "TEXT", "source": "TEXT"},
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",

@@ -84,7 +84,8 @@ FORMAT_GUIDES = {
         "just got added' instead. If history.is_comeback is true, lead with it: 'first Philly show since "
         "<history.last_philly_show_year>' (use only that year; never say 'first time ever'). If "
         "history.last_philly_show_was_multi_act is true, that was a festival/radio show, not their own "
-        "concert: don't call it a headline show.\n"
+        "concert: don't call it a headline show. If the show's kind is \"comedy\", it's stand-up: say "
+        "show, never concert or tour.\n"
         "Example hook: \"[Artist] just announced a Philly show\"\n"
         "Example script: \"Just announced: [Artist] is coming to [Venue] on [show_date]. Tickets go on sale "
         "[public_onsale]. Tag whoever you're going with.\""
@@ -98,6 +99,22 @@ FORMAT_GUIDES = {
         "Video: big home game, {artist} vs. the {opponent}. The script is already written; write the hook "
         "only. Rivalry energy, but don't invent records, standings, injuries or players.\n"
         "Example hook: \"[Opponent] in Philly this week. You know what that means\""
+    ),
+    "experience": (
+        "Video: a Philly {category} happening: {artist}. The script is already written; write the hook only. "
+        "The facts don't say what's there, so don't invent vendors, food, rides, performers or crowds, and don't "
+        "call it back, returning, annual or the biggest. Only say it's free if the price is \"Free\".\n"
+        "Example hook: \"Your Philly weekend plans just got easier\""
+    ),
+    "things_to_do": (
+        "Video: 'Things to do in Philly this weekend' ({weekend}). Not just concerts: markets, festivals, "
+        "comedy, a game. One quick line each: what it is, the day, where. An entry with \"dates\" runs several "
+        "days: say it's on through its end date, don't pin it to one day. kind \"comedy\" is stand-up, not a "
+        "concert. Don't describe what's at a market or festival beyond its name, and only call something free if "
+        "its price is \"Free\".\n"
+        "Example hook: \"No excuse to stay home in Philly this weekend\"\n"
+        "Example script: \"Here's what's on in Philly this weekend. [Market] is open at [Venue] all weekend. "
+        "Saturday, [Comedian] is at [Venue]. Sunday, the [Team] are home. Which one are you doing?\""
     ),
     "status_change": (
         "Video: quick news update. {artist}'s Philly show changed. Say plainly what changed and tell "
@@ -583,6 +600,17 @@ def check_facts(draft: dict, facts: dict) -> list[str]:
             warnings.append(token)
     if re.search(r"\bcode\b[^.]*\b[A-Z0-9]{4,}\b", text):
         warnings.append("possible presale code")
+    # "free" / "cheap" are prices too (P2-14): only when a listing or you said so ("feel free to..." is fine)
+    for m in re.finditer(r"(?<!feel )\bfree\b(?! to\b)", text, re.I):
+        near = [" ".join(text[:m.start()].split()[-1:] + ["free"]), " ".join(["free"] + text[m.end():].split()[:1])]
+        # a price of "Free" in the facts, or a name with the word in it ("Free Nationals")
+        if '"free"' not in fact_text and not any(len(p.split()) == 2 and _canon(p.strip(".,!?")) in fact_text
+                                                 for p in near):
+            warnings.append(m.group(0))
+            break
+    for m in re.finditer(r"\b(cheap|budget|affordable)\b|\bunder \$\d+", text, re.I):
+        if _canon(m.group(0)) not in fact_text:  # "Cheap Trick" in the facts is a band, not a claim
+            warnings.append(m.group(0))
     warnings += re.findall(r"\[[A-Za-z_ ]+\]", text)  # "[Artist]" copied from a prompt example
     out = [f"Not in facts: {w}" for w in dict.fromkeys(warnings)]
     if _music(facts):  # status words, quoted titles, "trending" (music_formats.check)
