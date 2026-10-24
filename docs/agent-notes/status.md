@@ -114,4 +114,4 @@ out of drafts and out of the public snapshot.
 
 ## Open questions for the user
 
-- Is Deezer's ranking good enough, or would they get a Last.fm key (listeners + tags) as a second signal?
+- (Answered 2026-10-24: Deezer is good enough; Last.fm ranked slightly worse. See decisions.md "Deezer vs Last.fm".)
