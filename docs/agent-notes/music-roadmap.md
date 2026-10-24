@@ -531,7 +531,7 @@ stories that lack a Philadelphia connection." Plus section 6 (dashboard) and sec
 **Acceptance:** a national story with no Philly date scores on its merits; the tab shows grouped stories with
 feedback buttons; Send to queue creates a working alert.
 
-**Built 2026-10-23 on `feature/music-scoring`** (`tracker/music.py`, 13 new tests).
+**Built and merged 2026-10-23** (`d7a03d2`; `tracker/music.py`, 13 new tests).
 - Score components (config.MUSIC_WEIGHTS): content potential 0.30 (story type, +seen-live / Philly date for tours,
   +a second watchlist artist on a release), urgency 0.20 (news age or a release date within a week), your artists
   0.15 (tier, plays/20 up to +15, feedback), confidence 0.15, search 0.10 (trend notes), momentum 0.10 (unknown
