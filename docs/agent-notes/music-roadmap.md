@@ -589,7 +589,7 @@ music-news categories actually drive performance." Plus section 8 (formats).
 **Acceptance:** each format drafts with status-accurate wording and zero fact warnings on a sample; slides render;
 analytics split by pillar.
 
-**Built 2026-10-23 on `feature/music-drafts`** (`tracker/music_formats.py`, 9 new tests). Not merged yet.
+**Built and merged 2026-10-23** (`a11ab00`; `tracker/music_formats.py`, 9 new tests).
 - Story formats by story type (album announcement, tease, new release, collab, artist development, tour, music news);
   hooks built from facts (a rumor reads "Is X about to drop an album?"); sensitive/legal stories get one calm angle.
 - Every music script states the status phrase (`status_phrase`: "announced, no date yet", "rumored, not confirmed",
@@ -637,8 +637,8 @@ potentially more valuable." "The key is measuring change over time, not simply o
 **Acceptance:** weekly candidates with reasons; momentum shown only when its sample-size rules are met; nothing
 called "trending" without two signals.
 
-**Built 2026-10-23 on `feature/music-discovery`** (stacked on M6; `tracker/discovery.py`, `fetchers/lastfm.py`,
-`fetchers/listenbrainz.py`, 8 new tests). Not merged yet.
+**Built and merged 2026-10-23** (`a11ab00`; `tracker/discovery.py`, `fetchers/lastfm.py`,
+`fetchers/listenbrainz.py`, 8 new tests).
 - Tables `artist_candidates`, `artist_metrics` (by name key, ET day), `api_cache`. The news job runs
   `discovery.step`: the weekly refresh (≈35 Last.fm calls, cached a week), daily mention counts (local), and 15
   artist snapshots per check (Last.fm getInfo, Deezer fans, ListenBrainz listens by mbid), so ~485 artists a day.
