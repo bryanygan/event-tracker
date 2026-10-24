@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from . import catalog, config, db, music, store, stories, watchlist
+from . import catalog, config, db, discovery, music, music_formats, store, stories, watchlist
 from .fetchers import news_rss
 
 log = logging.getLogger("tracker.news")
@@ -137,6 +137,15 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
             log.warning("Catalog check failed: %s", exc)
             releases = {"artists": 0, "new": 0, "error": str(exc)}
         music.auto_send(conn)  # off unless config.MUSIC_AUTO_SEND (M9)
+        try:  # New Music Friday and next month's albums, from the catalogs (music_formats.py, M6)
+            music_formats.roundups(conn)
+        except Exception as exc:
+            log.warning("Music roundups failed: %s", exc)
+        try:  # candidates weekly, mention counts daily, a slice of artist snapshots (discovery.py, M7)
+            found = discovery.step(conn)
+        except Exception as exc:
+            log.warning("Discovery step failed: %s", exc)
+            found = {"error": str(exc)}
         store.finish_run(conn, run_id, fetched=new, api_calls=len(results), ok=True,
                          error=("failed: " + ", ".join(failed)) if failed else None)
     except Exception as exc:
@@ -144,7 +153,8 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
                          error=str(exc))
         raise
     return {"run_id": run_id, "read": len(results), "new": new,
-            "not_modified": sum(r["status"] == 304 for r in results), "failed": failed, "catalog": releases}
+            "not_modified": sum(r["status"] == 304 for r in results), "failed": failed, "catalog": releases,
+            "discovery": found}
 
 
 def main(argv=None):

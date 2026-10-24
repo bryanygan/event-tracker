@@ -166,8 +166,67 @@ def _show_ids(shows: list[dict]) -> list[str]:
     return ids
 
 
+def _music_deck(facts: dict) -> dict:
+    """Music ideas (roadmap M6): a title slide, one slide per release (the show layout: date pill, big name, title
+    underneath, status in the accent colour), Philly dates if any, and a closing slide. All from the facts."""
+    from . import music_formats as mf
+    fmt = facts["format"]
+    slides = []
+    if fmt == "music_story":
+        phrase = mf.status_phrase(facts)
+        outlets = list(dict.fromkeys(s["outlet"] for s in facts.get("sources") or []))
+        slides.append({"id": "title", "kind": "title", "fields": {
+            "kicker": mf.KICKER[mf.format_key(facts)], "headline": facts.get("artist") or "",
+            "sub": f"“{facts['release_title']}”" if facts.get("release_title") else facts.get("headline", ""),
+            "note": ("via " + ", ".join(outlets[:3])) if outlets else ""}})
+        if facts.get("release_title") or phrase:
+            reported = facts.get("release_dates_reported") or []
+            slides.append({"id": "release", "kind": "show", "fields": {
+                "date": "DATE NOT SETTLED" if reported else facts.get("release_date") or (phrase or "").upper(),
+                "time": "", "artist": facts.get("artist") or "",
+                "venue": f"“{facts['release_title']}”" if facts.get("release_title") else "",
+                "extra": " · ".join(f"{r['date']} per {r['from']}" for r in reported) or (phrase or "").upper()}})
+        shows = facts.get("philly_shows") or []
+        if shows:
+            slides.append({"id": "sales", "kind": "sales", "fields": {
+                "heading": "Philly dates", "lines": "\n".join(f"{s['date']}: {s['venue']}" for s in shows[:4])}})
+        cta = ("What do you think?", "Follow for music news")
+    else:
+        items = mf._items(facts)
+        if fmt == "new_music_friday":
+            kicker, headline, sub = "NEW MUSIC FRIDAY", f"{len(items)} new releases", facts.get("week", "")
+        elif fmt == "upcoming_albums":
+            kicker, headline, sub = f"{facts['month'].split()[0].upper()} ALBUMS", "Albums I'm watching", facts["month"]
+        else:
+            kicker, headline, sub = "ARTISTS TO WATCH", f"{len(items)} artists to know", "Before everyone else does"
+        slides.append({"id": "title", "kind": "title", "fields": {"kicker": kicker, "headline": headline, "sub": sub,
+                                                                   "note": "Release info: Deezer / iTunes" if fmt != "emerging_artists" else ""}})
+        ids = Counter()
+        for i in items[:MAX_SHOWS]:
+            sid = "item:" + re.sub(r"\W+", "-", f"{i['artist']} {i.get('title', '')}".casefold()).strip("-")
+            ids[sid] += 1
+            if fmt == "emerging_artists":
+                fields = {"date": "ON MY RADAR", "time": "", "artist": i["artist"], "venue": i.get("why", ""), "extra": ""}
+            else:
+                kind = {"album": "ALBUM", "ep": "EP", "single": "SINGLE"}.get(i.get("type"), "RELEASE")
+                status = "" if fmt == "new_music_friday" else ("ANNOUNCED" if i.get("status") == "announced" else "")
+                fields = {"date": i.get("date") or "DATE TBA" if fmt == "upcoming_albums" else kind, "time": "",
+                          "artist": i["artist"], "venue": f"“{i['title']}”" if i.get("title") else "",
+                          "extra": " · ".join(b for b in (kind if fmt == "upcoming_albums" else "", status) if b)}
+            slides.append({"id": sid if ids[sid] == 1 else f"{sid}#{ids[sid]}", "kind": "show", "fields": fields})
+        cta = {"new_music_friday": ("Which one are you playing first?", "Follow for New Music Friday"),
+               "upcoming_albums": ("Save this for later", "Follow for music news"),
+               "emerging_artists": ("Who should I add?", "Follow for new artists")}[fmt]
+    slides.append({"id": "cta", "kind": "cta", "fields": {"headline": cta[0], "sub": cta[1]}})
+    shown = sum(s["kind"] == "show" for s in slides)
+    return {"version": 1, "format": fmt, "theme": "night", "brand": config.SLIDES_BRAND,
+            "shows_total": len(mf._items(facts)) or shown, "shows_on_slides": shown, "slides": slides}
+
+
 def build(facts: dict) -> dict:
     """The default manifest for these facts. Deterministic: same facts, same manifest."""
+    if facts.get("format") in config.MUSIC_KINDS:
+        return _music_deck(facts)
     shows = _shows(facts)
     slides = [{"id": "title", "kind": "title", "fields": _title(facts, shows)}]
     # Roundup picks are flagged so the overlay can show "picks only"; when there are more shows than slides,

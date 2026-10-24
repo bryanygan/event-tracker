@@ -34,7 +34,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -121,7 +121,7 @@ export type PostInput = Partial<Pick<Post, 'alert_id' | 'draft_id' | 'url' | 'ti
   'video_style' | 'hook' | 'length_seconds' | 'notes' | 'series'>>
 
 export type Analytics = {
-  group_by: 'format' | 'video_style'
+  group_by: 'format' | 'video_style' | 'pillar' | 'music_format'
   min_posts: number
   checkpoints: Record<Checkpoint, { target_hours: number; window_hours: [number, number] }>
   groups: {
@@ -197,7 +197,7 @@ export type QueueItem = {
   series_set: string | null // the series you typed (null = the default)
   format: string
   lane: 'lane' | 'other' | 'sports' | 'music'
-  pillar: 'events' | 'music' // music: a music-news story you sent to the queue (tracker/music.py)
+  pillar: 'events' | 'music' // music: a music story you sent, or a music roundup (tracker/music_formats.py)
 }
 
 // Editorial calendar (tracker/planner.py)
@@ -306,11 +306,27 @@ export type NewsArtistTag = {
 }
 export type WatchTier = 'core' | 'adjacent' | 'watch' | 'breakout' | 'dropped'
 export type WatchArtist = {
-  id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual'; aliases: string[]; muted: boolean
+  id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual' | 'related'; aliases: string[]; muted: boolean
   user_edited: boolean; common_word: boolean; common_word_auto: boolean; common_word_override: number | null
   ambiguous_name: boolean; mbid: string | null; deezer_id: number | null; attraction_id: string | null
   plays: number; articles_30d: number; bucket: string | null; seen_live: boolean
 }
+// Discover (tracker/discovery.py, roadmap M7): candidates with their evidence; momentum is experimental
+export type MomentumSignal = {
+  provider: string; metric: string; label: string; status: 'collecting' | 'too_small' | 'ready'; ready: boolean
+  growing: boolean; counts: boolean; observations: number; latest?: number; weekly_growth?: number; why: string
+}
+export type Momentum = { ready: boolean; signals: MomentumSignal[]; growing: number; two_signals: boolean; value: number | null; summary: string }
+export type Candidate = {
+  id: number; name: string; status: 'new' | 'accepted' | 'dismissed'; score: number; why: string[]; tags: string[]
+  lastfm_url: string | null; similar_to: string[]; metrics: Record<string, number>; momentum: Momentum | null
+  first_seen: string; breakout: boolean
+}
+export type DiscoverList = {
+  candidates: Candidate[]; refreshed_at: string | null; enabled: boolean
+  rules: { min_observations: number; min_days: number; growth_per_week: number; min_mentions: number }
+}
+export type DiscoverAction = 'watch' | 'adjacent' | 'dismiss' | 'restore'
 export type StoryArtist = { id: number; name: string; tier: WatchTier; plays: number; seen_live: boolean }
 export type StoryFeedback = 'interested' | 'not_my_lane' | 'already_covered'
 export type Story = {
@@ -408,6 +424,11 @@ const staticApi = {
   stories: (_days: number, _origin?: Story['origin'], _sort?: 'score' | 'recent') => Promise.resolve<Story[]>([]),
   storyFeedback: readOnly,
   sendStory: readOnly,
+  discover: (_status: Candidate['status'] = 'new') =>
+    Promise.resolve<DiscoverList>({ candidates: [], refreshed_at: null, enabled: false,
+      rules: { min_observations: 3, min_days: 7, growth_per_week: 0.03, min_mentions: 2 } }),
+  decideCandidate: readOnly,
+  candidatesIdea: readOnly,
   addWatch: readOnly,
   updateWatch: readOnly,
 }
@@ -462,6 +483,11 @@ const liveApi = {
   storyFeedback: (id: number, feedback: StoryFeedback | null) =>
     req<{ ok: boolean }>(`/api/news/stories/${id}/feedback`, { method: 'POST', body: JSON.stringify({ feedback }) }),
   sendStory: (id: number) => req<{ alert_id: number }>(`/api/news/stories/${id}/send`, { method: 'POST' }),
+  discover: (status: Candidate['status'] = 'new') => req<DiscoverList>(`/api/discover?status=${status}`),
+  decideCandidate: (id: number, action: DiscoverAction) =>
+    req<{ id: number; status: string }>(`/api/discover/${id}/decide`, { method: 'POST', body: JSON.stringify({ action }) }),
+  candidatesIdea: (ids: number[]) =>
+    req<{ alert_id: number }>('/api/discover/idea', { method: 'POST', body: JSON.stringify({ ids }) }),
   addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
     req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
   updateWatch: (id: number, fields: WatchPatch) =>

@@ -32,13 +32,19 @@ TZ = ZoneInfo(config.TIMEZONE)
 URL = "https://api.perplexity.ai/v1/agent"
 PROVIDER = "perplexity/fast"
 # Single-artist formats. Roundups and games have no one subject worth a lookup.
-FORMATS = ("presale", "new_tour", "status_change")
+FORMATS = ("presale", "new_tour", "status_change", "music_story")
 
 PROMPT = ("Today is {today}. {artist} has a Philadelphia show on {show}. "
           "For a Philly concert TikTok creator, list up to 3 recent things (from roughly {since} to today) "
           "that make this show timely: new releases, tour announcements, viral moments, Philly connections. "
           "Give the date of each item. Use only what search results support; if you find nothing recent, say so. "
           "Keep it under 90 words.")
+# Music stories (roadmap M6): background for your take, not facts for the draft
+MUSIC_PROMPT = ("Today is {today}. Music news: \"{headline}\" ({outlet}, {date}). "
+                "For a music TikTok creator about to cover this, give up to 3 bits of context about {artist}: their "
+                "previous projects and how this fits, anything else announced around it, and how it was received. "
+                "Give the date of each item. Use only what search results support; if you find nothing, say so. "
+                "Keep it under 90 words.")
 
 
 class ContextError(Exception):
@@ -51,6 +57,8 @@ class ContextError(Exception):
 
 def subject(facts: dict) -> str | None:
     """Cache key: the artist, for formats where a lookup makes sense."""
+    if facts.get("format") == "music_story" and facts.get("story_id") is not None:
+        return f"music:{facts['story_id']}"  # one lookup per story: the event lookup asks a different question
     if facts.get("format") in FORMATS and facts.get("artist"):
         return facts["artist"].casefold()
     return None
@@ -58,6 +66,11 @@ def subject(facts: dict) -> str | None:
 
 def build_prompt(facts: dict, now: datetime) -> str:
     local = now.astimezone(TZ)
+    today = f"{local:%A, %B} {local.day}, {local.year}"
+    if facts.get("format") == "music_story":
+        src = (facts.get("sources") or [{}])[0]
+        return MUSIC_PROMPT.format(today=today, headline=facts.get("headline", ""), outlet=src.get("outlet", "a music outlet"),
+                                   date=src.get("date", "recently"), artist=facts.get("artist", "the artist"))
     show = (facts.get("shows") or [facts.get("show") or {}])[0]
     where = f"{show.get('date', 'a date TBA')}" + (f" at {show['venue']}" if show.get("venue") else "")
     since = local - timedelta(days=60)
@@ -121,7 +134,7 @@ def lookup(conn, alert_id: int, refresh: bool = False, trigger: str = "manual",
     facts = json.loads(row["facts"])
     subj = subject(facts)
     if not subj:
-        raise ContextError("web context is only for single-artist ideas (presales, new shows, status changes)", 400)
+        raise ContextError("web context is only for single-artist ideas (presales, new shows, status changes, music stories)", 400)
     hit = cached(conn, subj, now)
     if hit and hit["fresh"] and not refresh:
         return hit

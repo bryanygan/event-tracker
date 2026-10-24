@@ -10,6 +10,9 @@
 - `sed -i` with `\n` and backslashes is just as fragile; prefer Edit.
 - Same trap, third time (notes update): a Windows path like `C:\Users\...` inside a Python `"""..."""` string in
   a heredoc is a `\U` unicode escape, so the script fails with a SyntaxError. Even for docs, use Edit.
+- Fourth time (M6/M7, 2026-10-23): Python-heredoc "replace" scripts turned `"\\n"` into a real line break inside a
+  string literal (SyntaxError in llm.py and slides.py) and `\\b` into `\x08` in discovery.py. A plain-text replace
+  script is only safe when neither the old nor the new text contains a backslash.
 
 ## Windows / Task Scheduler
 

@@ -239,7 +239,10 @@ def test_api_scores_feedback_send_and_seen_live(tmp_path, monkeypatch):
     alert_id = r.json()["alert_id"]
     q = client.get("/api/queue").json()["items"]
     assert [i["pillar"] for i in q if i["alert_id"] == alert_id] == ["music"]
-    assert client.post(f"/api/alerts/{alert_id}/draft").status_code == 400  # drafting music comes with M6
+    # M6: music ideas draft like any other (an unknown angle is refused before a job starts)
+    assert client.post(f"/api/alerts/{alert_id}/draft?angle=nope").status_code == 400
+    [card] = [a for a in client.get("/api/alerts").json() if a["id"] == alert_id]
+    assert [x["key"] for x in card["angles"]] == ["news", "fan"] and card["context_supported"]
 
     nova = next(w for w in client.get("/api/watchlist").json() if w["name"] == "Nova Vale")
     assert nova["seen_live"] is False

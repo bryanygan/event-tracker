@@ -63,6 +63,7 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; border-bott
 button.tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
 .toolbar input { min-width: 220px; }
+.toolbar input[type="checkbox"] { min-width: 0; }
 
 .banner { background: var(--warn-bg); color: var(--warn-text); padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
 .banner.error { color: var(--error); }
@@ -95,6 +96,7 @@ button.tab.active { background: var(--accent); color: var(--accent-text); border
 .field p { margin: 3px 0 0; white-space: pre-wrap; line-height: 1.45; }
 .field p.hook { font-size: 1.15rem; font-weight: 600; }
 .onscreen { margin: 3px 0 0; padding-left: 18px; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+mark.take { background: color-mix(in srgb, var(--accent, #6c5ce7) 22%, transparent); color: inherit; padding: 1px 4px; border-radius: 4px; font-weight: 600; }
 .draft-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .draft-foot > span { flex: 1; }
 .actions-inline { display: flex; gap: 6px; }

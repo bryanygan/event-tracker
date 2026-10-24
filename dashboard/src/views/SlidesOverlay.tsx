@@ -12,6 +12,10 @@ const LABELS: Record<string, string> = {
   heading: 'Heading', lines: 'Lines (one per line)',
 }
 const KIND_NAME: Record<Slide['kind'], string> = { title: 'Title', show: 'Show', sales: 'Ticket times', cta: 'Call to action' }
+// Music decks (tracker/slides.py _music_deck) reuse the show layout for releases and artists
+const MUSIC_FORMATS = ['music_story', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
+const MUSIC_KIND_NAME: Record<Slide['kind'], string> = { title: 'Title', show: 'Release', sales: 'Philly dates', cta: 'Call to action' }
+const MUSIC_LABELS: Record<string, string> = { date: 'Top label (date or type)', artist: 'Artist', venue: 'Title' }
 
 // Mirrors slides.apply() so edits redraw instantly before they're saved
 function applyOverrides(base: SlideManifest, o: Overrides): SlideManifest {
@@ -162,6 +166,9 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
 
   // A roundup's picks are flagged on their show slides: one tap skips (or brings back) the rest
   const hasPicks = !!manifest?.slides.some((s) => s.pick)
+  const musicDeck = MUSIC_FORMATS.includes(String(deck?.base.format))
+  const kindName = musicDeck ? MUSIC_KIND_NAME : KIND_NAME
+  const labels = musicDeck ? { ...LABELS, ...MUSIC_LABELS } : LABELS
   const showOnly = (picks: boolean) => {
     if (!manifest) return
     setOverrides((o) => {
@@ -247,7 +254,7 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
         <div className="slides-strip">
           {manifest.slides.map((s, i) => (
             <button key={s.id} className={`slide-thumb${i === selected ? ' selected' : ''}${s.hidden ? ' hidden-slide' : ''}`}
-                    onClick={() => setSelected(i)} aria-label={`${KIND_NAME[s.kind]} slide${s.hidden ? ' (skipped)' : ''}`}>
+                    onClick={() => setSelected(i)} aria-label={`${kindName[s.kind]} slide${s.hidden ? ' (skipped)' : ''}`}>
               {previews[s.id] ? <img src={previews[s.id]} alt="" /> : <span className="muted small">…</span>}
               {s.hidden && <span className="slide-badge">Skipped</span>}
             </button>
@@ -258,7 +265,7 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
       {manifest && slide && (
         <div className="slides-editor">
           <div className="row wrap">
-            <strong>{KIND_NAME[slide.kind]} slide</strong>
+            <strong>{kindName[slide.kind]} slide</strong>
             {!slide.hidden && <button className="ghost" onClick={() => downloadOne(slide)} disabled={!previews[slide.id]}>Download</button>}
             <button className="ghost" onClick={downloadAll} disabled={visible.some((s) => !previews[s.id])}>Download all ({visible.length})</button>
           </div>
@@ -273,7 +280,7 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
               </label>
               {Object.entries(slide.fields).map(([k, v]) => (
                 <div key={k} className="slide-field">
-                  <label htmlFor={`f-${k}`}>{LABELS[k] ?? k}{slide.edited?.includes(k) && <span className="pill">edited</span>}</label>
+                  <label htmlFor={`f-${k}`}>{labels[k] ?? k}{slide.edited?.includes(k) && <span className="pill">edited</span>}</label>
                   <div className="row">
                     {k === 'lines'
                       ? <textarea id={`f-${k}`} rows={4} value={v} maxLength={1200} onChange={(e) => edit(slide.id, k, e.target.value)} />

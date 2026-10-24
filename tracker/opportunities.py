@@ -234,7 +234,11 @@ def evaluate_music(alert: dict, story: dict | None, ctx: dict, draft: dict | Non
     """A music story sent to the queue (music.py): scored like the story, with the alert's timing and stage."""
     expires = _dt(alert["expires_at"])
     expired = bool(expires and now > expires)
-    if story is None:  # stories with an alert are kept, so only a deleted database row gets here
+    if alert["kind"] != "music_story":  # a catalog roundup (music_formats.py): its own score and reasons
+        from .music_formats import roundup_evaluation
+        opp = {"score": alert["score"], "band": music._band(alert["score"]), "coverage": 1.0, "components": [],
+               "trend_notes": [], **roundup_evaluation(alert)}
+    elif story is None:  # stories with an alert are kept, so only a deleted database row gets here
         opp = {"score": alert["score"], "band": music._band(alert["score"]), "coverage": 0.0, "components": [],
                "reasons": [], "caveats": ["The story behind this idea is gone; the score is from when it was sent"],
                "trend_notes": []}
@@ -274,7 +278,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             recent.append({**p, "artists": _artists(json.loads(p["facts_snapshot"])) if p["facts_snapshot"] else set()})
 
     notes = trends.list_notes(conn, now)
-    music_ctx = music.context(conn, now) if any(a["kind"] == "music_story" for a in alerts) else None
+    music_ctx = music.context(conn, now) if any(a["kind"] in config.MUSIC_KINDS for a in alerts) else None
     out = []
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
@@ -283,13 +287,17 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
         shows = a["facts"].get("shows") or ([a["facts"]["show"]] if a["facts"].get("show") else [])
         links = [{"label": f"{s.get('artist') or s.get('event_name')} · {s.get('date')}", "url": s["url"]}
                  for s in shows if s.get("url")]
-        if a["kind"] == "music_story":
-            try:
-                story = music._story(conn, a["facts"]["story_id"])
-            except KeyError:
-                story = None
+        if a["kind"] in config.MUSIC_KINDS:
+            story = None
+            if a["kind"] == "music_story":
+                try:
+                    story = music._story(conn, a["facts"]["story_id"])
+                except KeyError:
+                    pass
             opp = evaluate_music(a, story, music_ctx, draft, posts_for.get(a["id"], []), now)
             links = [{"label": s["outlet"], "url": s["url"]} for s in a["facts"].get("sources", []) if s.get("url")]
+            links += [{"label": f"{i['artist']} · {i.get('title', '')}", "url": i["url"]}
+                      for i in a["facts"].get("releases") or a["facts"].get("albums") or [] if i.get("url")]
         else:
             ids = json.loads(a["event_ids"]) if a["event_ids"] else []
             linked = [events[i] for i in ids if i in events] if ids else _match_shows(a["facts"], events.values())
@@ -302,7 +310,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             "format": a["facts"].get("format") or a["kind"],  # planned_for/series/format: the Calendar tab
             "your_plays": a["facts"].get("your_plays") or 0,
             "links": links[:6],
-            "pillar": "music" if a["kind"] == "music_story" else "events",
+            "pillar": "music" if a["kind"] in config.MUSIC_KINDS else "events",
             "draft": None if draft is None else {k: draft[k] for k in ("id", "status", "hook", "warnings", "facts_changes")},
             "posts": [{"id": p["id"], "url": p["url"], "posted_at": p["posted_at"]} for p in posts_for.get(a["id"], [])],
             **opp,

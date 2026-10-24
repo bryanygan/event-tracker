@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type NewsArticle, type NewsArtistTag, type NewsHealth, type NewsSource } from '../api'
+import DiscoverView from './DiscoverView'
 import StoriesList from './StoriesList'
 import WatchlistPanel from './WatchlistPanel'
 import { fmtWhen } from '../App'
 
 // Music news (roadmap M1-M5): what the feeds published, read every 30 minutes, tagged with your watchlist artists,
-// grouped into stories (M3), checked against the release catalogs (M4) and scored for you (M5).
+// grouped into stories (M3), checked against the release catalogs (M4) and scored for you (M5); Discover (M7).
+type NewsSub = 'stories' | 'releases' | 'discover' | 'articles'
+const SUBS: NewsSub[] = ['stories', 'releases', 'discover', 'articles']
+
 export default function NewsView({ refreshKey }: { refreshKey: number }) {
-  const [view, setView] = useState<'stories' | 'releases' | 'articles'>('stories')
+  // The sub-view rides in the URL hash too (#news/discover), so it can be bookmarked
+  const [view, setViewState] = useState<NewsSub>(() => SUBS.find((s) => window.location.hash === `#news/${s}`) ?? 'stories')
+  const setView = (v: NewsSub) => { setViewState(v); history.replaceState(null, '', v === 'stories' ? '#news' : `#news/${v}`) }
   const [days, setDays] = useState(3)
   const [q, setQ] = useState('')
   const [source, setSource] = useState('')
@@ -59,14 +65,17 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
                 title="Stories about your watchlist artists, best first">For you</button>
         <button className={view === 'releases' ? 'tab active' : 'tab'} onClick={() => setView('releases')}
                 title="Releases by your watchlist artists that no feed covered, from Deezer and Apple Music (iTunes)">New releases</button>
+        <button className={view === 'discover' ? 'tab active' : 'tab'} onClick={() => setView('discover')}
+                title="Artists you don't follow yet, with why they're here (experimental)">Discover</button>
         <button className={view === 'articles' ? 'tab active' : 'tab'} onClick={() => setView('articles')}>All headlines</button>
-        <select value={days} onChange={(e) => setDays(+e.target.value)}>
+        {view !== 'discover' && <select value={days} onChange={(e) => setDays(+e.target.value)}>
           {[1, 2, 3, 7, 14].map((d) => <option key={d} value={d}>{d === 1 ? 'Last 24 hours' : `Last ${d} days`}</option>)}
-        </select>
+        </select>}
       </div>
 
       {view === 'stories' && <StoriesList refreshKey={refreshKey} days={days} origin="news" />}
       {view === 'releases' && <StoriesList refreshKey={refreshKey} days={days} origin="catalog" />}
+      {view === 'discover' && <DiscoverView refreshKey={refreshKey} />}
       {view === 'articles' && <>
       <div className="toolbar">
         <input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />

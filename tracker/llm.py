@@ -257,7 +257,21 @@ def _prompt_facts(facts: dict) -> dict:
     return out
 
 
+def _music(facts: dict):
+    """tracker/music_formats.py for music ideas (roadmap M6), else None. Imported late: it imports the detectors."""
+    from . import config as _c
+    if facts.get("format") in _c.MUSIC_KINDS:
+        from . import music_formats
+        return music_formats
+    return None
+
+
 def build_prompt(facts: dict) -> str:
+    mf = _music(facts)
+    if mf:
+        return (f"{mf.guide(facts)}\n\nFACTS (the only things you may state):\n"
+                f"{json.dumps(mf.prompt_facts(facts), indent=2, ensure_ascii=False)}\n\n"
+                'Return JSON: {"hook": str, "script": str, "closer": str, "caption": str, "hashtags": [str]}')
     fmt = facts.get("format", "")
     guide = FORMAT_GUIDES.get(fmt, "Format: quick update on Philly concerts.")
     try:
@@ -299,7 +313,9 @@ def fill_placeholders(text: str, facts: dict) -> str:
 def _artist_names(facts: dict) -> list[str]:
     """Artist and venue names: the proper nouns a hashtag should spell exactly."""
     shows = facts.get("shows", []) + ([facts["show"]] if facts.get("show") else [])
-    names = [facts.get("artist")] + [s.get("artist") for s in shows] + [s.get("venue") for s in shows]
+    items = facts.get("releases") or facts.get("albums") or facts.get("artists_to_watch") or []  # music roundups
+    names = ([facts.get("artist")] + [s.get("artist") for s in shows] + [s.get("venue") for s in shows]
+             + list(facts.get("other_artists") or []) + [i.get("artist") for i in items])
     return [n for n in dict.fromkeys(names) if n]
 
 
@@ -330,6 +346,8 @@ def clean_hashtags(raw: list, facts: dict) -> list[str]:
         tag = "#" + body
         if tag.lower() not in (x.lower() for x in tags):
             tags.append(tag)
+    if _music(facts):  # national music news: #philly only if the model chose it
+        return tags
     tags = [t for t in tags if t.lower() != "#philly"]
     return ["#philly"] + tags  # always present, always first
 
@@ -341,7 +359,7 @@ HOOK_ONLY_SCHEMA = {
 }
 
 
-def _ollama_chat(model: str, prompt: str, schema: dict) -> dict:
+def _ollama_chat(model: str, prompt: str, schema: dict, system: str = SYSTEM_PROMPT) -> dict:
     resp = requests.post(f"{config.OLLAMA_URL}/api/chat", timeout=600, json={
         "model": model,
         "stream": False,
@@ -349,7 +367,7 @@ def _ollama_chat(model: str, prompt: str, schema: dict) -> dict:
         "keep_alive": "2m",
         "options": {"temperature": 0.8, "num_ctx": 4096, "num_predict": 700},
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
     })
@@ -373,7 +391,7 @@ def claude_usage(conn, now: datetime | None = None) -> dict:
             "cap": config.CLAUDE_DAILY_CAP, "month_calls": row["n"], "month_cost_usd": round(row["cost"], 4)}
 
 
-def _claude_chat(conn, model: str, prompt: str, schema: dict) -> dict:
+def _claude_chat(conn, model: str, prompt: str, schema: dict, system: str = SYSTEM_PROMPT) -> dict:
     """One Claude call with the reply constrained to the draft schema. Logged (tokens, cost) even on failure."""
     import anthropic
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=60.0)
@@ -382,7 +400,7 @@ def _claude_chat(conn, model: str, prompt: str, schema: dict) -> dict:
         resp = client.messages.create(
             model=model,
             max_tokens=2000,
-            system=SYSTEM_PROMPT,
+            system=system,
             output_config={"effort": config.CLAUDE_EFFORT, "format": {"type": "json_schema",
                                                         "schema": {**schema, "additionalProperties": False}}},
             messages=[{"role": "user", "content": prompt}],
@@ -404,7 +422,7 @@ def _claude_chat(conn, model: str, prompt: str, schema: dict) -> dict:
             conn.commit()
 
 
-def _chat(conn, model: str | None, prompt: str, schema: dict) -> tuple[dict, str]:
+def _chat(conn, model: str | None, prompt: str, schema: dict, system: str = SYSTEM_PROMPT) -> tuple[dict, str]:
     """The model's JSON reply and which model wrote it. Claude when configured and under today's cap (the cap
     needs `conn`); Ollama otherwise, or when the Claude call fails. An explicit `model` picks Ollama."""
     if model is None and uses_claude() and conn is not None:
@@ -412,7 +430,7 @@ def _chat(conn, model: str | None, prompt: str, schema: dict) -> tuple[dict, str
             pass  # already failed this batch; don't wait out another timeout per draft
         elif claude_calls_today(conn) < config.CLAUDE_DAILY_CAP:
             try:
-                return _claude_chat(conn, config.CLAUDE_MODEL, prompt, schema), config.CLAUDE_MODEL
+                return _claude_chat(conn, config.CLAUDE_MODEL, prompt, schema, system), config.CLAUDE_MODEL
             except Exception as exc:
                 log.warning("Claude draft failed, falling back to Ollama: %s", exc)
                 if _batch:
@@ -420,9 +438,9 @@ def _chat(conn, model: str | None, prompt: str, schema: dict) -> tuple[dict, str
         else:
             log.warning("Claude daily cap (%d calls) reached; drafting with Ollama", config.CLAUDE_DAILY_CAP)
         with _fallback_ollama():  # model_session() didn't start it on the Claude path
-            return _ollama_chat(config.OLLAMA_MODEL, prompt, schema), config.OLLAMA_MODEL
+            return _ollama_chat(config.OLLAMA_MODEL, prompt, schema, system), config.OLLAMA_MODEL
     model = model or config.OLLAMA_MODEL
-    return _ollama_chat(model, prompt, schema), model
+    return _ollama_chat(model, prompt, schema, system), model
 
 
 def generate(facts: dict, model: str | None = None, script: str | None = None,
@@ -442,9 +460,13 @@ def generate(facts: dict, model: str | None = None, script: str | None = None,
                    "(the first line on screen, leading into this script) and hashtags.\n"
                    f"SCRIPT: {script}\n"
                    'Return JSON: {"hook": str, "hashtags": [str]}')
-    out, model = _chat(conn, model, prompt, HOOK_ONLY_SCHEMA if script else DRAFT_SCHEMA)
+    mf = _music(facts)
+    schema = HOOK_ONLY_SCHEMA if script else mf.STORY_SCHEMA if mf else DRAFT_SCHEMA
+    out, model = _chat(conn, model, prompt, schema, mf.SYSTEM_PROMPT if mf else SYSTEM_PROMPT)
     for key in ("hook", "script", "caption"):
         out[key] = fill_placeholders(str(out.get(key, "")), facts)
+    if mf and not script:  # music: the model's news, then your take, then its closing question
+        out["script"] = mf.assemble(spoken(out["script"]), spoken(str(out.get("closer", ""))), facts)
     # Captions often arrive as "text #tag #tag" or only tags: move tags to the hashtag list.
     caption_tags = re.findall(r"(?<!\w)#\w+", out["caption"])
     tags = clean_hashtags(list(out.get("hashtags", [])) + caption_tags, facts)
@@ -461,6 +483,8 @@ def generate(facts: dict, model: str | None = None, script: str | None = None,
 
 def onscreen_lines(facts: dict) -> list[str]:
     """Text overlays built straight from facts, so dates/venues on screen are always right."""
+    if _music(facts):
+        return _music(facts).onscreen(facts)
     lines = []
     fmt = facts.get("format")
     if facts.get("picked_from"):  # a "my N picks" draft (angles.scoped_facts)
@@ -560,4 +584,7 @@ def check_facts(draft: dict, facts: dict) -> list[str]:
     if re.search(r"\bcode\b[^.]*\b[A-Z0-9]{4,}\b", text):
         warnings.append("possible presale code")
     warnings += re.findall(r"\[[A-Za-z_ ]+\]", text)  # "[Artist]" copied from a prompt example
-    return [f"Not in facts: {w}" for w in dict.fromkeys(warnings)]
+    out = [f"Not in facts: {w}" for w in dict.fromkeys(warnings)]
+    if _music(facts):  # status words, quoted titles, "trending" (music_formats.check)
+        out += [w for w in _music(facts).check(draft, facts) if w not in out]
+    return out

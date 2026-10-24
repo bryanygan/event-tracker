@@ -194,15 +194,32 @@ def _median(values: list[float]) -> float | None:
     return round(statistics.median(values), 1) if values else None
 
 
+GROUP_BY = ("format", "video_style", "pillar", "music_format")
+
+
+def group_name(post: dict, group_by: str) -> str | None:
+    """pillar: events or music (from the format). music_format: the music video format (a story's kind decides
+    it: album announcement, collab...), music posts only."""
+    from .music_formats import format_key
+    music = (post["format"] or "") in config.MUSIC_KINDS
+    if group_by == "pillar":
+        return "music" if music else "events"
+    if group_by == "music_format":
+        return format_key({**(post["facts_snapshot"] or {}), "format": post["format"]}) if music else None
+    return post[group_by] or "unknown"
+
+
 def analytics(conn, group_by: str = "format", now: datetime | None = None) -> dict:
     """Compare groups of posts at the same age. Medians, not averages, so one breakout video doesn't
     define a format. Groups with fewer than ANALYTICS_MIN_POSTS posts at a checkpoint are marked
     `enough: False`: there, the numbers describe those posts, they don't predict anything."""
-    if group_by not in ("format", "video_style"):
-        raise PostError("group_by must be format or video_style")
+    if group_by not in GROUP_BY:
+        raise PostError(f"group_by must be one of {', '.join(GROUP_BY)}")
     groups: dict[str, list[dict]] = defaultdict(list)
     for p in list_posts(conn, now):
-        groups[p[group_by] or "unknown"].append(p)
+        name = group_name(p, group_by)
+        if name is not None:
+            groups[name].append(p)
     rows = []
     for name, posts in sorted(groups.items()):
         row = {"group": name, "posts": len(posts), "checkpoints": {}}

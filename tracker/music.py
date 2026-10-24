@@ -16,6 +16,7 @@ dates, Philly dates from the events data), so a draft can only say what a source
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -132,8 +133,12 @@ def context(conn, now: datetime | None = None) -> dict:
             facts.get("other_artists") or [])
         posts.append({"alert_id": p["alert_id"], "posted_at": p["posted_at"],
                       "artists": {n.casefold() for n in names if n}})
+    from .discovery import momentum  # late: discovery imports this module
+    keys = {r["id"]: r["key"] for r in conn.execute("SELECT id, key FROM artist_identities")}
+    by_key = momentum(conn, list(keys.values()))
     return {"now": now, "artists": artists, "by_artist": by_artist, "by_type": by_type, "shows": shows,
-            "posts": posts, "notes": trends.list_notes(conn, now)}
+            "posts": posts, "notes": trends.list_notes(conn, now),
+            "momentum": {i: by_key[k] for i, k in keys.items() if k in by_key}}
 
 
 # ---------- components ----------
@@ -222,6 +227,16 @@ def _band(score: float | None) -> str | None:
     return "strong" if score >= config.QUEUE_STRONG else "medium" if score >= config.QUEUE_MEDIUM else "low"
 
 
+def momentum_component(story: dict, ctx: dict) -> tuple[float | None, str]:
+    """The primary artist's momentum (discovery.py, M7): unknown until the sample-size rules are met."""
+    m = (ctx.get("momentum") or {}).get(story["primary_artist_id"])
+    if not m or m["value"] is None:
+        return None, "Collecting: momentum needs a week of daily snapshots"
+    if m["two_signals"]:
+        return m["value"], f"Growing on two signals (experimental): {m['summary']}"
+    return m["value"], ("One signal growing (experimental): " if m["growing"] else "") + m["summary"]
+
+
 def search_facts(story: dict, ctx: dict) -> dict:
     """What trend notes are matched against: the story's artists."""
     names = [ctx["artists"][i]["name"] for i in [story["primary_artist_id"], *_ids(story["other_artist_ids"])]
@@ -241,7 +256,7 @@ def evaluate(story: dict, ctx: dict) -> dict:
         _component("relevance", *relevance(story, ctx)),
         _component("confidence", *confidence(story)),
         _component("search", s_value, s_why),
-        _component("momentum", None, "Unknown until artist momentum exists (roadmap M7)"),
+        _component("momentum", *momentum_component(story, ctx)),
     ]
     known = [c for c in comps if c["value"] is not None]
     weight = sum(c["weight"] for c in known)
@@ -324,8 +339,10 @@ def set_feedback(conn, story_id: int, action: str | None, now: datetime | None =
 def facts_for(conn, story: dict, ctx: dict) -> dict:
     """The alert's facts: only what a source, a catalog or the events data says, each with where it came from."""
     artist = ctx["artists"].get(story["primary_artist_id"]) or {}
-    sources = [{"outlet": r["source_name"], "headline": r["title"], "url": r["url"], "date": r["seen_at"][:10]}
-               for r in conn.execute("""SELECT a.title, a.url, s.name AS source_name,
+    # The feed's own short summary, so a draft knows what the story says (attributed to its outlet)
+    sources = [{"outlet": r["source_name"], "headline": r["title"], "url": r["url"], "date": r["seen_at"][:10],
+                **({"summary": _clip(r["excerpt"])} if r["excerpt"] else {})}
+               for r in conn.execute("""SELECT a.title, a.url, a.excerpt, s.name AS source_name,
                                                COALESCE(a.published_at, a.fetched_at) AS seen_at
                                         FROM story_articles x JOIN articles a ON a.id = x.article_id
                                         JOIN news_sources s ON s.id = a.source_id
@@ -352,7 +369,41 @@ def facts_for(conn, story: dict, ctx: dict) -> dict:
     shows = ctx["shows"].get((artist.get("name") or "").casefold(), [])
     if shows:
         facts["philly_shows"] = shows[:5]
+    earlier = previous_releases(conn, story["primary_artist_id"], story["release_title"])
+    if earlier:
+        facts["previous_releases"] = earlier
     return {k: v for k, v in facts.items() if v is not None}
+
+
+def clean_title(title: str) -> str:
+    """"Glass Hours - Single" -> "Glass Hours" (the catalogs' suffix isn't part of the name)."""
+    return re.sub(r"\s+-\s+(?:single|ep)\s*$", "", title or "", flags=re.I).strip()
+
+
+def _clip(text: str, limit: int = 280) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def previous_releases(conn, artist_id: int | None, title: str | None, limit: int = 3) -> list[dict]:
+    """The artist's earlier releases in the catalogs (the last ~90 days are kept): context for your take. The last two
+    weeks are left out: a lead single out days before its album announcement isn't the previous release."""
+    from .catalog import title_key
+    if artist_id is None:
+        return []
+    skip = title_key(title) if title else None
+    out, seen = [], set()
+    today = (datetime.now(timezone.utc).date() - timedelta(days=14)).isoformat()
+    for r in conn.execute("""SELECT title, title_key, record_type, release_date, provider FROM releases
+                             WHERE artist_id=? AND release_date <= ? ORDER BY release_date DESC""", (artist_id, today)):
+        if r["title_key"] in seen or r["title_key"] == skip:
+            continue
+        seen.add(r["title_key"])
+        out.append({"title": clean_title(r["title"]), "type": r["record_type"], "date": fmt_date(r["release_date"]),
+                    "from": r["provider"]})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _timing(story: dict, now: datetime) -> tuple[str, str]:

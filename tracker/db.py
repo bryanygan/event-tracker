@@ -401,6 +401,41 @@ CREATE TABLE IF NOT EXISTS releases (
 );
 CREATE INDEX IF NOT EXISTS idx_releases_artist ON releases(artist_id, release_date);
 
+-- Artists you don't follow yet (tracker/discovery.py, roadmap M7): Last.fm similar artists and niche tags, and guests
+-- on your artists' releases. Each keeps its evidence; accepting one adds it to the watchlist, dismissing hides it.
+CREATE TABLE IF NOT EXISTS artist_candidates (
+    id INTEGER PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,       -- listening.artist_key(name)
+    name TEXT NOT NULL,
+    evidence TEXT NOT NULL DEFAULT '[]',  -- JSON [{kind: similar|tag|feature, of, detail, weight}], from the last refresh
+    tags TEXT NOT NULL DEFAULT '[]',      -- Last.fm's top tags for them
+    mbid TEXT,
+    deezer_id INTEGER,
+    lastfm_url TEXT,
+    status TEXT NOT NULL DEFAULT 'new',  -- new, accepted, dismissed
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    decided_at TEXT
+);
+
+-- Daily audience and attention numbers for momentum (M7), for watchlist artists and candidates alike (by name key).
+-- Never back-filled or guessed: a day that wasn't observed stays missing.
+CREATE TABLE IF NOT EXISTS artist_metrics (
+    artist_key TEXT NOT NULL,
+    provider TEXT NOT NULL,         -- deezer, lastfm, listenbrainz, news
+    metric TEXT NOT NULL,           -- fans, listeners, playcount, listens, mentions (distinct outlets, last 7 days)
+    value INTEGER NOT NULL,
+    observed_on TEXT NOT NULL,      -- ET date
+    PRIMARY KEY (artist_key, provider, metric, observed_on)
+);
+
+-- Cached third-party lookups (Last.fm similar artists and tag lists, a week; see discovery.py)
+CREATE TABLE IF NOT EXISTS api_cache (
+    key TEXT PRIMARY KEY,
+    body TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,

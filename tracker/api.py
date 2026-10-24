@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, drafts, listening, llm, music, opportunities, planner, posts, publish, remote,
+from . import (angles, config, context, db, discovery, drafts, listening, llm, music, opportunities, planner, posts, publish, remote,
                slides, trends, watchlist)
 from .scoring import upcoming_events
 
@@ -306,8 +306,6 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
     if not row:
         raise HTTPException(404)
     facts = json.loads(row["facts"])
-    if facts.get("format") == "music_story":
-        raise HTTPException(400, "Drafting music stories comes with roadmap M6")
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
 
@@ -619,6 +617,43 @@ def story_send(story_id: int, c=Depends(get_db)):
         return {"alert_id": music.send(c, story_id)}
     except KeyError:
         raise HTTPException(404)
+
+
+@app.get("/api/discover")
+def get_discover(status: str = "new", c=Depends(get_db)):
+    """Artists you don't follow yet, with their evidence and momentum (tracker/discovery.py, M7, experimental)."""
+    if status not in ("new", "accepted", "dismissed"):
+        raise HTTPException(400, "status must be new, accepted or dismissed")
+    return discovery.listing(c, status)
+
+
+class DiscoverDecision(BaseModel):
+    action: str  # watch, adjacent, dismiss, restore
+
+
+@app.post("/api/discover/{candidate_id}/decide")
+def discover_decide(candidate_id: int, body: DiscoverDecision, c=Depends(get_db)):
+    try:
+        return discovery.decide(c, candidate_id, body.action)
+    except KeyError:
+        raise HTTPException(404)
+    except (discovery.DiscoveryError, watchlist.WatchlistError) as exc:
+        raise HTTPException(400, str(exc))
+
+
+class DiscoverIdea(BaseModel):
+    ids: list[int]
+
+
+@app.post("/api/discover/idea", status_code=201)
+def discover_idea(body: DiscoverIdea, c=Depends(get_db)):
+    """An "Artists to watch" video idea from the ones you picked."""
+    try:
+        return {"alert_id": discovery.make_idea(c, body.ids)}
+    except KeyError:
+        raise HTTPException(404)
+    except discovery.DiscoveryError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.get("/api/watchlist")
