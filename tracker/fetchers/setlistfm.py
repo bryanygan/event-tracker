@@ -137,7 +137,7 @@ def enrich_history(conn, client: SetlistFmClient | None = None, limit: int = MAX
     rows = conn.execute(
         """SELECT DISTINCT a.id, a.name, a.setlistfm_mbid, a.first_seen, a.popularity FROM attractions a
            JOIN event_attractions ea ON ea.attraction_id = a.id AND ea.position = 0
-           JOIN events e ON e.id = ea.event_id AND e.active = 1 AND e.segment IS NOT 'Sports'
+           JOIN events e ON e.id = ea.event_id AND e.active = 1 AND (e.segment IS NULL OR e.segment = 'Music')
            WHERE a.history_checked_at IS NULL OR a.history_checked_at < ?
            ORDER BY a.first_seen DESC, a.popularity DESC LIMIT ?""", (cutoff, limit)).fetchall()
     done = 0

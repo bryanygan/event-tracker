@@ -195,7 +195,8 @@ CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM l
 # Default series by format: recurring shows of the page. Change a single idea's series on its card.
 SERIES_FOR_FORMAT = {
     "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
-    "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
+    "new_tour": "Just announced", "status_change": "Show update", "team_week": "Game week", "big_game": "Game week",
+    "experience": "Philly happenings", "things_to_do": "Things to do this weekend",
     "music_story": "Music news", "new_music_friday": "New Music Friday", "upcoming_albums": "Upcoming albums",
     "emerging_artists": "Artists to watch",
 }
@@ -221,18 +222,36 @@ NICHE_TM_GENRES = {"Hip-Hop/Rap", "R&B", "Dance/Electronic", "Pop"}
 NICHE_TM_SUBGENRES = {"Indie Pop", "Hyperpop", "Bedroom Pop", "Alternative Rap", "Trap", "Urban"}
 
 # --- Sports ---
-# Extra Ticketmaster classifications fetched each run (~1 API call each), and which teams to keep from them.
-# The basketball feed also has Villanova, the Delaware Blue Coats and NCAA events; to track one, add its
-# Ticketmaster attraction name here. "short" is what scripts say; "aliases" are accepted in hooks.
-SPORTS_CLASSIFICATIONS = ["basketball"]
+# Home games of these teams, from Ticketmaster's feed for each team's `classification` (~1 API call each per
+# run). The feeds also carry college, G League and minor-league games; only teams listed here are kept (to track
+# one, add its Ticketmaster attraction name). "short" is what scripts say; "aliases" are accepted in hooks;
+# "league" and "emoji" go in hashtags and captions. "marquee": opponents that make a home game a "big game" alert
+# (Ticketmaster attraction names). "every_game_big": every home game is its own alert (a team with one home game
+# a week), and no "home games this week" roundup.
 SPORTS_TEAMS = {
-    "Philadelphia 76ers": {"short": "Sixers", "aliases": ["Sixers", "76ers"]},
+    "Philadelphia 76ers": {"short": "Sixers", "aliases": ["Sixers", "76ers"], "classification": "basketball",
+                           "league": "NBA", "emoji": "🏀", "marquee": [
+        "Boston Celtics", "New York Knicks", "Los Angeles Lakers", "Golden State Warriors", "Brooklyn Nets",
+        "Milwaukee Bucks", "Miami Heat", "Cleveland Cavaliers", "Denver Nuggets", "Oklahoma City Thunder"]},
+    "Philadelphia Flyers": {"short": "Flyers", "aliases": ["Flyers"], "classification": "hockey",
+                            "league": "NHL", "emoji": "🏒", "marquee": [
+        "Pittsburgh Penguins", "New York Rangers", "New Jersey Devils", "Washington Capitals", "Boston Bruins",
+        "New York Islanders"]},
+    "Philadelphia Eagles": {"short": "Eagles", "aliases": ["Eagles", "Birds"], "classification": "football",
+                            "league": "NFL", "emoji": "🦅", "every_game_big": True, "marquee": [
+        "Dallas Cowboys", "New York Giants", "Washington Commanders", "Kansas City Chiefs", "San Francisco 49ers"]},
+    "Philadelphia Phillies": {"short": "Phillies", "aliases": ["Phillies", "Phils"], "classification": "baseball",
+                              "league": "MLB", "emoji": "⚾", "marquee": [
+        "New York Mets", "Atlanta Braves", "Los Angeles Dodgers", "New York Yankees", "Washington Nationals"]},
+    "Philadelphia Union": {"short": "Union", "aliases": ["Union"], "classification": "soccer",
+                           "league": "MLS", "emoji": "⚽", "marquee": [
+        "Inter Miami CF", "New York Red Bulls", "New York City FC", "LA Galaxy", "Los Angeles Football Club"]},
 }
-# Opponents that make a home game a "big game" alert (Ticketmaster attraction names).
-MARQUEE_OPPONENTS = [
-    "Boston Celtics", "New York Knicks", "Los Angeles Lakers", "Golden State Warriors", "Brooklyn Nets",
-    "Milwaukee Bucks", "Miami Heat", "Cleveland Cavaliers", "Denver Nuggets", "Oklahoma City Thunder",
-]
+SPORTS_CLASSIFICATIONS = list(dict.fromkeys(t["classification"] for t in SPORTS_TEAMS.values()))
+# Opponent nicknames that are two words ("Blue Jackets", not "Jackets"). Soccer clubs go by the city part instead
+# (FC/CF/SC dropped): "Union vs. Inter Miami".
+TWO_WORD_NICKNAMES = {"Blue Jackets", "Maple Leafs", "Red Wings", "Golden Knights", "Red Sox", "White Sox",
+                      "Blue Jays"}
 SPORTS_BASE_SCORE = 55        # any home game; music scores come from popularity/venue/tour instead
 MARQUEE_BONUS = 25
 WEEKEND_GAME_BONUS = 5        # Fri-Sun games
@@ -329,7 +348,59 @@ VENUE_JUNK_PATTERNS = [
 JUNK_EVENT_PATTERNS = [
     r"\bparking\b", r"\bshuttle\b", r"\bupgrade\b", r"\bvip (package|experience)\b",
     r"\bhospitality\b", r"\bsuite\b", r"\blot [a-z0-9]\b", r"\bgift card\b",
+    r"\bmust have ticket\b",  # arena add-ons ("Flyers Pregame Tours - MUST HAVE TICKET TO GAME")
 ]
+
+# --- Comedy (creator-roadmap P2-14) ---
+# Stand-up from Ticketmaster's comedy feed (~1 API call a run). Scored like a show (venue + tour size; no Deezer
+# fans, a comedian's name can match a musician's), and kept out of the music formats (stacked month, your lane).
+COMEDY_CLASSIFICATION = "comedy"
+
+# --- Philly experiences (creator-roadmap P2-14, survey in docs/agent-notes/experience-sources.md) ---
+# Markets, festivals, seasonal events and anything you add by hand: segment "Experience", category in `genre`.
+# Sources publish their own structured listings; robots.txt is checked before every read and a failed source
+# keeps its events (it never erases them). `base` is the notability of a typical listing from that source.
+EXPERIENCE_SOURCES = [
+    # The Events Calendar's public API. Recurring dates (a market open daily) collapse into one event with a range.
+    {"key": "ccd", "name": "Center City District", "kind": "tribe", "url": "https://www.centercityphila.org",
+     "base": 50, "terms": "robots.txt allows; public Events Calendar API; no terms page (checked 2026-10-24)"},
+    # Event list page, then one iCal file per event (the site's own "Add to calendar" link).
+    {"key": "drwc", "name": "Delaware River Waterfront", "kind": "drwc",
+     "url": "https://www.delawareriverwaterfront.com", "base": 60,
+     "terms": "robots.txt allows the list page and iCal links (checked 2026-10-24)"},
+]
+EXPERIENCE_LOOKAHEAD_DAYS = 120
+EXPERIENCE_LOOKBACK_DAYS = 120   # read this far back too, so a series that already started keeps its first date
+EXPERIENCE_MAX_PAGES = 8         # 50 listings a page; CCD had 160 upcoming (2026-10-24)
+EXPERIENCE_DELAY_SECONDS = 2     # between requests to the same site
+# Words in a listing's name that make it video-worthy, or not. First the boosts, then the cuts.
+EXPERIENCE_BIG_WORDS = [r"\bmarkets?\b", r"\bfest(ival)?s?\b", r"\bfireworks\b", r"\bparade\b", r"\blights?\b",
+                        r"\blantern", r"\bwinterfest\b", r"\bopen streets\b", r"\blunar new year\b",
+                        r"\btree lighting\b", r"\bopening (weekend|day|night)\b", r"\bnight market\b",
+                        r"\bfood\b", r"\bpop-?up\b", r"\bholiday\b", r"\bhalloween\b", r"\bparty\b"]
+EXPERIENCE_SMALL_WORDS = [r"\bhappy hour\b", r"\btrivia\b", r"\bgame night\b", r"\bclass(es)?\b",
+                          r"\bvolunteer\b", r"\bworkshop\b", r"\bmeeting\b", r"\bbook swap\b", r"\bsocials?\b"]
+EXPERIENCE_BIG_BONUS = 20
+EXPERIENCE_SMALL_PENALTY = 25
+EXPERIENCE_MANUAL_SCORE = 80      # you added it yourself: it's worth a look
+EXPERIENCE_MIN_SCORE = 65         # single-event idea at or above this
+EXPERIENCE_ALERT_DAYS = 21        # ...when it starts within this many days (or is on now)
+# Categories (stored as the event's genre). Hand-added events pick one; source listings get one from their name.
+EXPERIENCE_CATEGORIES = ["Food & Drink", "Market", "Festival", "Holiday", "Outdoors", "Arts", "Nightlife", "Other"]
+EXPERIENCE_CATEGORY_WORDS = [  # first match wins
+    ("Market", r"\bmarkets?\b|\bbazaar\b|\bflea\b"), ("Holiday", r"\bholiday|christmas|winterfest|tree lighting|"
+     r"\bnew year|halloween|lunar new year|valentine"), ("Festival", r"\bfest(ival)?s?\b|\bparade\b|\bfireworks\b"),
+    ("Food & Drink", r"\bfood\b|\btasting\b|\bbeer\b|\bwine\b|\bcocktail|\bwhiskey|\bbourbon"),
+    ("Outdoors", r"\bopen streets\b|\bpark\b|\bgarden\b|\bbike\b|\bskating\b|\brink\b"),
+]
+# "Things to do this weekend": experiences and comedy, plus at most this many games and concerts.
+THINGS_TO_DO_MIN = 3
+THINGS_TO_DO_MAX = 8
+THINGS_TO_DO_MIN_SCORE = 50       # experiences below this (a routine happy hour) stay out
+THINGS_TO_DO_COMEDY = 3
+THINGS_TO_DO_GAMES = 1
+THINGS_TO_DO_CONCERTS = 2
+WEEKEND_MAX_GAMES = 2             # the music weekend roundup keeps at most this many games
 
 # Music news (tracker/news.py, docs/agent-notes/music-roadmap.md M1): public RSS/Atom feeds, read every 30 minutes
 # by the PhillyEvents-News task with conditional requests (most reads are a 304 with no body). Feed URLs are public.

@@ -177,7 +177,18 @@ def is_tracked_team_event(raw: dict) -> bool:
     """Sports feeds are broad (college, G League...); keep games whose headliner is in SPORTS_TEAMS.
     The home team is listed first in Ticketmaster's attractions, so this keeps home games only."""
     attractions = raw.get("_embedded", {}).get("attractions") or []
-    return bool(attractions) and clean_text(attractions[0].get("name")) in config.SPORTS_TEAMS
+    # Arena add-ons ("Flyers Pregame Tours") carry the team as attraction but sit in the Miscellaneous segment
+    return (bool(attractions) and clean_text(attractions[0].get("name")) in config.SPORTS_TEAMS
+            and _classification(raw, "segment") == "Sports")
+
+
+def is_comedy_event(raw: dict) -> bool:
+    """Stand-up from the comedy feed (P2-14). The feed also returns plays and magic shows tagged comedy."""
+    return _classification(raw, "segment") == "Arts & Theatre" and _classification(raw, "genre") == "Comedy"
+
+
+def _classification(raw: dict, level: str) -> str | None:
+    return (((raw.get("classifications") or [{}])[0].get(level)) or {}).get("name")
 
 
 def is_junk(raw: dict) -> bool:

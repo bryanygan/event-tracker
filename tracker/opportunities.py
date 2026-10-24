@@ -78,6 +78,9 @@ def _component(key: str, value: float | None, why: str) -> dict:
             "value": None if value is None else round(min(100.0, max(0.0, value))), "why": why}
 
 
+LOCAL_KINDS = ("experience", "things_to_do")  # markets, festivals, comedy (P2-14)
+
+
 def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
     """The angle beyond 'X is playing': the strongest applicable rule wins."""
     kind = alert["kind"]
@@ -91,7 +94,11 @@ def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
                           f"{facts.get('notable_show_count')} notable {facts.get('genre')} shows in {facts.get('month')}"),
         "status_change": (70 if facts.get("change") in ("cancelled", "postponed") else 55, f"Show {facts.get('change')}"),
         "team_week": (20, "Routine home-game week"),
-        "big_game": (55, f"Marquee opponent: {facts.get('opponent')}"),
+        "big_game": (55, f"Marquee opponent: {facts.get('opponent')}")
+        if facts.get("opponent") in (config.SPORTS_TEAMS.get(facts.get("team")) or {}).get("marquee", ())
+        else (45, f"{facts.get('artist')} home game"),
+        "experience": (60, f"Local {(facts.get('category') or 'event').lower()}: not a concert, a wider audience"),
+        "things_to_do": (45, "Weekend 'things to do' roundup"),
     }
     best = [options.get(kind, (30, "No special angle"))]
     history = facts.get("history") or {}
@@ -110,7 +117,9 @@ def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
 
 def local(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
     if alert["kind"] in ("team_week", "big_game"):
-        return 100, "Sixers home game"
+        return 100, f"{facts.get('artist')} home game"
+    if alert["kind"] in LOCAL_KINDS:
+        return 100, "Happening in Philly"
     plays = max([e.get("my_plays") or 0 for e in events] + [facts.get("your_plays") or 0])
     if plays >= config.ROTATION_MIN_PLAYS:
         return 100, f"Philly show, in your rotation ({plays} plays)"
@@ -225,7 +234,8 @@ def evaluate(alert: dict, events: list[dict], draft: dict | None, posts: list[di
         "stage": stage(alert, draft, posts, t["expired"] or not events, now),
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
         "trend_notes": trend_matches,
-        "lane": "sports" if alert["kind"] in ("team_week", "big_game") else "lane" if local(alert, facts, events)[0] == 100 else "other",
+        "lane": "sports" if alert["kind"] in ("team_week", "big_game") else "local" if alert["kind"] in LOCAL_KINDS
+        else "lane" if local(alert, facts, events)[0] == 100 else "other",
     }
 
 

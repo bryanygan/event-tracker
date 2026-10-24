@@ -42,3 +42,20 @@ Structured data covers sports and comedy well (Ticketmaster) and a handful of bi
 Food festivals and markets mostly live on Eventbrite, Instagram and editorial roundups, none of which we can read
 automatically. A hand-entry path ("add an event from a link I paste", facts typed by the user) would cover them
 without breaking any terms.
+
+## Built (2026-10-24, `feature/experience-sources`)
+
+- **Teams:** Sixers, Flyers, Eagles, Phillies, Union (`config.SPORTS_TEAMS`: classification, rivals, league,
+  emoji). The Eagles get an idea per home game and no weekly roundup (`every_game_big`).
+- **Comedy:** Ticketmaster's comedy feed, stand-up only (`is_comedy_event`). Scored on venue + tour size; kept out of
+  Deezer/setlist.fm lookups, stacked months, your-lane cuts and the music weekend roundup.
+- **Center City District and the waterfront** (`tracker/fetchers/experiences.py`), robots.txt checked each read, a
+  failed source keeps its events. Category from the name; price only when the listing gives one.
+- **Events you add** (Events tab, "Your events"; `tracker/manual_events.py`): every fact typed by you; saving raises
+  its idea at once.
+- **Ideas:** `experience` (one notable market/festival starting within 21 days, or anything you added; templated
+  script, the model writes only the hook) and `things_to_do` (weekend: experiences and comedy first, then a game
+  and two concerts). The music weekend roundup now keeps at most 2 games.
+- First real run (DB copy): 164 comedy shows, Phillies 41 / Flyers 35 / Eagles 6 / Union 2 games, 14 CCD + 4
+  waterfront listings; new ideas: Holiday Market, Open Streets, an Eagles game, a Union week, things to do.
+- South Street and Bartram's Garden were left out on purpose (see above).

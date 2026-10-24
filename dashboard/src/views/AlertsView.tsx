@@ -12,13 +12,15 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   status_change: 'Status change',
   team_week: 'Home games this week',
   big_game: 'Big game',
+  experience: 'Philly happening',
+  things_to_do: 'Things to do',
   music_story: 'Music news',
   new_music_friday: 'New Music Friday',
   upcoming_albums: 'Upcoming albums',
   emerging_artists: 'Artists to watch',
 }
 // Formats whose script comes from Python (tracker/templates.py, tracker/music_formats.py): an angle drafts instantly
-const TEMPLATED = ['presale', 'status_change', 'team_week', 'big_game', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
+const TEMPLATED = ['presale', 'status_change', 'team_week', 'big_game', 'experience', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
 export const MUSIC_KINDS: Alert['kind'][] = ['music_story', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
 
 /** The script, with the "YOUR TAKE:" beat (music drafts, for you to fill in) marked */
@@ -243,13 +245,15 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
           <tbody>
             {shows.map((s, i) => (
               <tr key={i}>
-                <td>{s.date}{s.time ? ` · ${s.time}` : ''}</td>
+                <td>{s.dates ?? s.date}{s.time ? ` · ${s.time}` : ''}</td>
                 <td>
                   {picks.includes(`${s.artist}|${s.date}`) && <span className="pick" title={`one of the top ${picks.length} picks`}>★ </span>}
-                  <strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}</td>
+                  <strong>{s.artist ?? s.event_name}</strong>{s.support ? <span className="muted"> w/ {s.support}</span> : null}
+                  {s.kind === 'comedy' && <span className="muted small"> · comedy</span>}
+                  {s.listed_by && <div className="muted small">Listed by {s.listed_by}: check the link before filming</div>}</td>
                 <td>{s.venue}</td>
                 <td>{s.price ?? ''}</td>
-                <td>{s.url && <a href={s.url} target="_blank" rel="noreferrer">tickets ↗</a>}</td>
+                <td>{s.url && <a href={s.url} target="_blank" rel="noreferrer">{s.kind === 'experience' ? 'details ↗' : 'tickets ↗'}</a>}</td>
               </tr>
             ))}
           </tbody>

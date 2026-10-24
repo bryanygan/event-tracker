@@ -14,6 +14,8 @@ export const FORMAT_LABEL: Record<string, string> = {
   status_change: 'Status change',
   team_week: 'Home games this week',
   big_game: 'Big game',
+  experience: 'Philly happening',
+  things_to_do: 'Things to do',
   other: 'Other',
 }
 

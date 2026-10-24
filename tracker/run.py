@@ -23,7 +23,7 @@ from logging.handlers import RotatingFileHandler
 from . import config, context, db, detectors, drafts, genres, publish, store, watchlist
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
-from .fetchers import venue_calendars
+from .fetchers import experiences, venue_calendars
 
 log = logging.getLogger("tracker")
 RAW_CACHE = config.CACHE_DIR / "tm_last_pull.json"
@@ -77,6 +77,51 @@ def fetch_calendars(conn, run_id: int, tm_events: list[dict], from_cache: bool =
     return out, tuple(first_seen), tuple(failed)
 
 
+def _feed(e: dict):
+    """Which Ticketmaster feed an event came from, for the ones added after the first run: a team, or comedy."""
+    if e.get("segment") == "Sports" and e.get("attractions"):
+        return ("team", e["attractions"][0]["name"])
+    if e.get("segment") == "Arts & Theatre" and e.get("genre") == "Comedy":
+        return ("comedy", None)
+    return None
+
+
+def new_feed_ids(conn, events: list[dict]) -> set[str]:
+    """Events from a feed this database has never stored (a team or comedy added to config later). Their first
+    read is a baseline, like a new venue calendar's: otherwise 160 comedy shows already on sale would all look
+    "just announced"."""
+    have = {("team", r["name"]) for r in conn.execute(
+        """SELECT DISTINCT a.name FROM events e JOIN event_attractions ea ON ea.event_id = e.id AND ea.position = 0
+           JOIN attractions a ON a.id = ea.attraction_id WHERE e.segment = 'Sports'""")}
+    if conn.execute("SELECT 1 FROM events WHERE segment = 'Arts & Theatre' AND genre = 'Comedy' LIMIT 1").fetchone():
+        have.add(("comedy", None))
+    return {e["id"] for e in events if _feed(e) and _feed(e) not in have}
+
+
+def fetch_experiences(conn, run_id: int, from_cache: bool = False):
+    """Markets, festivals and seasonal events (config.EXPERIENCE_SOURCES), plus the events you added yourself.
+    Same return shape as fetch_calendars. Hand-added events need no network, so replays keep them too."""
+    out = [experiences.manual_event(r) for r in conn.execute("SELECT * FROM manual_events WHERE archived=0")]
+    if from_cache:
+        return out, ("man:",), tuple(f"{s['key']}:" for s in config.EXPERIENCE_SOURCES)
+    first_seen, failed = ["man:"], []  # a hand-added event isn't "just announced": you know about it
+    for source in config.EXPERIENCE_SOURCES:
+        prefix = f"{source['key']}:"
+        try:
+            found = experiences.fetch_source(source)
+        except venue_calendars.SourceError as exc:
+            log.warning("Experience source %s failed: %s", source["name"], exc)
+            store.record_source(conn, run_id, source["key"], ok=False, count=0, error=str(exc))
+            failed.append(prefix)
+            continue
+        if not conn.execute("SELECT 1 FROM events WHERE id LIKE ? LIMIT 1", (prefix + "%",)).fetchone():
+            first_seen.append(prefix)
+        store.record_source(conn, run_id, source["key"], ok=True, count=len(found))
+        log.info("Experience source %s: %d listings", source["name"], len(found))
+        out += found
+    return out, tuple(first_seen), tuple(failed)
+
+
 class RunBusy(Exception):
     pass
 
@@ -121,14 +166,19 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
             raw = client.fetch_events()
             for classification in config.SPORTS_CLASSIFICATIONS:
                 raw += [r for r in client.fetch_events(classification) if tm.is_tracked_team_event(r)]
+            raw += [r for r in client.fetch_events(config.COMEDY_CLASSIFICATION) if tm.is_comedy_event(r)]
             calls = client.calls
             tm.save_raw(raw, RAW_CACHE)
         events = [tm.normalize(r) for r in raw if not tm.is_junk(r)]
         log.info("Fetched %d raw events, %d after filtering (%d API calls)%s",
                  len(raw), len(events), calls, " [baseline run]" if baseline else "")
         calendar, first_seen, failed = fetch_calendars(conn, run_id, events, from_cache=from_cache)
-        counts = store.upsert_events(conn, run_id, events + calendar, baseline=baseline,
-                                     baseline_prefixes=first_seen, protected_prefixes=failed)
+        # the midday check is for tours and presales; these sites change slowly, so twice a day is plenty
+        local, local_first, local_failed = fetch_experiences(conn, run_id, from_cache=from_cache or midday)
+        counts = store.upsert_events(conn, run_id, events + calendar + local, baseline=baseline,
+                                     baseline_prefixes=first_seen + local_first,
+                                     protected_prefixes=failed + local_failed,
+                                     baseline_ids=new_feed_ids(conn, events))
         log.info("Changes: %s", counts or "none")
 
         if not from_cache:  # genres for venue-calendar acts, from Ticketmaster's attraction search (capped)

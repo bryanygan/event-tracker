@@ -23,8 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, discovery, drafts, listening, llm, music, news, opportunities, planner, posts,
-               publish, remote, slides, trends, watchlist)
+from . import (angles, config, context, db, discovery, drafts, listening, llm, manual_events, music, news, opportunities,
+               planner, posts, publish, remote, scoring, slides, trends, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -485,8 +485,12 @@ def delete_trend(note_id: int, c=Depends(get_db)):
     return {"ok": True}
 
 
+EVENT_KINDS = {"music": scoring.is_music, "sports": scoring.is_game, "comedy": scoring.is_comedy,
+               "local": scoring.is_experience}
+
+
 @app.get("/api/events")
-def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, c=Depends(get_db)):
+def list_events(q: str = "", genre: str = "", kind: str = "", days: int = 60, limit: int = 300, c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     end = (today.fromordinal(today.toordinal() + days)).isoformat()
     rows = [e for e in upcoming_events(c, today.isoformat()) if e["local_date"] <= end]
@@ -496,11 +500,59 @@ def list_events(q: str = "", genre: str = "", days: int = 60, limit: int = 300, 
                 or ql in (e["venue_name"] or "").lower()]
     if genre:
         rows = [e for e in rows if e["genre"] == genre]
+    if kind in EVENT_KINDS:
+        rows = [e for e in rows if EVENT_KINDS[kind](e)]
     rows.sort(key=lambda e: (e["local_date"], e["local_time"] or ""))
     keep = ["id", "name", "headliner", "support", "local_date", "local_time", "status", "venue_name", "genre",
             "subgenre", "price_min", "price_max", "onsale_start", "url", "image_url", "score", "popularity", "fans", "my_plays", "niche",
-            "first_seen", "genre_source", "ticketmaster_genre"]
+            "first_seen", "genre_source", "ticketmaster_genre", "segment", "end_date", "source"]
     return [{k: e.get(k) for k in keep} for e in rows[:limit]]
+
+
+class ManualEventFields(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    start_time: str | None = None
+    venue: str | None = None
+    city: str | None = None
+    price_min: float | None = None
+    price_max: float | None = None
+    free: bool | None = None
+    url: str | None = None
+    notes: str | None = None
+
+
+def _manual_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except manual_events.ManualEventError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except KeyError:
+        raise HTTPException(404, "No such event") from None
+
+
+@app.get("/api/manual-events")
+def list_manual_events(c=Depends(get_db)):
+    return {"events": manual_events.list_events(c), "categories": config.EXPERIENCE_CATEGORIES}
+
+
+@app.post("/api/manual-events", status_code=201)
+def create_manual_event(body: ManualEventFields, c=Depends(get_db)):
+    return {"id": _manual_call(manual_events.create, c, **body.model_dump(exclude_none=True))}
+
+
+@app.patch("/api/manual-events/{event_id}")
+def update_manual_event(event_id: int, body: ManualEventFields, c=Depends(get_db)):
+    _manual_call(manual_events.update, c, event_id, **body.model_dump(exclude_unset=True))
+    return {"ok": True}
+
+
+@app.delete("/api/manual-events/{event_id}")
+def delete_manual_event(event_id: int, c=Depends(get_db)):
+    _manual_call(manual_events.archive, c, event_id)
+    return {"ok": True}
 
 
 @app.get("/api/genres")
