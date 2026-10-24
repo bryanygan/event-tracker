@@ -353,6 +353,23 @@ NEWS_SOURCES = [
     {"key": "vibe", "name": "Vibe", "url": "https://www.vibe.com/feed/", "niches": ["rap", "rnb"]},
     {"key": "uproxx-music", "name": "Uproxx Music", "url": "https://uproxx.com/music/feed/", "niches": ["rap", "pop", "indie"]},
 ]
+# YouTube (roadmap M8), through the YouTube Data API v3: youtube.com's robots.txt disallows /feeds/videos.xml, so the
+# channel RSS feeds are not used. Off until YOUTUBE_API_KEY is set (free; Google Cloud console, YouTube Data API v3).
+# Each read costs 1 quota unit (of 10,000 a day); we stay under YOUTUBE_DAILY_UNITS. Outlet channels below; your
+# artists' own channels come from MusicBrainz (watchlist.resolve_ids) and are stored in the database, not here.
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+YOUTUBE_SOURCES = [  # channel ids from each handle page's canonical link, 2026-10-24
+    {"key": "yt-colors", "name": "COLORS (YouTube)", "channel_id": "UC2Qw1dzXDBAZPwS7zm37g8g", "niches": ["rnb", "rap", "pop"]},
+    {"key": "yt-lyrical-lemonade", "name": "Lyrical Lemonade (YouTube)", "channel_id": "UCtylTUUVIGY_i5afsQYeBZA", "niches": ["rap"]},
+    {"key": "yt-elevator", "name": "Elevator (YouTube)", "channel_id": "UCvOT2VGzTrm-qm5fXkMCduw", "niches": ["rap"]},
+]
+YOUTUBE_OUTLET_POLL_MINUTES = 60    # outlets upload a few times a day
+YOUTUBE_ARTIST_POLL_MINUTES = 360   # an artist's own channel, every 6 hours (~4 units a day each)
+YOUTUBE_READS_PER_CHECK = 30        # channel reads per 30-min news check, oldest-read first
+YOUTUBE_DAILY_UNITS = 3000          # our own cap, well under the API's 10,000
+YOUTUBE_ITEMS = 10                  # latest uploads per read
+YOUTUBE_TERMS_NOTE = "YouTube Data API v3 within its quota (robots.txt disallows the channel feeds; checked 2026-10-24)"
+
 NEWS_POLL_MINUTES = 30          # default per source; a source that keeps failing waits longer (NEWS_BACKOFF_MINUTES)
 NEWS_BACKOFF_MINUTES = (30, 60, 120)  # after 1, 2, 3+ failures in a row; back to normal on the next success
 NEWS_MAX_AGE_DAYS = 14          # items older than this (by the feed's own date) aren't stored
@@ -360,5 +377,5 @@ NEWS_TIMEOUT = 25               # seconds per feed
 NEWS_MAX_BYTES = 5_000_000      # a feed bigger than this is refused (the largest seen is ~1 MB)
 NEWS_EXCERPT_CHARS = 300        # the feed's own summary, cut short; never the article body
 CATALOG_ARTISTS_PER_CHECK = 16  # release catalogs per 30-min news check (Deezer + iTunes at ~20/min): each artist ~every 10 h
-WATCHLIST_IDS_PER_RUN = 40     # Deezer + MusicBrainz lookups per 6:30 / 4:30 run (~50 s at MusicBrainz's 1/s)
+WATCHLIST_IDS_PER_RUN = 40     # artists per 6:30 / 4:30 run: Deezer + MusicBrainz id + MusicBrainz links (~100 s at 1/s)
 NEWS_USER_AGENT = "PhillyEventsTracker/0.1 (personal project; reads public music-news feeds every 30 minutes)"

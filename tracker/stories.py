@@ -99,12 +99,33 @@ NAMED = re.compile(rf"\b(?i:new|debut|sophomore|third|fourth|next|upcoming|surpr
 SINGLE_SUFFIX = re.compile(r"\s+-\s+(single|ep)\s*$", re.I)  # iTunes: "Glass Hours - Single"
 SONG_BY = re.compile(r"^(.+?)\s+[–—-]\s+(?:Song|Single|Album|EP) by\b", re.I)  # "Glass Hours – Song by Nova Vale"
 
+# YouTube uploads (M8): "Glass Hours (Official Video)", "Nova Vale - Glass Hours | A COLORS SHOW",
+# "Nova Vale - Glass Hours (Directed by ...)". Checked before RULES: a song called "Dead Man" isn't a death story.
+YT_RELEASE = re.compile(r"\b(official (?:music |lyric )?video|official (?:audio|visuali[sz]er)|music video|"
+                        r"visuali[sz]er|lyric video|a colors show|directed by)\b", re.I)
+YT_TAG = re.compile(r"\s*(?:[(\[][^)\]]*[)\]]|\|.*)\s*$")  # a trailing "(Official Video)", "[Audio]" or "| A COLORS SHOW"
+YT_FEAT = re.compile(r"\s+(?:feat\.?|ft\.?|featuring)\s.*$", re.I)
 
-def classify(title: str, excerpt: str | None = None, source_key: str = "") -> tuple[str, str]:
+
+def youtube_title(title: str, names: list[str]) -> str | None:
+    """The song in an upload's title: tags and features dropped, and a leading "Artist - " when it names one."""
+    t = title
+    while (shorter := YT_TAG.sub("", t)) != t:
+        t = shorter
+    m = re.match(r"^(.+?)\s+[-–—]\s+(.+)$", t)
+    if m and any(n.casefold() in m.group(1).casefold() for n in names):
+        t = m.group(2)
+    t = YT_FEAT.sub("", t).strip(" \"“”'‘’")
+    return t or None
+
+
+def classify(title: str, excerpt: str | None = None, source_key: str = "", kind: str = "rss") -> tuple[str, str]:
     """(story type, why). The headline decides first. The summary only if the headline matched nothing, and then
     not for release types: summaries mention songs and features in passing ("his playlist featuring...")."""
     if source_key == "pitchfork-reviews":
         return "review", "review: from Pitchfork's album reviews feed"
+    if kind == "youtube" and (m := YT_RELEASE.search(title)):
+        return "single_release", f"new song or video: '{m.group(0)}' (YouTube upload)"
     for text in (title, excerpt or ""):
         for story_type, label, rx in RULES:
             if text is not title and story_type in RELEASE_FAMILY:
@@ -116,10 +137,12 @@ def classify(title: str, excerpt: str | None = None, source_key: str = "") -> tu
     return "other", "other: no rule matched"
 
 
-def release_status(story_type: str, title: str, excerpt: str | None) -> str | None:
-    """Release-family stories only. Rumor words win over everything else."""
+def release_status(story_type: str, title: str, excerpt: str | None, uploaded: bool = False) -> str | None:
+    """Release-family stories only. Rumor words win over everything else, except a video that's already up."""
     if story_type not in RELEASE_FAMILY:
         return None
+    if uploaded and story_type in ("single_release", "collaboration", "album_release"):
+        return "released"  # a YouTube upload of the song or video: it's out
     text = f"{title}. {excerpt or ''}"
     if RUMOR.search(text):
         return "rumored"
@@ -192,6 +215,7 @@ def _load(conn, since: str) -> list[dict]:
     """Articles in the window that name a watchlist artist in the headline, oldest first."""
     rows = conn.execute(
         """SELECT a.id, a.title, a.excerpt, a.url, a.title_hash, s.key AS source_key, s.name AS source_name,
+                  s.kind AS source_kind, s.artist_id AS owner_id,
                   COALESCE(a.published_at, a.fetched_at) AS seen_at, a.published_at IS NULL AND a.first_read AS undated
            FROM articles a JOIN news_sources s ON s.id = a.source_id
            WHERE COALESCE(a.published_at, a.fetched_at) >= ?
@@ -205,15 +229,20 @@ def _load(conn, since: str) -> list[dict]:
             tags.setdefault(t["article_id"], []).append((t["id"], [t["name"]] + json.loads(t["aliases"] or "[]")))
     out = []
     for r in rows:
-        artists = sorted(tags.get(r["id"], []), key=lambda a: _position(r["title"], a[1]))
+        # The channel's owner comes first on their own uploads; otherwise whoever the headline names first
+        artists = sorted(tags.get(r["id"], []), key=lambda a: (a[0] != r["owner_id"], _position(r["title"], a[1])))
         if not artists:
             continue
         a = dict(r)
         a["artists"] = [x[0] for x in artists]
-        a["words"] = _words(r["title"], [n for x in artists for n in x[1]])
-        a["type"], a["rule"] = classify(r["title"], r["excerpt"], r["source_key"])
-        a["status"] = release_status(a["type"], r["title"], r["excerpt"])
-        a["release_title"] = release_title(r["title"]) if a["type"] in RELEASE_FAMILY else None
+        names = [n for x in artists for n in x[1]]
+        a["words"] = _words(r["title"], names)
+        a["official"] = r["owner_id"] is not None and a["artists"][0] == r["owner_id"]
+        uploaded = r["source_kind"] == "youtube"
+        a["type"], a["rule"] = classify(r["title"], r["excerpt"], r["source_key"], r["source_kind"])
+        a["status"] = release_status(a["type"], r["title"], r["excerpt"], uploaded)
+        a["release_title"] = ((youtube_title(r["title"], names) if uploaded else release_title(r["title"]))
+                              if a["type"] in RELEASE_FAMILY else None)
         published = datetime.fromisoformat(r["seen_at"]).date()
         a["release_date"] = (release_date(r["title"], published) or release_date(r["excerpt"] or "", published)
                              if a["type"] in RELEASE_FAMILY else None)
@@ -275,12 +304,14 @@ def _summarize(s: dict) -> dict:
     timed = [a for a in arts if not a["undated"]] or arts
     sources = {a["source_key"] for a in arts}
     verification = "corroborated" if len(sources) >= 2 else "unverified"
+    if any(a.get("official") and a["artists"][0] == s["primary"] for a in arts):
+        verification = "confirmed"  # the artist's own channel posted it (M8)
     if len({d for d, _ in dates}) > 1:
         verification = "conflicting"
     evidence = []
     for a in arts:
-        said = {"kind": "article", "provider": a["source_name"], "url": a["url"], "excerpt": a["title"],
-                "observed_at": a["seen_at"]}
+        said = {"kind": "official" if a.get("official") else "article", "provider": a["source_name"], "url": a["url"],
+                "excerpt": a["title"], "observed_at": a["seen_at"]}
         for claim in ("release_date", "release_title", "status"):
             if a[claim]:
                 evidence.append({**said, "claim": "title" if claim == "release_title" else claim, "value": a[claim]})

@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS news_sources (
     id INTEGER PRIMARY KEY,
     key TEXT UNIQUE NOT NULL,       -- config key, e.g. "pitchfork-news"
     name TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'rss',  -- rss (youtube / official later, roadmap M8)
+    kind TEXT NOT NULL DEFAULT 'rss',  -- rss, youtube (Data API, roadmap M8)
     url TEXT NOT NULL,
     niches TEXT,                    -- JSON list, e.g. ["rap", "rnb"]
     enabled INTEGER NOT NULL DEFAULT 1,  -- 0 once it's removed from config (its articles stay)
@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS artist_identities (
 CREATE TABLE IF NOT EXISTS article_artists (
     article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
     artist_id INTEGER NOT NULL REFERENCES artist_identities(id) ON DELETE CASCADE,
-    match TEXT NOT NULL,            -- exact, alias
+    match TEXT NOT NULL,            -- exact, alias, owner (an upload on the artist's own YouTube channel, M8)
     location TEXT NOT NULL,         -- title, excerpt
     confidence TEXT NOT NULL,       -- high (title), medium (excerpt), low (a common-word name next to a music word)
     PRIMARY KEY (article_id, artist_id)
@@ -479,8 +479,12 @@ _ADDED_COLUMNS = {
     "drafts": {"facts": "TEXT", "angle": "TEXT"},
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
     "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
-                          "seen_live": "INTEGER NOT NULL DEFAULT 0"},  # music.py (M5)
+                          "seen_live": "INTEGER NOT NULL DEFAULT 0",  # music.py (M5)
+                          "links": "TEXT",  # JSON [{type: homepage|youtube|blog, url}] from MusicBrainz (M8)
+                          "links_checked_at": "TEXT"},
     "stories": {"origin": "TEXT NOT NULL DEFAULT 'news'"},
+    # M8: an artist's own channel (artist_id = whose), and where a source came from (config, or musicbrainz links)
+    "news_sources": {"artist_id": "INTEGER", "origin": "TEXT NOT NULL DEFAULT 'config'"},
 }
 # Run once, right after the column is added to an existing database.
 _BACKFILL = {

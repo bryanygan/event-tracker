@@ -16,7 +16,7 @@ const TYPE_LABEL: Record<string, string> = {
 const VERIFY: Record<Story['verification'], string> = {
   unverified: 'one source so far',
   corroborated: 'two or more outlets report it',
-  confirmed: 'matches a catalog or official source',
+  confirmed: "matches a release catalog, or the artist's own channel posted it",
   conflicting: 'sources disagree (see the evidence)',
 }
 const BUTTONS: [StoryFeedback, string, string][] = [
@@ -152,7 +152,7 @@ export default function StoriesList({ refreshKey, days, origin, onQueued }: {
                     {s.evidence.filter((e) => e.claim !== 'status').map((e, i) => (
                       <li key={i}>{e.claim === 'release_date' ? 'Release date' : 'Title'}: <strong>{e.value}</strong>
                         <span className="muted"> ({e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.provider}</a> : e.provider}
-                          {e.kind === 'catalog' ? ', catalog' : ''})</span></li>
+                          {e.kind === 'catalog' ? ', catalog' : e.kind === 'official' ? ", the artist's own channel" : ''})</span></li>
                     ))}
                   </ul>
                 </>

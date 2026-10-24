@@ -204,6 +204,9 @@ class FakeMB:
     def find_artist(self, name):
         return ("mbid-" + name, False) if name != "Echo Bay" else (None, True)
 
+    def links(self, mbid):
+        return [{"type": "youtube", "url": f"https://www.youtube.com/channel/UC{mbid[-4:]:0>22}"}]
+
 
 def test_resolve_ids_and_stop_on_a_rate_limit(conn):
     for n in ("Nova Vale", "Echo Bay", "Kilo Moon"):
@@ -215,6 +218,8 @@ def test_resolve_ids_and_stop_on_a_rate_limit(conn):
     nv, eb, km = artist(conn, "Nova Vale"), artist(conn, "Echo Bay"), artist(conn, "Kilo Moon")
     assert (nv["deezer_id"], nv["mbid"], nv["ambiguous_name"]) == (9, "mbid-Nova Vale", 0)
     assert eb["mbid"] is None and eb["ambiguous_name"] == 1 and km["ids_checked_at"] is None
+    assert json.loads(nv["links"])[0]["type"] == "youtube" and nv["links_checked_at"]  # their own pages (M8)
+    assert eb["links"] is None and eb["links_checked_at"] is None  # no id, no links
     assert links(conn) == []  # an ambiguous name loses its summary-only match
     assert watchlist.resolve_ids(conn, 10, FakeDeezer(), FakeMB()) == 1  # only Kilo Moon was left
 
@@ -243,8 +248,21 @@ def test_musicbrainz_takes_only_one_strong_exact_match():
     assert musicbrainz.MusicBrainzClient(alias, min_interval=0).find_artist("Kilo Moon") == ("a3", False)
     weak = MBSession([{"id": "a4", "name": "Echo Bay", "score": 60}])
     assert musicbrainz.MusicBrainzClient(weak, min_interval=0).find_artist("Echo Bay") == (None, False)
+    busy = musicbrainz.MusicBrainzClient(MBSession([], 503), min_interval=0, retry_waits=(0, 0))
     with pytest.raises(requests.RequestException):
-        musicbrainz.MusicBrainzClient(MBSession([], 503), min_interval=0).find_artist("Echo Bay")
+        busy.find_artist("Echo Bay")
+    assert busy.calls == 3  # tried, then retried twice (MusicBrainz sheds load with 503s)
+
+
+def test_musicbrainz_retries_a_busy_503():
+    class Flaky(MBSession):
+        def get(self, url, params=None, headers=None, timeout=None):
+            r = super().get(url, params, headers, timeout)
+            self.status = 200  # the first answer is 503, the retry works
+            return r
+    client = musicbrainz.MusicBrainzClient(Flaky([{"id": "a1", "name": "Nova Vale", "score": 100}], 503),
+                                           min_interval=0, retry_waits=(0,))
+    assert client.find_artist("Nova Vale") == ("a1", False) and client.calls == 2
 
 
 def test_api_watchlist_and_news_tags(tmp_path, monkeypatch, taste):

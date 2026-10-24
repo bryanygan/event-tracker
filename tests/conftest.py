@@ -13,6 +13,9 @@ def no_real_services(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "SETLISTFM_API_KEY", "")  # and never spend the real setlist.fm quota
     monkeypatch.setattr(config, "VENUE_CALENDARS", [])    # or fetch real venue sites
     monkeypatch.setattr(config, "NEWS_SOURCES", [])       # or real music-news feeds
+    monkeypatch.setattr(config, "YOUTUBE_API_KEY", "")    # or the YouTube Data API (and its quota)
+    monkeypatch.setattr(config, "LAST_FM_API_KEY", "")    # or Last.fm / Deezer / ListenBrainz discovery (M7)
+    monkeypatch.setattr(config, "YOUTUBE_SOURCES", [])
     monkeypatch.setattr(config, "WATCHLIST_IDS_PER_RUN", 0)  # or Deezer/MusicBrainz artist lookups
     monkeypatch.setattr(config, "CATALOG_ARTISTS_PER_CHECK", 0)  # or Deezer/iTunes release catalogs
     monkeypatch.setattr(config, "LISTENING_DB", "")       # or read the user's real listening history

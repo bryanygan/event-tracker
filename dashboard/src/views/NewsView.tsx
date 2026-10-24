@@ -42,13 +42,14 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
     return [...m.entries()].sort((x, y) => y[1].length - x[1].length)
   }, [shown])
 
-  const sources = health?.sources.filter((s) => s.enabled) ?? []
-  const broken = sources.filter((s) => s.last_error)
+  const sources = health?.sources.filter((s) => s.enabled && !s.needs_key) ?? []
+  // An artist's own channel failing is routine (no uploads yet, renamed): the Sources panel counts those
+  const broken = sources.filter((s) => s.last_error && !s.official)
   const lastCheck = health?.checks[0]
   return (
     <>
       <p className="muted small">
-        Headlines from {sources.length} music-news feeds, checked every 30 minutes
+        Headlines from {sources.length} music-news feeds and channels, checked every 30 minutes
         {lastCheck ? ` (last check ${fmtWhen(lastCheck.started_at)}, ${lastCheck.events_fetched} new)` : ''}, tagged
         with your watchlist artists and grouped into stories. Nothing here becomes an idea until you press Send to queue.
       </p>
@@ -81,7 +82,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
         <input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">All sources</option>
-          {sources.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+          {sources.filter((s) => !s.official).map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
         </select>
         <label className="small" title="Only articles about your watchlist artists">
           <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> For you
@@ -109,8 +110,26 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
       <WatchlistPanel refreshKey={refreshKey} />
 
       <h3>Sources</h3>
-      <SourcesTable sources={health?.sources ?? []} />
+      <SourcesTable sources={health?.sources ?? []} youtube={health?.youtube} />
     </>
+  )
+}
+
+/** YouTube (M8): whether it's on, today's quota use, and your artists' own channels in one line */
+function YouTubeStatus({ sources, youtube }: { sources: NewsSource[]; youtube: NonNullable<NewsHealth['youtube']> }) {
+  const own = sources.filter((s) => s.official && s.enabled)
+  const read = own.filter((s) => s.last_ok_at)
+  const failing = own.filter((s) => s.last_error)
+  return (
+    <p className="small">
+      <strong>YouTube:</strong>{' '}
+      {youtube.enabled
+        ? <>on, {youtube.units_today} of {youtube.daily_cap} quota units used today.</>
+        : <><span className="pill pill-warn">off</span> add a free YOUTUBE_API_KEY to .env (Google Cloud console → YouTube Data API v3).</>}
+      {' '}Your artists' own channels (from MusicBrainz): {own.length}
+      {youtube.enabled && own.length > 0 && <>, {read.length} read{failing.length > 0 && `, ${failing.length} not found or failing`}</>}.
+      {' '}An upload there marks its story <em>confirmed</em>. The channel RSS feeds aren't used: youtube.com's robots.txt disallows them.
+    </p>
   )
 }
 
@@ -148,7 +167,7 @@ const CONFIDENCE: Record<NewsArtistTag['confidence'], string> = {
 }
 
 function ArtistPill({ t }: { t: NewsArtistTag }) {
-  const why = [CONFIDENCE[t.confidence], t.match === 'alias' ? 'matched an alias' : '', `tier: ${t.tier}`,
+  const why = [t.match === 'owner' ? 'their own channel' : CONFIDENCE[t.confidence], t.match === 'alias' ? 'matched an alias' : '', `tier: ${t.tier}`,
     t.plays ? `${t.plays} plays` : ''].filter(Boolean).join(' · ')
   return (
     <span className={`pill trend${t.location === 'excerpt' ? ' muted' : ''}`} title={why}>
@@ -157,13 +176,14 @@ function ArtistPill({ t }: { t: NewsArtistTag }) {
   )
 }
 
-function SourcesTable({ sources }: { sources: NewsSource[] }) {
+function SourcesTable({ sources, youtube }: { sources: NewsSource[]; youtube?: NewsHealth['youtube'] }) {
   return (
     <div className="table-wrap">
+      {youtube && <YouTubeStatus sources={sources} youtube={youtube} />}
       <table className="events">
         <thead><tr><th>Source</th><th>Niches</th><th>Articles</th><th>Last 24h</th><th>Last OK</th><th>Last “nothing new”</th><th>Status</th></tr></thead>
         <tbody>
-          {sources.map((s) => (
+          {sources.filter((s) => !s.official).map((s) => (
             <tr key={s.key} className={s.enabled ? '' : 'muted'}>
               <td><a href={s.url} target="_blank" rel="noreferrer" title={s.terms_note ?? ''}>{s.name}</a></td>
               <td className="small">{s.niches.join(', ')}</td>
@@ -173,6 +193,7 @@ function SourcesTable({ sources }: { sources: NewsSource[] }) {
               <td className="nowrap">{s.last_not_modified_at ? fmtWhen(s.last_not_modified_at) : '–'}</td>
               <td>
                 {!s.enabled ? 'removed from config'
+                  : s.needs_key ? <span className="muted">needs YOUTUBE_API_KEY</span>
                   : s.last_error ? <span className="error-text">{s.last_error} ({s.failures}× in a row)</span>
                   : s.last_fetched_at ? 'ok' : 'not read yet'}
               </td>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type ShowFacts, type WebContext } from '../api'
+import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type MusicNewsItem, type ShowFacts, type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 import { SlidesOverlay } from './SlidesOverlay'
@@ -150,6 +150,32 @@ function WebContextView({ alertId, initial }: { alertId: number; initial: WebCon
   )
 }
 
+const NEWS_VERIFY: Record<MusicNewsItem['verification'], string> = {
+  unverified: 'one source', corroborated: '2+ outlets', confirmed: 'confirmed', conflicting: 'sources disagree',
+}
+
+/** Event ideas: what the acts have been in the music news lately (M8). Headlines to read for your own angle; they're
+ * not in the facts, so a draft never repeats them. */
+function MusicNewsList({ items }: { items: MusicNewsItem[] }) {
+  const [first] = items
+  return (
+    <details className="web-context">
+      <summary>🎵 In the music news ({items.length}): {first.artist}, {first.type_label.toLowerCase()} ({fmtWhen(first.last_seen)})</summary>
+      <p className="muted small">From the Music news tab. Not part of the facts: the draft can't use these, so check a story before you mention it.</p>
+      <ul>
+        {items.map((i) => (
+          <li key={i.story_id}>
+            <span className="pill">{i.type_label}</span>{' '}
+            {i.url ? <a href={i.url} target="_blank" rel="noreferrer">{i.title}</a> : i.title}
+            <span className="muted small"> · {fmtWhen(i.last_seen)} · {NEWS_VERIFY[i.verification]}
+              {i.release_status ? ` · ${i.release_status}` : ''}{i.sensitive ? ' · sensitive' : ''}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftChange }: {
   alert: Alert; busy: boolean; job: Job | null; onRegenerate: (angle?: string) => Promise<void>
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
@@ -232,6 +258,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       </details>
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
+      {alert.music_news && alert.music_news.length > 0 && <MusicNewsList items={alert.music_news} />}
 
       {alert.angles.length > 0 && (
         <details className="angles" open={!latest && !NARROW}>
