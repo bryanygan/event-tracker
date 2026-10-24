@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 SEARCH_URL = "https://api.deezer.com/search/artist"
 ALBUMS_URL = "https://api.deezer.com/artist/{}/albums"
+ARTIST_URL = "https://api.deezer.com/artist/{}"
 GENRES_URL = "https://api.deezer.com/genre"
 REFRESH_DAYS = 14
 MAX_LOOKUPS_PER_RUN = 600  # covers every headliner on a first fill (~1.5 min)
@@ -72,6 +73,11 @@ class DeezerClient:
         target = name.casefold().strip()
         exact = [a for a in body.get("data", []) if a.get("name", "").casefold().strip() == target]
         return max(exact, key=lambda a: a.get("nb_fan") or 0) if exact else None
+
+    def fans(self, artist_id: int) -> int | None:
+        """The artist's current fan count (momentum snapshots, tracker/discovery.py)."""
+        body = self._get(ARTIST_URL.format(artist_id), {}, artist_id)
+        return (body or {}).get("nb_fan")
 
     def releases(self, artist_id: int, limit: int = 50) -> list[dict]:
         """Newest releases (tracker/catalog.py): {provider_id, title, record_type, release_date, url}. Deezer lists

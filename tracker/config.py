@@ -28,6 +28,7 @@ PAGES_ALLOW_PUBLIC = os.getenv("PAGES_ALLOW_PUBLIC", "") == "1"  # skip the Acce
 
 # Web context on idea cards (tracker/context.py). Leave empty to turn lookups off.
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
+LAST_FM_API_KEY = os.getenv("LAST_FM_API_KEY", "").strip()  # read-only calls (tracker/discovery.py, M7)
 CONTEXT_CACHE_DAYS = 7      # reuse one lookup per artist this long
 CONTEXT_DAILY_CAP = 10      # all lookups per ET day, failures included (~$0.0016 each)
 CONTEXT_AUTO_PER_DAY = 5    # of which the pipeline may use this many, on "strong" ideas only
@@ -138,7 +139,7 @@ OPPORTUNITY_WEIGHTS = {
 # Music stories (tracker/music.py, roadmap M5): their own score, since a national story has no Philly date to judge.
 # From your M0 judgments (2026-10-23): the angle decided a yes, not how much you play the artist, so content potential
 # carries the most weight and your artists a modest share. Momentum is unknown until M7 and left out, like search.
-MUSIC_RULES_VERSION = "2026-10-23.M5"
+MUSIC_RULES_VERSION = "2026-10-23.M7"
 MUSIC_WEIGHTS = {
     "content": 0.30,     # the kind of story and its hook (brand tie-in, tour, roundup over chart notes)
     "urgency": 0.20,     # fresh news, or a release date coming up
@@ -160,6 +161,22 @@ MUSIC_KINDS = ("music_story", "new_music_friday", "upcoming_albums", "emerging_a
 MUSIC_ROUNDUP_MIN = 3
 MUSIC_ROUNDUP_MAX = 8      # releases listed, one slide each (slides.MAX_SHOWS), best first
 MUSIC_ROUNDUP_PER_ARTIST = 2
+# Artist discovery and momentum (tracker/discovery.py, roadmap M7). Experimental, labelled as such on the dashboard.
+DISCOVERY_REFRESH_DAYS = 7         # similar artists and tag lists: rebuilt weekly from a week-long cache
+DISCOVERY_SEEDS = 25               # your most-played watchlist artists whose Last.fm similar artists are read
+DISCOVERY_SIMILAR_PER_SEED = 20
+DISCOVERY_TAGS = ["hyperpop", "underground rap", "plugg", "rage", "pluggnb", "digicore", "alternative rnb",
+                  "bedroom pop", "indie pop", "edm"]
+DISCOVERY_TAG_ARTISTS = 50
+DISCOVERY_MAX_CANDIDATES = 150     # the best-evidenced candidates are kept and snapshotted daily
+METRICS_ARTISTS_PER_CHECK = 15     # daily snapshots, a slice per 30-minute news check (~3 calls each)
+# Momentum: growth against the artist's own baseline, never audience size. A signal counts only with at least
+# MOMENTUM_MIN_OBS observations spanning MOMENTUM_MIN_DAYS, from a base of at least MOMENTUM_MIN_BASE.
+MOMENTUM_MIN_OBS = 3
+MOMENTUM_MIN_DAYS = 7
+MOMENTUM_MIN_BASE = {("deezer", "fans"): 1000, ("lastfm", "listeners"): 2000, ("listenbrainz", "listens"): 500}
+MOMENTUM_GROWTH_PER_WEEK = 0.03    # +3% a week counts as growing
+MOMENTUM_MIN_MENTIONS = 2          # outlets in the last 7 days, and more than the 7 days before
 NEWS_FRESH_HOURS = 24      # announcements: post within a day...
 NEWS_EXPIRES_DAYS = 7      # ...and after a week it's not news anymore
 RECENT_POST_DAYS = 14      # warn when you already posted about the same artist this recently

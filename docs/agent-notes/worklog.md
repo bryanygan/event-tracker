@@ -209,3 +209,10 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   `story_actions`, `seen_live`; For you / New releases / All headlines with score pills, angle, reasons, caveats
   and the buttons; queue pillar filter and music path in `opportunities.py`. On a live-DB copy the top 6 stories
   were all ones the user had marked Y in M0. 13 new tests (354).
+- Merged `feature/music-scoring` (`d7a03d2`), dashboard restarted; live DB got `story_actions` and `seen_live`.
+- `feature/music-drafts` (M6): `tracker/music_formats.py` (formats, status phrases, YOUR TAKE line, music fact
+  checks, New Music Friday + upcoming-albums roundups), music paths in llm/drafts/slides/context/posts, dashboard
+  drafting + slides for music ideas. 8 real Haiku drafts on a DB copy, all clean. 9 new tests (363).
+- `feature/music-discovery` (M7, stacked): `tracker/discovery.py`, Last.fm + ListenBrainz clients, Deezer fans,
+  candidates/metrics/cache tables, momentum rules, Discover view with accept/dismiss and "Artists to watch" ideas.
+  Real refresh on a DB copy: 150 candidates in 11 s. 8 new tests (371).

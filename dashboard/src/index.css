@@ -63,6 +63,7 @@ nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; border-bott
 button.tab.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
 .toolbar input { min-width: 220px; }
+.toolbar input[type="checkbox"] { min-width: 0; }
 
 .banner { background: var(--warn-bg); color: var(--warn-text); padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
 .banner.error { color: var(--error); }

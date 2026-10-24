@@ -589,6 +589,26 @@ music-news categories actually drive performance." Plus section 8 (formats).
 **Acceptance:** each format drafts with status-accurate wording and zero fact warnings on a sample; slides render;
 analytics split by pillar.
 
+**Built 2026-10-23 on `feature/music-drafts`** (`tracker/music_formats.py`, 9 new tests). Not merged yet.
+- Story formats by story type (album announcement, tease, new release, collab, artist development, tour, music news);
+  hooks built from facts (a rumor reads "Is X about to drop an album?"); sensitive/legal stories get one calm angle.
+- Every music script states the status phrase (`status_phrase`: "announced, no date yet", "rumored, not confirmed",
+  "out Fri, Nov 13"...). The model writes news + a closing question; Python puts a `YOUR TAKE:` line between them
+  (a prompt from the facts, e.g. the previous catalog release older than two weeks), highlighted on the card.
+- Music fact checks on top of the date/number check: "out now" without a released status, "drops Friday" without a
+  settled date, "confirmed" on a rumor or a conflict, "trending/viral/blowing up" without two momentum signals,
+  quoted titles not in the facts, and a script that never says the status. A bad hook falls back to the fact-built one.
+- Music system prompt: attribute single-source claims, no opinions on the music, no forced #philly. Facts now carry
+  each source's feed summary (clipped) and previous releases; prompts drop links, ids and your plays.
+- Roundups built by the news job from the catalogs: New Music Friday (Thu-Sun, the Sat-Fri week, ≥3 releases, 8
+  max, 2 per artist, core artists first) and next month's albums (from the 15th; pre-orders + dated
+  announcements). Templated scripts and captions; the model writes only the hook (or nothing with an angle).
+- Slides: music decks reuse the show layout for releases; conflicting dates show each date with its source.
+- Web context: one Perplexity lookup per music story (story-specific prompt), automatic only for strong ideas.
+- Analytics: group by events vs. music (`pillar`) and by music format.
+- Live-DB copy, 8 Claude Haiku drafts (≈$0.004 with retries): every story draft had zero warnings and stated its
+  status; the first NMF found one artist filling 4 of 10 slots and its own "and 5 more" caption flagged, both fixed.
+
 ### M7: Artist discovery and momentum (L, experimental)
 
 Advice section 4: "Finding artists who are becoming popular before everyone else talks about them is harder—and
@@ -616,6 +636,22 @@ potentially more valuable." "The key is measuring change over time, not simply o
 
 **Acceptance:** weekly candidates with reasons; momentum shown only when its sample-size rules are met; nothing
 called "trending" without two signals.
+
+**Built 2026-10-23 on `feature/music-discovery`** (stacked on M6; `tracker/discovery.py`, `fetchers/lastfm.py`,
+`fetchers/listenbrainz.py`, 8 new tests). Not merged yet.
+- Tables `artist_candidates`, `artist_metrics` (by name key, ET day), `api_cache`. The news job runs
+  `discovery.step`: the weekly refresh (≈35 Last.fm calls, cached a week), daily mention counts (local), and 15
+  artist snapshots per check (Last.fm getInfo, Deezer fans, ListenBrainz listens by mbid), so ~485 artists a day.
+- Candidates: similar artists of the 25 most-played watchlist artists, top 50 of 10 niche tags, guests on watchlist
+  releases (remixes count once). Joint credits with someone you follow ("X & Y") are skipped. Max 150.
+- Momentum: per signal ≥3 snapshots over ≥7 days, a minimum base, +3%/week counts as growing; mentions = outlets in
+  7 days vs a week earlier. Two counted signals (Deezer fans, Last.fm listeners, outlets; ListenBrainz never
+  counts) = breakout watch. Feeds the story score's momentum component (rules `2026-10-23.M7`); unknown until then.
+- Discover view (Music news → Discover, `#news/discover`): reasons, tags, numbers, signals; Add to watchlist /
+  Add as adjacent (origin `related`) / Not interested / Restore; pick 2-8 for an "Artists to watch" idea
+  (`emerging_artists`, templated, the reasons are its facts).
+- Live-DB copy: 150 candidates in 11 s (similar 104, tag 86, feature 68 pieces of evidence), 15 snapshots in 9 s.
+  Momentum will read "collecting" for the first week by design.
 
 ### M8: Later and optional (each its own decision)
 

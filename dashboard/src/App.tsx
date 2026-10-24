@@ -14,7 +14,7 @@ const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs', 'calendar', '
 
 export default function App() {
   // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone
-  const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => `#${t}` === window.location.hash) ?? 'queue')
+  const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => `#${t}` === window.location.hash || window.location.hash.startsWith(`#${t}/`)) ?? 'queue')
   const setTab = (t: Tab) => { setTabState(t); history.replaceState(null, '', t === 'queue' ? location.pathname + location.search : `#${t}`) }
   const [summary, setSummary] = useState<Summary | null>(null)
   const [job, setJob] = useState<Job | null>(null)

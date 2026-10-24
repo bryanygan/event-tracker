@@ -306,11 +306,27 @@ export type NewsArtistTag = {
 }
 export type WatchTier = 'core' | 'adjacent' | 'watch' | 'breakout' | 'dropped'
 export type WatchArtist = {
-  id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual'; aliases: string[]; muted: boolean
+  id: number; name: string; tier: WatchTier; origin: 'listening' | 'manual' | 'related'; aliases: string[]; muted: boolean
   user_edited: boolean; common_word: boolean; common_word_auto: boolean; common_word_override: number | null
   ambiguous_name: boolean; mbid: string | null; deezer_id: number | null; attraction_id: string | null
   plays: number; articles_30d: number; bucket: string | null; seen_live: boolean
 }
+// Discover (tracker/discovery.py, roadmap M7): candidates with their evidence; momentum is experimental
+export type MomentumSignal = {
+  provider: string; metric: string; label: string; status: 'collecting' | 'too_small' | 'ready'; ready: boolean
+  growing: boolean; counts: boolean; observations: number; latest?: number; weekly_growth?: number; why: string
+}
+export type Momentum = { ready: boolean; signals: MomentumSignal[]; growing: number; two_signals: boolean; value: number | null; summary: string }
+export type Candidate = {
+  id: number; name: string; status: 'new' | 'accepted' | 'dismissed'; score: number; why: string[]; tags: string[]
+  lastfm_url: string | null; similar_to: string[]; metrics: Record<string, number>; momentum: Momentum | null
+  first_seen: string; breakout: boolean
+}
+export type DiscoverList = {
+  candidates: Candidate[]; refreshed_at: string | null; enabled: boolean
+  rules: { min_observations: number; min_days: number; growth_per_week: number; min_mentions: number }
+}
+export type DiscoverAction = 'watch' | 'adjacent' | 'dismiss' | 'restore'
 export type StoryArtist = { id: number; name: string; tier: WatchTier; plays: number; seen_live: boolean }
 export type StoryFeedback = 'interested' | 'not_my_lane' | 'already_covered'
 export type Story = {
@@ -408,6 +424,11 @@ const staticApi = {
   stories: (_days: number, _origin?: Story['origin'], _sort?: 'score' | 'recent') => Promise.resolve<Story[]>([]),
   storyFeedback: readOnly,
   sendStory: readOnly,
+  discover: (_status: Candidate['status'] = 'new') =>
+    Promise.resolve<DiscoverList>({ candidates: [], refreshed_at: null, enabled: false,
+      rules: { min_observations: 3, min_days: 7, growth_per_week: 0.03, min_mentions: 2 } }),
+  decideCandidate: readOnly,
+  candidatesIdea: readOnly,
   addWatch: readOnly,
   updateWatch: readOnly,
 }
@@ -462,6 +483,11 @@ const liveApi = {
   storyFeedback: (id: number, feedback: StoryFeedback | null) =>
     req<{ ok: boolean }>(`/api/news/stories/${id}/feedback`, { method: 'POST', body: JSON.stringify({ feedback }) }),
   sendStory: (id: number) => req<{ alert_id: number }>(`/api/news/stories/${id}/send`, { method: 'POST' }),
+  discover: (status: Candidate['status'] = 'new') => req<DiscoverList>(`/api/discover?status=${status}`),
+  decideCandidate: (id: number, action: DiscoverAction) =>
+    req<{ id: number; status: string }>(`/api/discover/${id}/decide`, { method: 'POST', body: JSON.stringify({ action }) }),
+  candidatesIdea: (ids: number[]) =>
+    req<{ alert_id: number }>('/api/discover/idea', { method: 'POST', body: JSON.stringify({ ids }) }),
   addWatch: (name: string, tier: WatchTier, aliases: string[] = []) =>
     req<{ id: number }>('/api/watchlist', { method: 'POST', body: JSON.stringify({ name, tier, aliases }) }),
   updateWatch: (id: number, fields: WatchPatch) =>

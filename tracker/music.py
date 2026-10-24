@@ -133,8 +133,12 @@ def context(conn, now: datetime | None = None) -> dict:
             facts.get("other_artists") or [])
         posts.append({"alert_id": p["alert_id"], "posted_at": p["posted_at"],
                       "artists": {n.casefold() for n in names if n}})
+    from .discovery import momentum  # late: discovery imports this module
+    keys = {r["id"]: r["key"] for r in conn.execute("SELECT id, key FROM artist_identities")}
+    by_key = momentum(conn, list(keys.values()))
     return {"now": now, "artists": artists, "by_artist": by_artist, "by_type": by_type, "shows": shows,
-            "posts": posts, "notes": trends.list_notes(conn, now)}
+            "posts": posts, "notes": trends.list_notes(conn, now),
+            "momentum": {i: by_key[k] for i, k in keys.items() if k in by_key}}
 
 
 # ---------- components ----------
@@ -223,6 +227,16 @@ def _band(score: float | None) -> str | None:
     return "strong" if score >= config.QUEUE_STRONG else "medium" if score >= config.QUEUE_MEDIUM else "low"
 
 
+def momentum_component(story: dict, ctx: dict) -> tuple[float | None, str]:
+    """The primary artist's momentum (discovery.py, M7): unknown until the sample-size rules are met."""
+    m = (ctx.get("momentum") or {}).get(story["primary_artist_id"])
+    if not m or m["value"] is None:
+        return None, "Collecting: momentum needs a week of daily snapshots"
+    if m["two_signals"]:
+        return m["value"], f"Growing on two signals (experimental): {m['summary']}"
+    return m["value"], ("One signal growing (experimental): " if m["growing"] else "") + m["summary"]
+
+
 def search_facts(story: dict, ctx: dict) -> dict:
     """What trend notes are matched against: the story's artists."""
     names = [ctx["artists"][i]["name"] for i in [story["primary_artist_id"], *_ids(story["other_artist_ids"])]
@@ -242,7 +256,7 @@ def evaluate(story: dict, ctx: dict) -> dict:
         _component("relevance", *relevance(story, ctx)),
         _component("confidence", *confidence(story)),
         _component("search", s_value, s_why),
-        _component("momentum", None, "Unknown until artist momentum exists (roadmap M7)"),
+        _component("momentum", *momentum_component(story, ctx)),
     ]
     known = [c for c in comps if c["value"] is not None]
     weight = sum(c["weight"] for c in known)
