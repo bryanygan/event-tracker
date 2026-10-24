@@ -28,15 +28,17 @@ export default function App() {
 
   useEffect(() => { api.summary().then(setSummary).catch((e) => setError(String(e))) }, [])
 
-  // Poll the background job while one is running; refresh everything when it finishes.
+  // Poll the background job; refresh everything when one finishes. Keyed on the finish time, not on seeing it
+  // running: a templated draft finishes between two polls, so the poll may never see it run.
   useEffect(() => {
     if (STATIC) return // nothing runs on a snapshot
-    let wasRunning = false
+    let lastFinished: string | undefined // the last finished job seen; undefined until the first poll
     const tick = () =>
       api.job().then((j) => {
         setJob(j)
-        if (wasRunning && !j.running) refresh()
-        wasRunning = j.running
+        const key = `${j.started}|${j.finished}`
+        if (lastFinished !== undefined && !j.running && key !== lastFinished) refresh()
+        if (!j.running) lastFinished = key
       }).catch(() => {})
     tick()
     const id = setInterval(tick, 3000)
