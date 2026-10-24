@@ -237,19 +237,27 @@ def _matchable(conn):
 def rematch(conn, article_ids: list[int] | None = None) -> int:
     """Rebuild article_artists for these articles (all of them when None), then the stories. Returns how many links
     were made."""
-    matcher = Matcher(_matchable(conn))
+    matchable = _matchable(conn)
+    matcher = Matcher(matchable)
+    can_match = {a["id"] for a in matchable}
+    # An upload on an artist's own channel is about them even when the title only names the song (M8)
+    select = "SELECT a.id, a.title, a.excerpt, s.artist_id AS owner FROM articles a JOIN news_sources s ON s.id = a.source_id"
     if article_ids is None:
         conn.execute("DELETE FROM article_artists")
-        rows = conn.execute("SELECT id, title, excerpt FROM articles").fetchall()
+        rows = conn.execute(select).fetchall()
     else:
         if not article_ids:
             return 0
         marks = ",".join("?" * len(article_ids))
         conn.execute(f"DELETE FROM article_artists WHERE article_id IN ({marks})", article_ids)
-        rows = conn.execute(f"SELECT id, title, excerpt FROM articles WHERE id IN ({marks})", article_ids).fetchall()
+        rows = conn.execute(f"{select} WHERE a.id IN ({marks})", article_ids).fetchall()
     links = 0
     for r in rows:
-        for h in matcher.match(r["title"], r["excerpt"]):
+        hits = matcher.match(r["title"], r["excerpt"])
+        if r["owner"] in can_match:
+            hits = [h for h in hits if h["artist_id"] != r["owner"]] + [
+                {"artist_id": r["owner"], "match": "owner", "location": "title", "confidence": "high"}]
+        for h in hits:
             conn.execute("INSERT INTO article_artists (article_id, artist_id, match, location, confidence) VALUES (?,?,?,?,?)",
                          (r["id"], h["artist_id"], h["match"], h["location"], h["confidence"]))
             links += 1
@@ -275,20 +283,29 @@ def resolve_ids(conn, limit: int = 40, deezer_client=None, mb_client=None) -> in
     mb_client = mb_client or musicbrainz.MusicBrainzClient()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=IDS_REFRESH_DAYS)).isoformat()
     marks = ",".join("?" * len(MATCHED_TIERS))
-    rows = conn.execute(f"""SELECT id, name FROM artist_identities
-                            WHERE muted=0 AND tier IN ({marks}) AND (ids_checked_at IS NULL OR ids_checked_at < ?)
+    rows = conn.execute(f"""SELECT id, name, mbid, ids_checked_at FROM artist_identities
+                            WHERE muted=0 AND tier IN ({marks}) AND (ids_checked_at IS NULL OR ids_checked_at < ?
+                                  OR (mbid IS NOT NULL AND links_checked_at IS NULL))
                             ORDER BY ids_checked_at IS NOT NULL, ids_checked_at, id LIMIT ?""",
                         (*MATCHED_TIERS, cutoff, limit)).fetchall()
     done = 0
     for r in rows:
         try:
-            found = deezer_client.find_artist(r["name"])
-            mbid, ambiguous = mb_client.find_artist(r["name"])
+            if r["ids_checked_at"] is None or r["ids_checked_at"] < cutoff:
+                found = deezer_client.find_artist(r["name"])
+                mbid, ambiguous = mb_client.find_artist(r["name"])
+                conn.execute("""UPDATE artist_identities SET deezer_id=?, mbid=?, ambiguous_name=?, ids_checked_at=?
+                                WHERE id=?""", (found["id"] if found else None, mbid, int(ambiguous), _now(), r["id"]))
+            else:  # ids are fresh; only the links are missing (artists looked up before links were read)
+                mbid = r["mbid"]
+            # The artist's own pages (official YouTube channel, site): news.sync_artist_channels reads the channels
+            links = mb_client.links(mbid) if mbid else []
+            conn.execute("UPDATE artist_identities SET links=?, links_checked_at=? WHERE id=?",
+                         (json.dumps(links) if mbid else None, _now() if mbid else None, r["id"]))
         except (requests.RequestException, ValueError) as exc:
+            conn.commit()  # an id found before the links failed is kept; the links come next run
             log.warning("Artist id lookups stopped after %d: %s", done, exc)
             break
-        conn.execute("""UPDATE artist_identities SET deezer_id=?, mbid=?, ambiguous_name=?, ids_checked_at=?
-                        WHERE id=?""", (found["id"] if found else None, mbid, int(ambiguous), _now(), r["id"]))
         conn.commit()
         done += 1
     if done and conn.execute("SELECT 1 FROM artist_identities WHERE ambiguous_name=1 LIMIT 1").fetchone():

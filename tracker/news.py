@@ -27,20 +27,99 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _upsert_source(conn, key: str, name: str, url: str, kind: str, niches: list, poll_minutes: int, terms_note: str,
+                   artist_id: int | None = None, origin: str = "config") -> None:
+    conn.execute("""INSERT INTO news_sources (key, name, url, kind, niches, poll_minutes, terms_note, artist_id, origin,
+                                              enabled)
+                    VALUES (?,?,?,?,?,?,?,?,?,1)
+                    ON CONFLICT(key) DO UPDATE SET name=excluded.name, url=excluded.url, kind=excluded.kind,
+                        niches=excluded.niches, poll_minutes=excluded.poll_minutes, terms_note=excluded.terms_note,
+                        artist_id=excluded.artist_id, origin=excluded.origin, enabled=1""",
+                 (key, name, url, kind, json.dumps(niches), poll_minutes, terms_note, artist_id, origin))
+
+
 def seed_sources(conn) -> None:
-    """Add or update sources from config; ones no longer in config are disabled, never deleted."""
+    """Add or update sources from config (feeds and YouTube outlets); ones no longer in config are disabled, never
+    deleted. Artist channels (origin 'musicbrainz') are synced separately, by sync_artist_channels."""
     keys = []
     for s in config.NEWS_SOURCES:
         keys.append(s["key"])
-        conn.execute("""INSERT INTO news_sources (key, name, url, niches, poll_minutes, terms_note, enabled)
-                        VALUES (?,?,?,?,?,?,1)
-                        ON CONFLICT(key) DO UPDATE SET name=excluded.name, url=excluded.url, niches=excluded.niches,
-                            poll_minutes=excluded.poll_minutes, terms_note=excluded.terms_note, enabled=1""",
-                     (s["key"], s["name"], s["url"], json.dumps(s.get("niches", [])),
-                      s.get("poll_minutes", config.NEWS_POLL_MINUTES), s.get("terms_note", config.NEWS_TERMS_CHECKED)))
-    conn.execute(f"UPDATE news_sources SET enabled=0 WHERE key NOT IN ({','.join('?' * len(keys))})" if keys
-                 else "UPDATE news_sources SET enabled=0", keys)
+        _upsert_source(conn, s["key"], s["name"], s["url"], "rss", s.get("niches", []),
+                       s.get("poll_minutes", config.NEWS_POLL_MINUTES), s.get("terms_note", config.NEWS_TERMS_CHECKED))
+    for s in config.YOUTUBE_SOURCES:
+        keys.append(s["key"])
+        _upsert_source(conn, s["key"], s["name"], f"https://www.youtube.com/channel/{s['channel_id']}", "youtube",
+                       s.get("niches", []), s.get("poll_minutes", config.YOUTUBE_OUTLET_POLL_MINUTES),
+                       config.YOUTUBE_TERMS_NOTE)
+    conn.execute(f"UPDATE news_sources SET enabled=0 WHERE origin='config' AND key NOT IN ({','.join('?' * len(keys))})"
+                 if keys else "UPDATE news_sources SET enabled=0 WHERE origin='config'", keys)
     conn.commit()
+
+
+ARTIST_CHANNELS_EACH = 2  # an artist's own channel and, say, their VEVO channel
+
+
+def sync_artist_channels(conn) -> int:
+    """A YouTube source for each watchlist artist's own channel, from the links MusicBrainz lists
+    (watchlist.resolve_ids). Muted or dropped artists' channels are disabled. Returns how many are enabled."""
+    from .fetchers import youtube
+    marks = ",".join("?" * len(watchlist.MATCHED_TIERS))
+    keys = []
+    for a in conn.execute(f"""SELECT id, name, links FROM artist_identities
+                              WHERE muted=0 AND tier IN ({marks}) AND links IS NOT NULL""", watchlist.MATCHED_TIERS):
+        refs = [r for r in (youtube.channel_ref(l["url"]) for l in json.loads(a["links"]) if l["type"] == "youtube") if r]
+        for ref in refs[:ARTIST_CHANNELS_EACH]:
+            key = "yt-artist:" + next(iter(ref.values()))
+            if key in keys:  # two artists listing one channel (a duo and a member): the first keeps it
+                continue
+            keys.append(key)
+            url = f"https://www.youtube.com/channel/{ref['id']}" if "id" in ref else \
+                f"https://www.youtube.com/{ref['handle']}" if "handle" in ref else f"https://www.youtube.com/user/{ref['user']}"
+            _upsert_source(conn, key, f"{a['name']} (YouTube)", url, "youtube", [], config.YOUTUBE_ARTIST_POLL_MINUTES,
+                           config.YOUTUBE_TERMS_NOTE + "; the artist's own channel, per MusicBrainz",
+                           artist_id=a["id"], origin="musicbrainz")
+    conn.execute(f"UPDATE news_sources SET enabled=0 WHERE origin='musicbrainz' AND key NOT IN ({','.join('?' * len(keys))})"
+                 if keys else "UPDATE news_sources SET enabled=0 WHERE origin='musicbrainz'", keys)
+    conn.commit()
+    return len(keys)
+
+
+# ---------- YouTube quota (each read is 1 unit; config.YOUTUBE_DAILY_UNITS is our own cap) ----------
+
+def _units_key(now: datetime) -> str:
+    return f"youtube:units:{now.date().isoformat()}"  # the API's quota resets at midnight Pacific; UTC is close enough
+
+
+def youtube_units(conn, now: datetime) -> int:
+    row = conn.execute("SELECT body FROM api_cache WHERE key=?", (_units_key(now),)).fetchone()
+    return json.loads(row["body"]) if row else 0
+
+
+def _add_units(conn, now: datetime, units: int) -> None:
+    if units:
+        conn.execute("INSERT OR REPLACE INTO api_cache (key, body, fetched_at) VALUES (?,?,?)",
+                     (_units_key(now), json.dumps(youtube_units(conn, now) + units), now.isoformat()))
+
+
+CHANNEL_CACHE_DAYS = 30
+
+
+def _youtube_uploads(conn, client, source, now: datetime) -> list[dict]:
+    """The channel's latest uploads. Its uploads-playlist id is looked up once and kept CHANNEL_CACHE_DAYS (a channel
+    that doesn't exist is remembered too, so it costs nothing until then)."""
+    from .fetchers import youtube
+    cache_key = f"youtube:channel:{source['key']}"
+    row = conn.execute("SELECT body, fetched_at FROM api_cache WHERE key=?", (cache_key,)).fetchone()
+    if row and datetime.fromisoformat(row["fetched_at"]) > now - timedelta(days=CHANNEL_CACHE_DAYS):
+        channel = json.loads(row["body"])
+    else:
+        ref = youtube.channel_ref(source["url"])
+        channel = client.channel(ref) if ref else None
+        conn.execute("INSERT OR REPLACE INTO api_cache (key, body, fetched_at) VALUES (?,?,?)",
+                     (cache_key, json.dumps(channel), now.isoformat()))
+    if not channel or not channel.get("uploads"):
+        raise news_rss.FeedError("channel not found or has no uploads")
+    return client.uploads(channel["uploads"])
 
 
 def wait_minutes(source) -> int:
@@ -84,14 +163,20 @@ def store_articles(conn, source, articles: list[dict], now: datetime) -> list[in
     return new
 
 
-def read_source(conn, session, source, now: datetime) -> dict:
-    """One conditional GET. On any failure the stored articles and validators stay as they were."""
+def read_source(conn, session, source, now: datetime, youtube_client=None) -> dict:
+    """One conditional GET (a feed) or one API read (YouTube). On any failure the stored articles and validators
+    stay as they were. A used-up YouTube quota is not the channel's fault: no failure is counted for it."""
+    from .fetchers import youtube
     result = {"source": source["key"], "status": None, "new": 0, "new_ids": [], "error": None}
     try:
-        got = news_rss.fetch(session, source["url"], source["etag"], source["last_modified"])
+        if source["kind"] == "youtube":
+            got = {"status": 200, "articles": _youtube_uploads(conn, youtube_client, source, now), "etag": None,
+                   "last_modified": None}
+        else:
+            got = news_rss.fetch(session, source["url"], source["etag"], source["last_modified"])
         result["status"] = got["status"]
         if got["status"] == 200:
-            articles = news_rss.parse(got["body"])
+            articles = got["articles"] if "articles" in got else news_rss.parse(got["body"])
             result["new_ids"] = store_articles(conn, source, articles, now)
             result["new"] = len(result["new_ids"])
             conn.execute("""UPDATE news_sources SET etag=?, last_modified=?, last_ok_at=?, last_error=NULL,
@@ -100,6 +185,9 @@ def read_source(conn, session, source, now: datetime) -> dict:
         else:  # 304: nothing new, nothing to parse
             conn.execute("""UPDATE news_sources SET last_ok_at=?, last_not_modified_at=?, last_error=NULL, failures=0,
                             last_fetched_at=? WHERE id=?""", (now.isoformat(),) * 3 + (source["id"],))
+    except youtube.QuotaExceeded as exc:
+        result["error"], result["quota"] = str(exc), True
+        conn.execute("UPDATE news_sources SET last_error=? WHERE id=?", (str(exc), source["id"]))
     except news_rss.FeedError as exc:
         result["error"] = str(exc)
         conn.execute("UPDATE news_sources SET last_error=?, failures=failures+1, last_fetched_at=? WHERE id=?",
@@ -108,19 +196,42 @@ def read_source(conn, session, source, now: datetime) -> dict:
     return result
 
 
-def run(conn, session: requests.Session | None = None, now: datetime | None = None) -> dict:
-    """Read every due source once. Recorded in `runs` as source 'news' (new articles in events_fetched)."""
+def _youtube_due(sources: list, now: datetime) -> list:
+    """Due channels, longest-unread first, at most YOUTUBE_READS_PER_CHECK. None without an API key."""
+    if not config.YOUTUBE_API_KEY:
+        return []
+    return sorted(sources, key=lambda s: s["last_fetched_at"] or "")[:config.YOUTUBE_READS_PER_CHECK]
+
+
+def run(conn, session: requests.Session | None = None, now: datetime | None = None, youtube_client=None) -> dict:
+    """Read every due source once (YouTube channels within the quota). Recorded in `runs` as source 'news' (new
+    articles in events_fetched)."""
+    from .fetchers import youtube
     seed_sources(conn)
+    sync_artist_channels(conn)
     run_id = store.start_run(conn, "news")
     session = session or requests.Session()
     results = []
     try:
         due = [s for s in conn.execute("SELECT * FROM news_sources WHERE enabled=1 ORDER BY id")
                if is_due(s, now or _now())]
-        for i, source in enumerate(due):
+        for i, source in enumerate(s for s in due if s["kind"] != "youtube"):
             if i:
                 time.sleep(0.5)  # every source is a different host; this just keeps the job gentle
             results.append(read_source(conn, session, source, now or _now()))
+        channels = _youtube_due([s for s in due if s["kind"] == "youtube"], now or _now())
+        youtube_client = youtube_client or (youtube.YouTubeClient() if channels else None)
+        for source in channels:
+            if youtube_units(conn, now or _now()) + 2 > config.YOUTUBE_DAILY_UNITS:  # a channel lookup + its uploads
+                log.info("YouTube: today's %d-unit cap reached; the rest wait", config.YOUTUBE_DAILY_UNITS)
+                break
+            before = youtube_client.units
+            r = read_source(conn, session, source, now or _now(), youtube_client)
+            _add_units(conn, now or _now(), youtube_client.units - before)
+            conn.commit()
+            results.append(r)
+            if r.get("quota"):
+                break
         new = sum(r["new"] for r in results)
         # Tag the new articles with watchlist artists (the first time, build the watchlist from listening history)
         if not conn.execute("SELECT 1 FROM artist_identities LIMIT 1").fetchone():

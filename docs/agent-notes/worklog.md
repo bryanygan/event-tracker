@@ -224,3 +224,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   draft until a page reload (App only refreshed after a poll had seen the job running). App now refreshes when
   the finished job changes (started|finished). Reproduced and verified by clicking "Draft this" in headless Edge
   over CDP on a DB copy (old build: draft #82 stayed; new: #84 appeared at the "ready" note).
+- Merged `fix/draft-refresh` (`8423d40`).
+- `feature/music-sources` (M8): MusicBrainz 503 retries + url-rels links; `fetchers/youtube.py` (Data API, off
+  without YOUTUBE_API_KEY) for outlet channels and artists' own channels (synced from links); owner tagging,
+  YouTube classification and `confirmed` official evidence in stories; event cards show the acts' recent music
+  stories. conftest now blanks LAST_FM_API_KEY / YOUTUBE_*: the suite had been calling Last.fm, Deezer and
+  ListenBrainz live since M7 (389 tests now run in 13 s instead of ~4 min). 18 new tests (389).

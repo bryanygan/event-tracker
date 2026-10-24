@@ -23,8 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, discovery, drafts, listening, llm, music, opportunities, planner, posts, publish, remote,
-               slides, trends, watchlist)
+from . import (angles, config, context, db, discovery, drafts, listening, llm, music, news, opportunities, planner, posts,
+               publish, remote, slides, trends, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -174,9 +174,11 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
     alerts = [dict(r) for r in c.execute(
         f"SELECT * FROM alerts a WHERE {where} ORDER BY a.created_at DESC, a.score DESC LIMIT ?", (limit,))]
     posted = posts.posts_by_alert(c)
+    news = music.news_index(c)  # cross-pillar (M8): the acts' recent music stories, shown on event cards
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
         a["posts"] = posted.get(a["id"], [])
+        a["music_news"] = [] if a["kind"] in config.MUSIC_KINDS else music.news_for_event(news, a["facts"])
         a["angles"] = angles.angles_for(a["facts"])
         a["context"] = context.cached(c, context.subject(a["facts"]))
         a["context_supported"] = context.subject(a["facts"]) is not None
@@ -698,12 +700,16 @@ def news_sources(c=Depends(get_db)):
                                SUM(COALESCE(a.published_at, a.fetched_at) >= ?) AS last_24h
                         FROM news_sources s LEFT JOIN articles a ON a.source_id = s.id
                         GROUP BY s.id ORDER BY s.enabled DESC, s.name""", (day_ago,))
-    sources = [{k: r[k] for k in ("key", "name", "url", "enabled", "poll_minutes", "last_fetched_at", "last_ok_at",
-                                  "last_not_modified_at", "last_error", "failures", "terms_note", "articles")}
+    sources = [{k: r[k] for k in ("key", "name", "url", "kind", "origin", "enabled", "poll_minutes", "last_fetched_at",
+                                  "last_ok_at", "last_not_modified_at", "last_error", "failures", "terms_note",
+                                  "articles")}
                | {"enabled": bool(r["enabled"]), "niches": json.loads(r["niches"] or "[]"),
-                  "last_24h": r["last_24h"] or 0}
+                  "last_24h": r["last_24h"] or 0, "official": r["artist_id"] is not None,
+                  "needs_key": r["kind"] == "youtube" and not config.YOUTUBE_API_KEY}
                for r in rows]
-    return {"sources": sources, "checks": runs(limit=10, source="news", c=c)}
+    youtube = {"enabled": bool(config.YOUTUBE_API_KEY), "units_today": news.youtube_units(c, datetime.now(timezone.utc)),
+               "daily_cap": config.YOUTUBE_DAILY_UNITS}
+    return {"sources": sources, "checks": runs(limit=10, source="news", c=c), "youtube": youtube}
 
 
 @app.get("/api/remote-edits")

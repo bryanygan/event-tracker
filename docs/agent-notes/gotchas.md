@@ -175,3 +175,13 @@
 
 - Job polling (App.tsx): don't detect "job finished" by having seen `running: true` in a poll. Templated drafts
   finish in under 3 s, between polls. Compare the finished job (`started|finished`) instead.
+
+## Music sources (M8, 2026-10-24)
+
+- **youtube.com's robots.txt disallows `/feeds/videos.xml`.** The channel RSS feeds look like the free route but
+  aren't allowed; YouTube goes through the Data API (YOUTUBE_API_KEY). Never log the request URL: it has the key.
+- **MusicBrainz 503s are often load-shedding, not our rate** (`Retry-After: 0`, X-RateLimit-Remaining high, ~1 in 3
+  requests on 2026-10-24). Treating 503 as "stop for this run" left 331 of 335 artists without an mbid for days.
+- **Any new keyed API must be blanked in tests/conftest.py.** LAST_FM_API_KEY wasn't (M7), so every test that ran
+  `news.run` made live Last.fm/Deezer/ListenBrainz calls from the main folder (where `.env` exists) but not from the
+  dev worktree (no `.env`), which hid it. A suite that suddenly takes minutes is a sign.

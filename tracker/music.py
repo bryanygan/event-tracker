@@ -209,7 +209,13 @@ def confidence(story: dict) -> tuple[float, str]:
     if story.get("release_status") == "rumored":
         return 35, "Reported as a rumor"
     if v == "confirmed":
-        return 100, "Listed on the release catalogs" if story.get("origin") == "catalog" else "Confirmed by the catalogs"
+        if story.get("origin") == "catalog":
+            return 100, "Listed on the release catalogs"
+        if any(e.get("kind") == "official" for e in story.get("evidence") or []):
+            return 100, "Posted on the artist's own channel"
+        if story.get("evidence"):
+            return 100, "Confirmed by the catalogs"
+        return 100, "Confirmed (a release catalog or the artist's own channel)"  # callers without the evidence
     if v == "corroborated":
         n = story.get("source_count") or 2
         return 80, f"{n} outlets report it"
@@ -295,6 +301,48 @@ def evaluate(story: dict, ctx: dict) -> dict:
     }
 
 
+# ---------- cross-pillar (M8): an event idea shows its artists' recent music stories ----------
+
+CROSS_DAYS = 30
+CROSS_LIMIT = 4
+
+
+def news_index(conn, now: datetime | None = None) -> dict[str, list[dict]]:
+    """Recent stories by artist_key, newest first, loaded once per request. For the event cards only: these are
+    headlines to read, not facts, so they never reach a draft."""
+    now = now or datetime.now(timezone.utc)
+    since = (now - timedelta(days=CROSS_DAYS)).replace(microsecond=0).isoformat()
+    out: dict[str, list[dict]] = {}
+    for r in conn.execute(
+            """SELECT s.id, s.title, s.story_type, s.release_status, s.verification, s.sensitive, s.last_seen,
+                      w.key, w.name,
+                      (SELECT a.url FROM story_articles x JOIN articles a ON a.id = x.article_id
+                       WHERE x.story_id = s.id ORDER BY a.id LIMIT 1) AS url
+               FROM stories s JOIN artist_identities w ON w.id = s.primary_artist_id
+               WHERE s.last_seen >= ? AND s.story_type NOT IN ('roundup', 'politics')
+               ORDER BY s.last_seen DESC, s.id DESC""", (since,)):
+        out.setdefault(r["key"], []).append({
+            "story_id": r["id"], "artist": r["name"], "title": r["title"],
+            "type_label": TYPE_LABEL.get(r["story_type"], r["story_type"]), "release_status": r["release_status"],
+            "verification": r["verification"], "sensitive": bool(r["sensitive"]), "last_seen": r["last_seen"],
+            "url": r["url"]})
+    return out
+
+
+def news_for_event(index: dict[str, list[dict]], facts: dict) -> list[dict]:
+    """The stories about an event alert's acts (headliners, then support), newest first, at most CROSS_LIMIT."""
+    shows = facts.get("shows") or ([facts["show"]] if facts.get("show") else [])
+    names = [facts.get("artist"), *(s.get("artist") for s in shows)]
+    names += [n.strip() for s in shows for n in (s.get("support") or "").split(",")]
+    seen, found = set(), []
+    for key in dict.fromkeys(listening.artist_key(n) for n in names if n):
+        for story in index.get(key, []):
+            if story["story_id"] not in seen:
+                seen.add(story["story_id"])
+                found.append(story)
+    return sorted(found, key=lambda s: s["last_seen"], reverse=True)[:CROSS_LIMIT]
+
+
 def rank_key(story: dict) -> tuple:
     """For you: stories you haven't handled first, best score first."""
     return (story.get("feedback") in ("not_my_lane", "already_covered"), story.get("alert_id") is not None,
@@ -341,8 +389,9 @@ def facts_for(conn, story: dict, ctx: dict) -> dict:
     artist = ctx["artists"].get(story["primary_artist_id"]) or {}
     # The feed's own short summary, so a draft knows what the story says (attributed to its outlet)
     sources = [{"outlet": r["source_name"], "headline": r["title"], "url": r["url"], "date": r["seen_at"][:10],
-                **({"summary": _clip(r["excerpt"])} if r["excerpt"] else {})}
-               for r in conn.execute("""SELECT a.title, a.url, a.excerpt, s.name AS source_name,
+                **({"summary": _clip(r["excerpt"])} if r["excerpt"] else {}),
+                **({"official": True} if r["artist_id"] == story["primary_artist_id"] else {})}  # their own channel
+               for r in conn.execute("""SELECT a.title, a.url, a.excerpt, s.name AS source_name, s.artist_id,
                                                COALESCE(a.published_at, a.fetched_at) AS seen_at
                                         FROM story_articles x JOIN articles a ON a.id = x.article_id
                                         JOIN news_sources s ON s.id = a.source_id

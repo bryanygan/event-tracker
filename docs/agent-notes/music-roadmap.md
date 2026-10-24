@@ -655,6 +655,24 @@ called "trending" without two signals.
 
 ### M8: Later and optional (each its own decision)
 
+**Built 2026-10-24** (`feature/music-sources`; the user picked YouTube, official sources and the cross-pillar link):
+
+- **MusicBrainz fix first:** only 3 of 335 artists had an mbid, because MusicBrainz sheds load with random 503s
+  (`Retry-After: 0`, quota left) and `resolve_ids` gave up on the first one. The client now waits 2/5/10 s and
+  retries. On a DB copy: 40 artists in 103 s, 38 mbids. The same pass reads each artist's url-rels (`links`).
+- **YouTube via the Data API v3**, not the channel RSS feeds: youtube.com's robots.txt disallows
+  `/feeds/videos.xml` (checked 2026-10-24). Off until `YOUTUBE_API_KEY`; 1 unit per channel read, our cap 3,000 of
+  10,000 a day, 30 reads per check, outlets hourly, artist channels every 6 h. Outlets in config (COLORS, Lyrical
+  Lemonade, Elevator); artists' own channels from MusicBrainz links (21 from 35 artists), stored in the DB
+  (`news_sources.origin='musicbrainz'`, `artist_id`). Shorts and private videos are skipped.
+- **Official = the artist's own channel:** its uploads are tagged with the artist (`match='owner'`), classified by a
+  YouTube rule ("Official Video", "Visualizer", "A COLORS SHOW"...) before the headline rules, `released`, and the
+  story is `confirmed` with `official` evidence.
+- **Official sites and label feeds: measured, not built.** Of 24 artist homepages/blogs MusicBrainz lists, 2 had a
+  feed, both stale; of 16 label/outlet sites, 2 had feeds (Warp, Secretly Canadian), neither in the user's lane.
+- **Cross-pillar:** event cards show their acts' (headliners and support) stories from the last 30 days,
+  display-only, never in facts. The story → Philly dates half already existed (M5/M6 `philly_shows`).
+
 - **YouTube adapter** (later, decided 2026-10-23): official artist and label channels, COLORS for R&B, and the
   YouTube-first rap/underground outlets with no working site feed (Lyrical Lemonade, Elevator), for music videos,
   singles and announcements, via the YouTube Data API within its daily quota (channel uploads, not search), or

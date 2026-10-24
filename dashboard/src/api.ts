@@ -46,6 +46,13 @@ export type Alert = {
   angles: Angle[]
   context: WebContext | null // latest web lookup for this artist (tracker/context.py)
   context_supported: boolean // single-artist ideas only
+  music_news?: MusicNewsItem[] // event ideas: the acts' recent music stories (M8); headlines to read, never facts
+}
+
+export type MusicNewsItem = {
+  story_id: number; artist: string; title: string; type_label: string; release_status: string | null
+  verification: 'unverified' | 'corroborated' | 'confirmed' | 'conflicting'; sensitive: boolean; last_seen: string
+  url: string | null
 }
 
 // Web reading material from Perplexity: never facts, never used in drafts
@@ -302,7 +309,7 @@ export type NewsArticle = {
 }
 export type NewsArtistTag = {
   id: number; name: string; tier: WatchTier; plays: number
-  match: 'exact' | 'alias'; location: 'title' | 'excerpt'; confidence: 'high' | 'medium' | 'low'
+  match: 'exact' | 'alias' | 'owner'; location: 'title' | 'excerpt'; confidence: 'high' | 'medium' | 'low'
 }
 export type WatchTier = 'core' | 'adjacent' | 'watch' | 'breakout' | 'dropped'
 export type WatchArtist = {
@@ -348,10 +355,16 @@ export type Story = {
 export type WatchPatch = Partial<{ tier: WatchTier; muted: boolean; aliases: string[]; common_word_override: boolean | null; seen_live: boolean }>
 export type NewsSource = {
   key: string; name: string; url: string; enabled: boolean; niches: string[]; poll_minutes: number
+  kind: 'rss' | 'youtube'; origin: 'config' | 'musicbrainz'
+  official: boolean // an artist's own channel (M8)
+  needs_key: boolean // YouTube without YOUTUBE_API_KEY: not read
   last_fetched_at: string | null; last_ok_at: string | null; last_not_modified_at: string | null
   last_error: string | null; failures: number; terms_note: string | null; articles: number; last_24h: number
 }
-export type NewsHealth = { sources: NewsSource[]; checks: Run[] }
+export type NewsHealth = {
+  sources: NewsSource[]; checks: Run[]
+  youtube?: { enabled: boolean; units_today: number; daily_cap: number }
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
