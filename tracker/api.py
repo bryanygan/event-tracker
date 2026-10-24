@@ -306,8 +306,6 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
     if not row:
         raise HTTPException(404)
     facts = json.loads(row["facts"])
-    if facts.get("format") == "music_story":
-        raise HTTPException(400, "Drafting music stories comes with roadmap M6")
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
 

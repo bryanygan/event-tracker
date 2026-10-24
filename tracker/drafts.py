@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from . import angles, config, detectors, llm, templates
+from . import angles, config, detectors, llm, music_formats, templates
 from .store import now_iso
 
 log = logging.getLogger(__name__)
@@ -24,10 +24,14 @@ def draft_row(r, alert_facts: dict) -> dict:
     return d
 
 
+def _script_for(facts: dict) -> str | None:
+    return music_formats.script_for(facts) if music_formats.is_music(facts) else templates.script_for(facts)
+
+
 def needs_llm(facts: dict, angle: str | None) -> bool:
     """Templated formats drafted from a chosen angle need no model at all (hook, script, caption, tags
     all come from Python), so the dashboard doesn't start Ollama for them."""
-    return not (angle and templates.script_for(facts))
+    return not (angle and _script_for(facts))
 
 
 def _quiet(step: str, extra_generation: bool = False) -> None:
@@ -40,6 +44,8 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
     for the dashboard's progress bar; extra_generation=True means a retry just added another model call."""
     alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     facts = json.loads(alert["facts"])
+    if music_formats.is_music(facts):
+        return _draft_music(conn, alert, facts, model, angle, progress)
     chosen = angles.find(facts, angle) if angle else None
     if angle and chosen is None:
         raise ValueError(f"no angle {angle!r} for this alert")
@@ -71,6 +77,41 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
         # Templated formats have a known-good fallback hook, so a flagged one is replaced, not shipped.
         out["hook"] = templates.fallback_hook(facts)
         warnings = llm.check_facts(out, facts)
+    progress("Saving the draft")
+    return _save(conn, alert, facts, out, warnings, angle)
+
+
+def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None, progress) -> int:
+    """Music ideas (music_formats.py): roundups have a templated script (the model writes only a hook and tags,
+    or nothing when you pick an angle); a story is written by the model around the status it has to state."""
+    chosen = angles.find(facts, angle) if angle else None
+    if angle and chosen is None:
+        raise ValueError(f"no angle {angle!r} for this alert")
+    script = music_formats.script_for(facts)
+    caption = music_formats.caption_for(facts)
+    if chosen and script:
+        out = {"hook": chosen["hook"], "script": script, "caption": caption,
+               "hashtags": music_formats.hashtags(facts), "model": "template"}
+        progress("Saving the draft")
+        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
+    out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+                       **({"angle": chosen} if chosen else {}))
+    progress("Checking the draft against the facts")
+    warnings = llm.check_facts(out, facts)
+    if warnings and not script:  # one retry for a model-written story; keep the attempt with fewer problems
+        progress("Second try: the first draft didn't match the facts", extra_generation=True)
+        retry = llm.generate(facts, model=model, conn=conn, **({"angle": chosen} if chosen else {}))
+        retry_warnings = llm.check_facts(retry, facts)
+        if len(retry_warnings) < len(warnings):
+            out, warnings = retry, retry_warnings
+    names = music_formats.hook_names(facts)
+    hook_ok = (any(n and n.lower() in out["hook"].lower() for n in names)
+               and len(out["hook"].split()) <= templates.MAX_HOOK_WORDS)
+    if not chosen and (not hook_ok or any(w.split(": ", 1)[-1].lower() in out["hook"].lower() for w in warnings)):
+        out["hook"] = music_formats.fallback_hook(facts)  # built from facts: right by construction
+        warnings = llm.check_facts(out, facts)
+    if script and not out["hashtags"]:
+        out["hashtags"] = music_formats.hashtags(facts)
     progress("Saving the draft")
     return _save(conn, alert, facts, out, warnings, angle)
 

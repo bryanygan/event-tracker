@@ -13,6 +13,20 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   team_week: 'Home games this week',
   big_game: 'Big game',
   music_story: 'Music news',
+  new_music_friday: 'New Music Friday',
+  upcoming_albums: 'Upcoming albums',
+  emerging_artists: 'Artists to watch',
+}
+// Formats whose script comes from Python (tracker/templates.py, tracker/music_formats.py): an angle drafts instantly
+const TEMPLATED = ['presale', 'status_change', 'team_week', 'big_game', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
+export const MUSIC_KINDS: Alert['kind'][] = ['music_story', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
+
+/** The script, with the "YOUR TAKE:" beat (music drafts, for you to fill in) marked */
+function ScriptText({ text }: { text: string }) {
+  return <p>{text.split('\n').map((line, i) => (
+    <span key={i}>{i > 0 && '\n'}{line.startsWith('YOUR TAKE:')
+      ? <mark className="take" title="your perspective goes here: the draft never invents opinions">{line}</mark> : line}</span>
+  ))}</p>
 }
 
 // Phones: start long lists (angles) collapsed so a card stays about one screen tall
@@ -174,7 +188,9 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
   // Roundups: the "my N picks" cut (best by notability), starred in the facts table
   const picks = ((alert.facts.picks as ShowFacts[] | undefined) ?? []).map((s) => `${s.artist}|${s.date}`)
   const [latest, ...older] = alert.drafts
-  const music = alert.kind === 'music_story' // drafting and slides for music stories come with roadmap M6
+  const music = MUSIC_KINDS.includes(alert.kind)
+  const sources = (alert.facts.sources as { outlet: string }[] | undefined) ?? []
+  const items = ((alert.facts.releases ?? alert.facts.albums ?? alert.facts.artists_to_watch) as unknown[] | undefined) ?? []
 
   return (
     <section className={`card kind-${alert.kind}`}>
@@ -194,7 +210,9 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       {alert.updated_at && <p className="muted small">Facts refreshed {fmtWhen(alert.updated_at)} (new shows, cancellations or sale changes).</p>}
 
       <details className="facts">
-        <summary>Facts ({shows.length} show{shows.length === 1 ? '' : 's'}) — the only things the draft is allowed to say</summary>
+        <summary>Facts ({music
+          ? alert.kind === 'music_story' ? `${sources.length} source${sources.length === 1 ? '' : 's'}` : `${items.length} listed`
+          : `${shows.length} show${shows.length === 1 ? '' : 's'}`}) — the only things the draft is allowed to say</summary>
         <table>
           <tbody>
             {shows.map((s, i) => (
@@ -225,7 +243,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
                 <div className="muted small">{a.pitch} · {a.style} · CTA: {a.cta}</div>
               </div>
               {!STATIC && <button className="ghost" disabled={busy || sending} onClick={() => draft(a.key)}
-                                  title={['presale', 'status_change', 'team_week', 'big_game'].includes(String(alert.facts.format))
+                                  title={TEMPLATED.includes(String(alert.facts.format))
                                     ? 'templated format: drafted instantly, no model' : 'the model writes the script around this hook (~1 min)'}>
                 Draft this
               </button>}
@@ -237,7 +255,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       <div ref={latestRef}>
         {done === 'ok' && <div className="draft-done" role="status">✓ New draft ready</div>}
         {latest ? <DraftView key={latest.id} draft={latest} alertId={alert.id} onChange={onDraftChange} />
-          : <p className="muted">{music ? 'Drafting music stories comes with roadmap M6; the facts above are the story’s sources.' : 'No draft yet.'}</p>}
+          : <p className="muted">No draft yet.</p>}
       </div>
       {older.length > 0 && (
         <button className="link" onClick={() => setShowOlder(!showOlder)}>
@@ -250,10 +268,10 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       {done === 'failed' && <div className="warn" role="status">Drafting failed: {job?.error}</div>}
       {startError && <div className="warn" role="status">Couldn't start the draft: {startError}</div>}
       <div className="actions">
-        {!STATIC && !music && <button onClick={() => draft()} disabled={busy || sending}>
+        {!STATIC && <button onClick={() => draft()} disabled={busy || sending}>
           {mine || sending ? 'Drafting…' : latest ? 'New draft' : 'Write draft'}
         </button>}
-        {!music && <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>}
+        <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
         {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}
@@ -304,7 +322,7 @@ function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number
       </div>
       {editing
         ? <textarea rows={rows} value={fields[key]} onChange={(e) => setFields({ ...fields, [key]: e.target.value })} />
-        : <p className={key === 'hook' ? 'hook' : ''}>{fields[key]}</p>}
+        : key === 'script' ? <ScriptText text={fields[key]} /> : <p className={key === 'hook' ? 'hook' : ''}>{fields[key]}</p>}
     </div>
   )
 

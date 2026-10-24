@@ -34,7 +34,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -121,7 +121,7 @@ export type PostInput = Partial<Pick<Post, 'alert_id' | 'draft_id' | 'url' | 'ti
   'video_style' | 'hook' | 'length_seconds' | 'notes' | 'series'>>
 
 export type Analytics = {
-  group_by: 'format' | 'video_style'
+  group_by: 'format' | 'video_style' | 'pillar' | 'music_format'
   min_posts: number
   checkpoints: Record<Checkpoint, { target_hours: number; window_hours: [number, number] }>
   groups: {
@@ -197,7 +197,7 @@ export type QueueItem = {
   series_set: string | null // the series you typed (null = the default)
   format: string
   lane: 'lane' | 'other' | 'sports' | 'music'
-  pillar: 'events' | 'music' // music: a music-news story you sent to the queue (tracker/music.py)
+  pillar: 'events' | 'music' // music: a music story you sent, or a music roundup (tracker/music_formats.py)
 }
 
 // Editorial calendar (tracker/planner.py)

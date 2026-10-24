@@ -73,6 +73,8 @@ function AnalyticsTable({ refreshKey, posts }: { refreshKey: number; posts: numb
         <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as Analytics['group_by'])}>
           <option value="format">by format</option>
           <option value="video_style">by video style</option>
+          <option value="pillar">events vs. music</option>
+          <option value="music_format">by music format</option>
         </select>
         <select value={cp} onChange={(e) => setCp(e.target.value as Checkpoint)}>
           <option value="24h">at ~24 hours</option>

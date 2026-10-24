@@ -10,7 +10,7 @@ Angle keys: "news" (what's new, why now), "fan" (why fans care), "utility" (what
 """
 from __future__ import annotations
 
-from . import templates
+from . import config, templates
 
 _DAY = {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday",
         "Sat": "Saturday", "Sun": "Sunday"}
@@ -33,6 +33,9 @@ def _angle(key, label, hook, pitch, style, cta) -> dict:
 
 def angles_for(facts: dict) -> list[dict]:
     fmt = facts.get("format")
+    if fmt in config.MUSIC_KINDS:  # music ideas have their own (music_formats.py, roadmap M6)
+        from . import music_formats
+        return music_formats.angles_for(facts)
     artist = facts.get("artist", "")
     history = facts.get("history") or {}
     out = []

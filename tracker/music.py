@@ -16,6 +16,7 @@ dates, Philly dates from the events data), so a draft can only say what a source
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -324,8 +325,10 @@ def set_feedback(conn, story_id: int, action: str | None, now: datetime | None =
 def facts_for(conn, story: dict, ctx: dict) -> dict:
     """The alert's facts: only what a source, a catalog or the events data says, each with where it came from."""
     artist = ctx["artists"].get(story["primary_artist_id"]) or {}
-    sources = [{"outlet": r["source_name"], "headline": r["title"], "url": r["url"], "date": r["seen_at"][:10]}
-               for r in conn.execute("""SELECT a.title, a.url, s.name AS source_name,
+    # The feed's own short summary, so a draft knows what the story says (attributed to its outlet)
+    sources = [{"outlet": r["source_name"], "headline": r["title"], "url": r["url"], "date": r["seen_at"][:10],
+                **({"summary": _clip(r["excerpt"])} if r["excerpt"] else {})}
+               for r in conn.execute("""SELECT a.title, a.url, a.excerpt, s.name AS source_name,
                                                COALESCE(a.published_at, a.fetched_at) AS seen_at
                                         FROM story_articles x JOIN articles a ON a.id = x.article_id
                                         JOIN news_sources s ON s.id = a.source_id
@@ -352,7 +355,41 @@ def facts_for(conn, story: dict, ctx: dict) -> dict:
     shows = ctx["shows"].get((artist.get("name") or "").casefold(), [])
     if shows:
         facts["philly_shows"] = shows[:5]
+    earlier = previous_releases(conn, story["primary_artist_id"], story["release_title"])
+    if earlier:
+        facts["previous_releases"] = earlier
     return {k: v for k, v in facts.items() if v is not None}
+
+
+def clean_title(title: str) -> str:
+    """"Glass Hours - Single" -> "Glass Hours" (the catalogs' suffix isn't part of the name)."""
+    return re.sub(r"\s+-\s+(?:single|ep)\s*$", "", title or "", flags=re.I).strip()
+
+
+def _clip(text: str, limit: int = 280) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
+def previous_releases(conn, artist_id: int | None, title: str | None, limit: int = 3) -> list[dict]:
+    """The artist's earlier releases in the catalogs (the last ~90 days are kept): context for your take. The last two
+    weeks are left out: a lead single out days before its album announcement isn't the previous release."""
+    from .catalog import title_key
+    if artist_id is None:
+        return []
+    skip = title_key(title) if title else None
+    out, seen = [], set()
+    today = (datetime.now(timezone.utc).date() - timedelta(days=14)).isoformat()
+    for r in conn.execute("""SELECT title, title_key, record_type, release_date, provider FROM releases
+                             WHERE artist_id=? AND release_date <= ? ORDER BY release_date DESC""", (artist_id, today)):
+        if r["title_key"] in seen or r["title_key"] == skip:
+            continue
+        seen.add(r["title_key"])
+        out.append({"title": clean_title(r["title"]), "type": r["record_type"], "date": fmt_date(r["release_date"]),
+                    "from": r["provider"]})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _timing(story: dict, now: datetime) -> tuple[str, str]:

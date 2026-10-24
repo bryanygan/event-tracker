@@ -153,6 +153,13 @@ MUSIC_CONFLICT_CAP = 64    # sources disagree on a date: never "strong" until it
 # decide what reaches What to post. Sensitive stories are never sent automatically.
 MUSIC_AUTO_SEND = False
 MUSIC_AUTO_SEND_MIN = 80
+# Music video ideas (tracker/music_formats.py, roadmap M6). music_story comes from Send to queue; the roundups are
+# built from the release catalogs by the news job (Thursday to Sunday for New Music Friday, from the 15th for next
+# month's albums), when there are at least MUSIC_ROUNDUP_MIN releases to list.
+MUSIC_KINDS = ("music_story", "new_music_friday", "upcoming_albums", "emerging_artists")
+MUSIC_ROUNDUP_MIN = 3
+MUSIC_ROUNDUP_MAX = 8      # releases listed, one slide each (slides.MAX_SHOWS), best first
+MUSIC_ROUNDUP_PER_ARTIST = 2
 NEWS_FRESH_HOURS = 24      # announcements: post within a day...
 NEWS_EXPIRES_DAYS = 7      # ...and after a week it's not news anymore
 RECENT_POST_DAYS = 14      # warn when you already posted about the same artist this recently
@@ -172,7 +179,8 @@ CALENDAR_DEFAULT_HOUR = 18         # "Plan" on a day without a time picks 6 PM l
 SERIES_FOR_FORMAT = {
     "weekend": "Philly this weekend", "stacked_month": "Stacked month", "presale": "Presale alarm",
     "new_tour": "Just announced", "status_change": "Show update", "team_week": "Sixers week", "big_game": "Sixers week",
-    "music_story": "Music news",
+    "music_story": "Music news", "new_music_friday": "New Music Friday", "upcoming_albums": "Upcoming albums",
+    "emerging_artists": "Artists to watch",
 }
 # How often a series usually runs. The Series table marks one "behind" when its last post is older than this.
 SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}
