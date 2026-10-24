@@ -216,3 +216,11 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - `feature/music-discovery` (M7, stacked): `tracker/discovery.py`, Last.fm + ListenBrainz clients, Deezer fans,
   candidates/metrics/cache tables, momentum rules, Discover view with accept/dismiss and "Artists to watch" ideas.
   Real refresh on a DB copy: 150 candidates in 11 s. 8 new tests (371).
+- Merged M6 + M7 (`a11ab00`); 371 pass on main.
+
+## 2026-10-24
+
+- `fix/draft-refresh`: a draft that finished between two 3 s job polls showed "New draft ready" but the old
+  draft until a page reload (App only refreshed after a poll had seen the job running). App now refreshes when
+  the finished job changes (started|finished). Reproduced and verified by clicking "Draft this" in headless Edge
+  over CDP on a DB copy (old build: draft #82 stayed; new: #84 appeared at the "ready" note).
