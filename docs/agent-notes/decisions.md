@@ -426,3 +426,27 @@ Each provider was asked for the artist, then its releases. The per-artist script
   - Compilations are skipped.
 - On the real-data trial this confirmed both announced albums' dates and surfaced an album pre-order (with its
   date) by a core artist that no feed had covered.
+
+## Deezer vs Last.fm for event popularity (2026-10-24)
+
+The user asked whether Last.fm would rank headliners better than Deezer. Test: all 667 upcoming headliners at a
+venue with a known tier, one Last.fm `artist.getInfo` each (667 calls, cached in the session scratchpad). The
+yardstick is the tier of the Philly room they're booked into (a promoter's bet on their draw), as a Spearman rank
+correlation on the 545 acts both sources know.
+
+| Signal | vs venue tier | vs Ticketmaster upcoming dates |
+|---|---|---|
+| Deezer fans | 0.52 | 0.30 |
+| Last.fm listeners | 0.49 | 0.26 |
+| Average or higher of the two | 0.525 | – |
+
+- The two agree closely (0.83 with each other). Last.fm counts run ~30x Deezer's.
+- Last.fm was a little better for rap and R&B (0.68/0.67 vs 0.63/0.64, small samples), worse for pop, rock/indie,
+  country, classical and Latin. Neither tracks electronic acts (DJs play clubs whatever their following).
+- Deezer's real failure: a wrong-artist match with a handful of fans (a few legacy acts with tens or hundreds of
+  fans on Deezer but 0.5-1.5M Last.fm listeners). Lifting only the 6 acts 25+ points below Last.fm moved the
+  correlation 0.52 → 0.53. Last.fm's own failures: accented names (an act at a 2,000-cap room with 735 listeners).
+- Filling Deezer's gaps: Last.fm knew 41 of the 122 acts Deezer didn't, only 1 of them with 10k+ listeners.
+
+**Kept: Deezer alone.** Last.fm isn't better, and a second signal adds ~0.005. Possible small follow-up (not built):
+check Last.fm only when Deezer's popularity is very low, to catch wrong-artist matches.

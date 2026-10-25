@@ -23,7 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, discovery, drafts, listening, llm, manual_events, music, news, opportunities,
+from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
+               opportunities,
                planner, posts, publish, remote, scoring, slides, trends, watchlist)
 from .scoring import upcoming_events
 
@@ -158,12 +159,15 @@ def summary(c=Depends(get_db)):
 
 
 def source_problems(c) -> list[dict]:
-    """Venue calendars whose latest read failed or found nothing, so a broken reader doesn't fail silently."""
-    names = {v["key"]: v["name"] for v in config.VENUE_CALENDARS}
-    rows = c.execute("""SELECT s.* FROM source_runs s
-                        WHERE s.run_id = (SELECT MAX(run_id) FROM source_runs s2 WHERE s2.source = s.source)""")
-    return [{"source": names.get(r["source"], r["source"]), "error": r["error"] or "0 shows found"}
-            for r in rows if r["source"] in names and (not r["ok"] or not r["count"])]
+    """Sources whose latest read failed or found nothing, and scheduled runs that stopped, so a broken reader
+    doesn't fail silently (tracker/health.py)."""
+    return health.problems(c)
+
+
+@app.get("/api/health")
+def source_health(c=Depends(get_db)):
+    """One line per source for the Runs tab: last good read, what it found, and any problem."""
+    return health.checks(c)
 
 
 @app.get("/api/alerts")

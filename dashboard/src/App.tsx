@@ -129,8 +129,8 @@ export default function App() {
       {job?.error && !job.running && <div className="banner error">Last job failed: {job.error}</div>}
       {!!summary?.source_problems?.length && (
         <div className="banner">
-          Venue calendar problem: {summary.source_problems.map((p) => `${p.source} (${p.error})`).join(' · ')}.
-          Their existing shows are kept; the site may have changed.
+          Source problem: {summary.source_problems.map((p) => `${p.source} (${p.error})`).join(' · ')}.
+          What it found before is kept; details on the Runs tab.
         </div>
       )}
       {error && <div className="banner error">{error}</div>}

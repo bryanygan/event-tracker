@@ -38,6 +38,8 @@ SLIDES_BRAND = os.getenv("SLIDES_BRAND", "PHILLY EVENTS").strip()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+# Don't load the local model (~2.2 GB) unless this much RAM is free, so Homebridge and the rest keep ~1.3 GB.
+OLLAMA_MIN_FREE_MB = int(os.getenv("OLLAMA_MIN_FREE_MB", "3500"))
 
 # Drafts are written by Claude when ANTHROPIC_API_KEY is set (DRAFT_PROVIDER=ollama forces the local model).
 # Ollama stays the fallback: over the daily cap, or when the API call fails.

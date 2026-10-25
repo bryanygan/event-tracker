@@ -595,10 +595,12 @@ def detect_experiences(conn: sqlite3.Connection, today: date, only_ids=None) -> 
             continue
         show = event_facts(e)
         start = date.fromisoformat(e["local_date"])
+        venue = e["venue_name"]
+        at = f" at {venue}" if venue and venue.casefold() != e["name"].casefold() else ""  # Open Streets: its own "venue"
         alerts.append({
             "key": f"experience:{e['id']}:{e['local_date'][:4]}",  # a series' first date can move; its year doesn't
             "kind": "experience",
-            "title": f"{e['name']} — {show.get('dates') or show['date']} at {e['venue_name']}",
+            "title": f"{e['name']} — {show.get('dates') or show['date']}{at}",
             "score": e["score"],
             "facts": {
                 "format": "experience",

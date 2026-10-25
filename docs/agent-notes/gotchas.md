@@ -30,6 +30,10 @@
   Use `grep -a`. This once made a working weekend alert look missing.
 - **Open SQLite connections lock the DB file.** The API originally opened a connection per request and never
   closed it. Stop the dashboard task before moving/deleting `data/tracker.db`.
+- **Low-memory guard (2026-10-24).** `ollama_session` raises `llm.LowMemory` before starting anything when
+  free RAM < `OLLAMA_MIN_FREE_MB` (3500; the PC has 12 GB, the model takes ~2.2 GB). `model_session` stores it
+  in `_batch["low_memory"]` so later drafts in the batch fail fast; drafts.py turns it into a template draft for
+  templated formats. Tests that need Ollama "up" must also stub `free_memory_mb` or `check_memory`.
 - `ollama list` with the server down can hang and/or launch the Ollama tray app (`ollama app.exe`). The user
   keeps Ollama off; if you start it, stop both `ollama` and `ollama app` afterwards.
 - **Memory leak, found 2026-10-21 (my earlier "no leftovers" check was wrong).** Ollama 0.32's model runner is

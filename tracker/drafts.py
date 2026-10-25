@@ -58,8 +58,16 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
                "hashtags": angles.template_hashtags(facts), "model": "template"}
         progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
-    out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
-                       **({"angle": chosen} if chosen else {}))
+    try:
+        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+                           **({"angle": chosen} if chosen else {}))
+    except llm.LowMemory:
+        if not script:
+            raise
+        out = {"hook": templates.fallback_hook(facts), "script": script, "caption": caption,
+               "hashtags": angles.template_hashtags(facts), "model": "template"}
+        progress("Saving the draft")
+        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
     progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
@@ -94,8 +102,16 @@ def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None,
                "hashtags": music_formats.hashtags(facts), "model": "template"}
         progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
-    out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
-                       **({"angle": chosen} if chosen else {}))
+    try:
+        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+                           **({"angle": chosen} if chosen else {}))
+    except llm.LowMemory:
+        if not script:  # a story needs a model to write it; it stays in the queue for a retry
+            raise
+        out = {"hook": music_formats.fallback_hook(facts), "script": script, "caption": caption,
+               "hashtags": music_formats.hashtags(facts), "model": "template"}
+        progress("Saving the draft")
+        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
     progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings and not script:  # one retry for a model-written story; keep the attempt with fewer problems
@@ -158,6 +174,8 @@ def _draft_all(conn, ids: list[int], claude_only: bool = False) -> list[int]:
                 break
             try:
                 made.append(draft_alert(conn, alert_id))
+            except llm.LowMemory:  # already logged once; templated ideas still get drafts
+                log.info("Alert %s left undrafted: not enough free memory for the local model", alert_id)
             except Exception as exc:  # one bad generation shouldn't stop the rest
                 log.exception("Drafting alert %s failed: %s", alert_id, exc)
     return made

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
-import { api, type RemoteEdits, type Run, type Summary } from '../api'
+import { api, type RemoteEdits, type Run, type SourceCheck, type Summary } from '../api'
 import { fmtWhen } from '../App'
 
 export default function RunsView({ refreshKey, summary }: { refreshKey: number; summary: Summary | null }) {
   const [runs, setRuns] = useState<Run[]>([])
   const [phone, setPhone] = useState<RemoteEdits | null>(null)
+  const [checks, setChecks] = useState<SourceCheck[]>([])
   useEffect(() => {
     api.runs().then(setRuns)
+    api.health().then(setChecks).catch(() => setChecks([]))
     api.remoteEdits().then(setPhone).catch(() => setPhone(null))
   }, [refreshKey])
+  const broken = checks.filter((c) => c.problem).length
   const d = summary?.drafting
   return (
     <div className="table-wrap">
@@ -36,6 +39,29 @@ export default function RunsView({ refreshKey, summary }: { refreshKey: number; 
         </tbody>
       </table>
       <p className="muted small">Full logs: <code>logs\pipeline.log</code></p>
+
+      {checks.length > 0 && (
+        <>
+          <h3>Sources</h3>
+          <p className="muted small">
+            {broken ? `${broken} of ${checks.length} need a look.` : `All ${checks.length} working.`} From what the
+            runs recorded; nothing extra is fetched.
+          </p>
+          <table className="events">
+            <thead><tr><th>Source</th><th>Last good read</th><th>Found</th><th>Status</th></tr></thead>
+            <tbody>
+              {checks.map((c) => (
+                <tr key={`${c.group}:${c.name}`}>
+                  <td><span className="muted small">{c.group} · </span>{c.name}</td>
+                  <td>{c.last_ok ? fmtWhen(c.last_ok) : 'never'}</td>
+                  <td>{c.found == null ? '' : `${c.found} ${c.what}`}</td>
+                  <td>{c.problem ? <span className="error-text">{c.problem}</span> : 'ok'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {phone?.enabled && (
         <>
