@@ -293,7 +293,7 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
     for a in alerts:
         a["facts"] = json.loads(a["facts"])
         latest = conn.execute("SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC LIMIT 1", (a["id"],)).fetchone()
-        draft = draft_row(latest, a["facts"]) if latest else None
+        draft = draft_row(latest, a["facts"], conn) if latest else None
         shows = a["facts"].get("shows") or ([a["facts"]["show"]] if a["facts"].get("show") else [])
         links = [{"label": f"{s.get('artist') or s.get('event_name')} · {s.get('date')}", "url": s["url"]}
                  for s in shows if s.get("url")]

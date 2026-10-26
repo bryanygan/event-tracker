@@ -207,3 +207,13 @@
 - **Hand-added events sync on save** through `store.upsert_events(..., protected_prefixes=("",))`: a one-event batch
   must not mark everything else removed. Their notes never reach facts.
 - `tests/conftest.py` blanks `EXPERIENCE_SOURCES`, or the end-to-end tests would read the real sites.
+
+## Drafts with notes (redraft.py, 2026-10-26)
+- A note is an instruction, not a fact: shows enter the facts only through `add` (event ids -> `event_facts`).
+  `check_facts` still runs against the edited facts.
+- `drafts.facts` stays the ALERT's facts at writing time; `drafts.instructions` holds the edits (plus `added`/
+  `left_out` labels). `draft_row` filters the user's own edits out of `facts_changes` by those labels, which
+  must match `detectors._show_label` ("artist (date)").
+- Slides use `redraft.edited_facts` (the newest draft's edits), whatever that draft's status.
+- Tests stub `llm.generate` with lambdas that don't take `note`: drafts.py passes it only when set (`_note`).
+- Ticket URLs aren't always unique per listing; `_find` checks name and date after matching the URL.

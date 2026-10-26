@@ -1,6 +1,6 @@
 """P1-10 genres for shows without one, and P1-08 picks / lane weekend cuts. Invented artist names only."""
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import responses
@@ -66,24 +66,26 @@ class FakeTM:
 
 
 def test_calendar_acts_get_ticketmaster_genre_by_exact_unambiguous_name(conn):
-    listing = [cal_event("Nova Vale"), cal_event("Twin Name"), cal_event("Open Mic Night"), cal_event("EQ"),
-               cal_event("Kilo Moon", date="2026-10-30")]
+    # dates relative to today: lookup_candidates only considers upcoming shows (fixed dates expired 2026-10-25)
+    D1, D2 = ((date.today() + timedelta(days=n)).isoformat() for n in (30, 36))
+    listing = [cal_event("Nova Vale", date=D1), cal_event("Twin Name", date=D1), cal_event("Open Mic Night", date=D1), cal_event("EQ", date=D1),
+               cal_event("Kilo Moon", date=D2)]
     add_cal(conn, *listing)
     client = FakeTM({"Nova Vale": ("found", "Hip-Hop/Rap"), "Twin Name": ("ambiguous", None),
                      "Kilo Moon": ("found", "Undefined")})
     counts = genres.fill_from_ticketmaster(conn, client, limit=10)
     assert counts == {"found": 1, "none": 0, "ambiguous": 1, "no_genre": 1}
     assert "Open Mic Night" not in client.asked and "EQ" not in client.asked  # event titles, too-short names
-    assert client.asked[0] == "Nova Vale"  # soonest show first (Oct 24 before Oct 30)
+    assert client.asked[0] == "Nova Vale"  # soonest show first (D1 before D2)
     e = by_id(conn)
-    nova = e["cal:sr:nova-vale-2026-10-24"]
+    nova = e[f"cal:sr:nova-vale-{D1}"]
     assert (nova["genre"], nova["subgenre"], nova["genre_source"]) == ("Hip-Hop/Rap", None, "tm_search")
     assert nova["niche"]  # an inferred lane genre counts toward your lane
-    assert e["cal:sr:twin-name-2026-10-24"]["genre"] is None
+    assert e[f"cal:sr:twin-name-{D1}"]["genre"] is None
     # cached: nothing is asked again until GENRE_RECHECK_DAYS pass, and a re-ingest keeps the found genre
     assert genres.fill_from_ticketmaster(conn, client, limit=10) == {"found": 0, "none": 0, "ambiguous": 0, "no_genre": 0}
     add_cal(conn, *listing)  # the next run reads the calendar again (still no genre in the listing)
-    assert by_id(conn)["cal:sr:nova-vale-2026-10-24"]["genre"] == "Hip-Hop/Rap"
+    assert by_id(conn)[f"cal:sr:nova-vale-{D1}"]["genre"] == "Hip-Hop/Rap"
     old = (datetime.now(timezone.utc) - timedelta(days=config.GENRE_RECHECK_DAYS + 1)).isoformat()
     conn.execute("UPDATE attractions SET genre_checked_at=?", (old,))  # a month later: unknowns are retried
     assert {c["name"] for c in genres.lookup_candidates(conn, 10)} == {"Twin Name", "Kilo Moon"}

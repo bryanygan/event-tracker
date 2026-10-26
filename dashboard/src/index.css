@@ -247,3 +247,16 @@ input.grow { flex: 1; }
 .manual-form label { display: flex; flex-direction: column; gap: 3px; font-size: 0.9em; }
 .manual-form label.inline { flex-direction: row; align-items: center; gap: 6px; }
 .manual-form input, .manual-form select { min-width: 0; }
+
+/* New draft with notes (RedraftForm.tsx) */
+.redraft { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.redraft h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.redraft ul { list-style: none; padding: 0; margin: 4px 0; }
+.redraft-shows li { padding: 2px 0; }
+.redraft-shows label { text-transform: none; letter-spacing: 0; font-size: 0.9rem; color: var(--text); }
+.cands li.cand { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--line); }
+.cands li.cand.on strong { color: var(--accent); }
+.cands li.cand button { flex: none; min-width: 72px; }
+.redraft-search { display: flex; gap: 8px; margin-top: 6px; }
+.redraft-search input { flex: 1; min-width: 0; }
+.your-notes { margin-bottom: 8px; }

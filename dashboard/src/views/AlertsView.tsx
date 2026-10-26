@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type MusicNewsItem, type ShowFacts, type WebContext } from '../api'
+import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type MusicNewsItem, type RedraftRequest, type ShowFacts,
+  type WebContext } from '../api'
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
+import { RedraftForm } from './RedraftForm'
 import { SlidesOverlay } from './SlidesOverlay'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
@@ -72,7 +74,7 @@ export default function AlertsView({ refreshKey, busy, job, onJob, onChange }: P
       {shown.length === 0 && <p className="muted">Nothing here yet. Alerts show up after a pipeline run finds something.</p>}
       {shown.map((a) => (
         <AlertCard key={a.id} alert={a} busy={busy} job={job}
-          onRegenerate={async (angle) => onJob(await api.regenerate(a.id, angle))}
+          onRegenerate={async (angle, notes) => onJob(await api.regenerate(a.id, angle, notes))}
           onStatus={async (s) => { await api.setAlertStatus(a.id, s); load(); onChange() }}
           onDraftChange={() => { load(); onChange() }} />
       ))}
@@ -179,7 +181,7 @@ function MusicNewsList({ items }: { items: MusicNewsItem[] }) {
 }
 
 export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftChange }: {
-  alert: Alert; busy: boolean; job: Job | null; onRegenerate: (angle?: string) => Promise<void>
+  alert: Alert; busy: boolean; job: Job | null; onRegenerate: (angle?: string, notes?: RedraftRequest) => Promise<void>
   onStatus: (s: Alert['status']) => void; onDraftChange: () => void
 }) {
   const [showOlder, setShowOlder] = useState(false)
@@ -210,6 +212,11 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
   const draft = async (angle?: string) => {
     setSending(true); setStartError(null); setDone(null)
     try { await onRegenerate(angle) } catch (e) { setStartError(String(e)) } finally { setSending(false) }
+  }
+  const [notesOpen, setNotesOpen] = useState(false)
+  const draftWithNotes = async (notes: RedraftRequest) => {  // a bad request (400) shows in the form, not below
+    setSending(true); setStartError(null); setDone(null)
+    try { await onRegenerate(undefined, notes); setNotesOpen(false) } finally { setSending(false) }
   }
   const [slidesOpen, setSlidesOpen] = useState(false)
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
@@ -298,9 +305,18 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       {(mine || sending) && <DraftProgress job={mine ? job : null} />}
       {done === 'failed' && <div className="warn" role="status">Drafting failed: {job?.error}</div>}
       {startError && <div className="warn" role="status">Couldn't start the draft: {startError}</div>}
+      {notesOpen && !STATIC && (
+        <RedraftForm alert={alert} previous={latest?.instructions ?? null} busy={busy || sending}
+          templated={TEMPLATED.includes(String(alert.facts.format))}
+          onSubmit={draftWithNotes} onCancel={() => setNotesOpen(false)} />
+      )}
       <div className="actions">
         {!STATIC && <button onClick={() => draft()} disabled={busy || sending}>
           {mine || sending ? 'Drafting…' : latest ? 'New draft' : 'Write draft'}
+        </button>}
+        {!STATIC && !notesOpen && <button className="ghost" onClick={() => setNotesOpen(true)} disabled={busy || sending}
+                                          title="tell the AI what to include, leave out or emphasize">
+          New draft with notes…
         </button>}
         <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
         {!STATIC && (alert.status !== 'dismissed'
@@ -361,12 +377,19 @@ function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number
     <div className={`draft status-${draft.status}`}>
       {draft.facts_changes.length > 0 && (
         <div className="warn">
-          ↻ The facts changed since this draft was written. Edit it or write a new draft:
+          ↻ The facts changed since this draft was written. Edit it, or write a new draft (with notes to keep a show):
           <ul>{draft.facts_changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
         </div>
       )}
       {draft.warnings.length > 0 && (
         <div className="warn">⚠ Check before filming: {draft.warnings.join(' · ')}</div>
+      )}
+      {draft.instructions && (
+        <div className="your-notes muted small">
+          {draft.instructions.note && <div>Your notes: “{draft.instructions.note}”</div>}
+          {!!draft.instructions.added?.length && <div>You added: {draft.instructions.added.join(', ')}</div>}
+          {!!draft.instructions.left_out?.length && <div>You left out: {draft.instructions.left_out.join(', ')}</div>}
+        </div>
       )}
       {block('Hook', 'hook')}
       {block('Script (voiceover)', 'script', 6)}

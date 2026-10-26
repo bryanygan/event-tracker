@@ -178,7 +178,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     status TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, filmed, rejected
     notes TEXT,
     facts TEXT,                     -- JSON: the alert's facts this draft was written from
-    angle TEXT                      -- angles.py key the draft was written from (NULL = default)
+    angle TEXT,                     -- angles.py key the draft was written from (NULL = default)
+    instructions TEXT               -- JSON: your note + shows added/left out for this draft (redraft.py)
 );
 
 -- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
@@ -498,7 +499,7 @@ _ADDED_COLUMNS = {
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT",
                "planned_for": "TEXT", "series": "TEXT"},
-    "drafts": {"facts": "TEXT", "angle": "TEXT"},
+    "drafts": {"facts": "TEXT", "angle": "TEXT", "instructions": "TEXT"},
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
     "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
                           "seen_live": "INTEGER NOT NULL DEFAULT 0",  # music.py (M5)

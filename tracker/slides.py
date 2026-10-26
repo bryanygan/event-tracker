@@ -21,7 +21,7 @@ import json
 import re
 from collections import Counter
 
-from . import config, detectors, templates
+from . import config, detectors, redraft, templates
 from .store import now_iso
 
 MAX_SHOWS = 8          # one slide per show; the rest are counted on the title slide
@@ -390,7 +390,7 @@ def deck(conn, alert_id: int) -> dict | None:
     alert = conn.execute("SELECT facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
     if not alert:
         return None
-    facts = json.loads(alert["facts"])
+    facts = redraft.edited_facts(conn, alert_id, json.loads(alert["facts"]))
     row = conn.execute("SELECT * FROM slide_decks WHERE alert_id=?", (alert_id,)).fetchone()
     if not row:
         base = build(facts)
@@ -411,7 +411,8 @@ def save(conn, alert_id: int, overrides) -> dict:
     if not alert:
         raise KeyError(alert_id)
     row = conn.execute("SELECT base FROM slide_decks WHERE alert_id=?", (alert_id,)).fetchone()
-    base = json.loads(row["base"]) if row else build(json.loads(alert["facts"]))
+    facts = redraft.edited_facts(conn, alert_id, json.loads(alert["facts"]))
+    base = json.loads(row["base"]) if row else build(facts)
     clean = validate(base, overrides)
     if row:
         conn.execute("UPDATE slide_decks SET overrides=?, updated_at=? WHERE alert_id=?",
@@ -419,7 +420,7 @@ def save(conn, alert_id: int, overrides) -> dict:
     else:
         conn.execute("""INSERT INTO slide_decks (alert_id, base, facts, overrides, created_at, updated_at)
                         VALUES (?,?,?,?,?,?)""",
-                     (alert_id, json.dumps(base), alert["facts"], json.dumps(clean), now_iso(), now_iso()))
+                     (alert_id, json.dumps(base), json.dumps(facts), json.dumps(clean), now_iso(), now_iso()))
     conn.commit()
     return deck(conn, alert_id)
 
@@ -432,13 +433,14 @@ def rebuild(conn, alert_id: int) -> dict:
     row = conn.execute("SELECT * FROM slide_decks WHERE alert_id=?", (alert_id,)).fetchone()
     if not row:
         return {**deck(conn, alert_id), "dropped": []}
-    new_base = build(json.loads(alert["facts"]))
+    facts = redraft.edited_facts(conn, alert_id, json.loads(alert["facts"]))
+    new_base = build(facts)
     overrides, dropped = rebase(json.loads(row["base"]), json.loads(row["overrides"]), new_base)
     if overrides and all(overrides.get(s["id"], {}).get("hidden") for s in new_base["slides"]):
         overrides = {k: {f: v for f, v in o.items() if f != "hidden"} for k, o in overrides.items()}
         dropped.append("Every slide would be hidden, so all slides are visible again")
     conn.execute("UPDATE slide_decks SET base=?, facts=?, overrides=?, updated_at=? WHERE alert_id=?",
-                 (json.dumps(new_base), alert["facts"], json.dumps(overrides), now_iso(), alert_id))
+                 (json.dumps(new_base), json.dumps(facts), json.dumps(overrides), now_iso(), alert_id))
     conn.commit()
     return {**deck(conn, alert_id), "dropped": dropped}
 
