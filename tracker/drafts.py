@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from . import angles, config, detectors, llm, music_formats, templates
+from . import angles, config, detectors, llm, music_formats, redraft, templates
 from .store import now_iso
 
 log = logging.getLogger(__name__)
@@ -14,13 +14,28 @@ MAX_DRAFTS_PER_RUN = 8  # ~1 min each with Ollama on the N95; keeps a run under 
 MAX_CLAUDE_DRAFTS_PER_RUN = 20  # seconds each with Claude; CLAUDE_DAILY_CAP still bounds the spend
 
 
-def draft_row(r, alert_facts: dict) -> dict:
-    """A drafts row for the dashboard: JSON fields parsed, plus what changed in the alert since it was written."""
+def draft_row(r, alert_facts: dict, conn=None) -> dict:
+    """A drafts row for the dashboard: JSON fields parsed, plus what changed in the alert since it was written.
+    With `conn`, a removed show says why (redraft.removal_reasons), and your own edits (redraft.py) aren't
+    reported back as changes: a show you left out that the idea later drops too, or one you added that it picks up."""
     d = dict(r)
     d["onscreen"] = json.loads(d["onscreen"] or "[]")
     d["warnings"] = json.loads(d["warnings"] or "[]")
+    d["instructions"] = ins = json.loads(d.get("instructions") or "null")
     written_from = d.pop("facts")
-    d["facts_changes"] = detectors.facts_diff(json.loads(written_from), alert_facts) if written_from else []
+    if not written_from:
+        d["facts_changes"] = []
+        return d
+    written = json.loads(written_from)
+    changes = detectors.facts_diff(written, alert_facts)
+    if ins:
+        mine = {f"Removed: {x}" for x in ins.get("left_out", [])} | {f"Added: {x}" for x in ins.get("added", [])}
+        changes = [c for c in changes if c not in mine]
+    if conn is not None:
+        changes = redraft.explain(changes, redraft.removal_reasons(conn, written, alert_facts))
+        if ins and ins.get("add"):
+            changes += redraft.apply(conn, alert_facts, ins)[1]
+    d["facts_changes"] = changes
     return d
 
 
@@ -38,18 +53,30 @@ def _quiet(step: str, extra_generation: bool = False) -> None:
     pass
 
 
-def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None = None, progress=_quiet) -> int:
+def _note(note: str | None) -> dict:
+    """generate()'s `note` only when you wrote one, so a plain draft's call is unchanged."""
+    return {"note": note} if note else {}
+
+
+def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None = None, progress=_quiet,
+                instructions: dict | None = None) -> int:
     """Generate one draft for an alert, optionally from a chosen angle (angles.py). Assumes Ollama is
     reachable when needs_llm(). Returns draft id. `progress(step, extra_generation)` hears what it's doing,
-    for the dashboard's progress bar; extra_generation=True means a retry just added another model call."""
+    for the dashboard's progress bar; extra_generation=True means a retry just added another model call.
+    `instructions`: your note and the shows you added or left out (redraft.validate)."""
     alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     facts = json.loads(alert["facts"])
     if music_formats.is_music(facts):
-        return _draft_music(conn, alert, facts, model, angle, progress)
+        return _draft_music(conn, alert, facts, model, angle, progress, instructions)
     chosen = angles.find(facts, angle) if angle else None
     if angle and chosen is None:
         raise ValueError(f"no angle {angle!r} for this alert")
     facts = angles.scoped_facts(facts, chosen)  # "picks": the draft only sees (and is checked against) the picks
+    edited, problems = redraft.apply(conn, facts, instructions)
+    instructions = _with_labels(instructions, facts, edited)
+    facts = edited
+    note = (instructions or {}).get("note")
+    problems += redraft.note_warnings(conn, facts, note)
     # presale/status: Python writes the voiceover and caption; the model only writes hook + hashtags
     script = templates.script_for(facts)
     caption = templates.caption_for(facts) if script else None
@@ -59,7 +86,7 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
         progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
     try:
-        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn, **_note(note),
                            **({"angle": chosen} if chosen else {}))
     except llm.LowMemory:
         if not script:
@@ -67,12 +94,12 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
         out = {"hook": templates.fallback_hook(facts), "script": script, "caption": caption,
                "hashtags": angles.template_hashtags(facts), "model": "template"}
         progress("Saving the draft")
-        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
+        return _save(conn, alert, facts, out, llm.check_facts(out, facts) + problems, angle, instructions)
     progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings:  # one retry; keep whichever attempt has fewer problems (~1 extra minute)
         progress("Second try: the first draft didn't match the facts", extra_generation=True)
-        retry = llm.generate(facts, model=model, script=script, caption=caption, conn=conn)
+        retry = llm.generate(facts, model=model, script=script, caption=caption, conn=conn, **_note(note))
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
             out, warnings = retry, retry_warnings
@@ -86,10 +113,21 @@ def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None
         out["hook"] = templates.fallback_hook(facts)
         warnings = llm.check_facts(out, facts)
     progress("Saving the draft")
-    return _save(conn, alert, facts, out, warnings, angle)
+    return _save(conn, alert, facts, out, warnings + problems, angle, instructions)
 
 
-def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None, progress) -> int:
+def _with_labels(ins: dict | None, before: dict, after: dict) -> dict | None:
+    """The instructions as saved on the draft, plus readable labels of what was added and left out."""
+    if not ins:
+        return None
+    was = {redraft.show_key(s): s for s in before.get("shows") or []}
+    now = {redraft.show_key(s): s for s in after.get("shows") or []}
+    return {**ins, "added": [redraft.label(s) for k, s in now.items() if k not in was],
+            "left_out": [redraft.label(s) for k, s in was.items() if k not in now]}
+
+
+def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None, progress,
+                 instructions: dict | None = None) -> int:
     """Music ideas (music_formats.py): roundups have a templated script (the model writes only a hook and tags,
     or nothing when you pick an angle); a story is written by the model around the status it has to state."""
     chosen = angles.find(facts, angle) if angle else None
@@ -102,8 +140,9 @@ def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None,
                "hashtags": music_formats.hashtags(facts), "model": "template"}
         progress("Saving the draft")
         return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
+    note = (instructions or {}).get("note")
     try:
-        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn,
+        out = llm.generate(facts, model=model, script=script, caption=caption, conn=conn, **_note(note),
                            **({"angle": chosen} if chosen else {}))
     except llm.LowMemory:
         if not script:  # a story needs a model to write it; it stays in the queue for a retry
@@ -111,12 +150,12 @@ def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None,
         out = {"hook": music_formats.fallback_hook(facts), "script": script, "caption": caption,
                "hashtags": music_formats.hashtags(facts), "model": "template"}
         progress("Saving the draft")
-        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle)
+        return _save(conn, alert, facts, out, llm.check_facts(out, facts), angle, instructions)
     progress("Checking the draft against the facts")
     warnings = llm.check_facts(out, facts)
     if warnings and not script:  # one retry for a model-written story; keep the attempt with fewer problems
         progress("Second try: the first draft didn't match the facts", extra_generation=True)
-        retry = llm.generate(facts, model=model, conn=conn, **({"angle": chosen} if chosen else {}))
+        retry = llm.generate(facts, model=model, conn=conn, **_note(note), **({"angle": chosen} if chosen else {}))
         retry_warnings = llm.check_facts(retry, facts)
         if len(retry_warnings) < len(warnings):
             out, warnings = retry, retry_warnings
@@ -129,20 +168,21 @@ def _draft_music(conn, alert, facts: dict, model: str | None, angle: str | None,
     if script and not out["hashtags"]:
         out["hashtags"] = music_formats.hashtags(facts)
     progress("Saving the draft")
-    return _save(conn, alert, facts, out, warnings, angle)
+    return _save(conn, alert, facts, out, warnings, angle, instructions)
 
 
-def _save(conn, alert, facts: dict, out: dict, warnings: list[str], angle: str | None) -> int:
+def _save(conn, alert, facts: dict, out: dict, warnings: list[str], angle: str | None,
+          instructions: dict | None = None) -> int:
     if templates.comeback(facts):  # not an error, but crowd-sourced data deserves a second look
         warnings.append(f"Verify: last Philly show {facts['history']['last_philly_show']} "
                         f"({facts['history']['last_philly_venue']}) is from setlist.fm, which is crowd-sourced")
     cur = conn.execute(
         """INSERT INTO drafts (alert_id, format, model, hook, script, caption, hashtags, onscreen, warnings, created_at,
-                               facts, angle)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                               facts, angle, instructions)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (alert["id"], facts.get("format", alert["kind"]), out["model"], out["hook"], out["script"], out["caption"],
          " ".join(out["hashtags"]), json.dumps(llm.onscreen_lines(facts)), json.dumps(warnings), now_iso(),
-         alert["facts"], angle))
+         alert["facts"], angle, json.dumps(instructions) if instructions else None))
     conn.execute("UPDATE alerts SET status='drafted' WHERE id=? AND status='new'", (alert["id"],))
     conn.commit()
     if warnings:

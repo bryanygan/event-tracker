@@ -247,3 +247,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   crash or retry the start per draft: templated formats draft from their template, the rest stay "new". Source
   health (`tracker/health.py`, `/api/health`, a Sources table on the Runs tab; the banner now covers every
   source plus stopped scheduled runs), read only from runs/source_runs/news_sources. 11 new tests (426).
+- 2026-10-26 `feature/draft-notes`: "New draft with notes…" on every idea card (`tracker/redraft.py`,
+  `RedraftForm.tsx`). A note steers the model (prompt: instructions, never facts); list ideas (weekend, stacked
+  month, things to do, team week) let you untick shows and add any upcoming show, suggested from the idea's dates
+  with the reason each was left out (genre by source incl. Deezer's, score vs threshold, top-N cut). Saved on the
+  draft (`drafts.instructions`); the facts-changed list skips your own edits; slides follow the newest draft's
+  shows. "Removed: X" lines now say why. Trigger: a stacked Dance/Electronic month lost an act whose calendar
+  listing had been filled with Deezer's genre until a Ticketmaster name lookup filed it as Pop (same genre
+  family, so Deezer doesn't override). Also fixed `test_roundups_genres` hard-coded dates that expired 2026-10-25.
+  6 new tests (432).

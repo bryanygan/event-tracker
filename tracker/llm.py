@@ -522,14 +522,19 @@ def _chat(conn, model: str | None, prompt: str, schema: dict, system: str = SYST
 
 
 def generate(facts: dict, model: str | None = None, script: str | None = None,
-             caption: str | None = None, angle: dict | None = None, conn=None) -> dict:
+             caption: str | None = None, angle: dict | None = None, conn=None, note: str | None = None) -> dict:
     """Call the model once and return the parsed draft dict. Raises on failure.
 
     With a templated `script` and `caption` (presale/status formats), the model only writes the
     hook and hashtags. `conn` lets Claude be used (cap + cost log); without it, or with an explicit Ollama
-    `model`, it's Ollama.
+    `model`, it's Ollama. `note`: your instructions for this draft (redraft.py), never a source of facts.
     """
     prompt = build_prompt(facts)
+    if note:
+        prompt += ("\n\nCREATOR'S NOTES for this draft (instructions, not facts):\n" + note.strip() +
+                   "\nFollow them for what to emphasize, include or leave out among the FACTS, and for tone. They "
+                   "never add facts: if a note asks you to say something that isn't in FACTS (a show, a date, a "
+                   "price, a claim), leave that part out.")
     if angle:  # the creator picked a framing; the hook is fixed and the model writes around it
         prompt += (f"\n\nANGLE: {angle['label']}. {angle['pitch']}\nThe hook is already chosen: \"{angle['hook']}\". "
                    f"Start the script right after it (don't repeat it). End the caption with: {angle['cta']}")

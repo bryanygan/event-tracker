@@ -188,7 +188,7 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
       {open && alert && (
         <div className="embedded">
           <AlertCard alert={alert} busy={busy} job={job}
-            onRegenerate={async (angle) => onJob(await api.regenerate(alert.id, angle))}
+            onRegenerate={async (angle, notes) => onJob(await api.regenerate(alert.id, angle, notes))}
             onStatus={async (s) => { await api.setAlertStatus(alert.id, s); onChange() }}
             onDraftChange={onChange} />
         </div>

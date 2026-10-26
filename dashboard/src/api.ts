@@ -18,6 +18,13 @@ export type ShowFacts = {
   listed_by?: string  // where an experience came from (provenance)
 }
 
+// A new draft with your notes: `add` are event ids, `drop` are show keys ("artist|date")
+export type RedraftRequest = { note?: string; add?: string[]; drop?: string[] }
+
+// A show you could add to a list idea, and why the idea left it out
+export type DraftCandidate = { id: string; artist: string; date: string; venue: string; genre: string | null; score: number
+  why_not: string }
+
 export type Draft = {
   id: number
   alert_id: number
@@ -31,6 +38,8 @@ export type Draft = {
   warnings: string[]
   facts_changes: string[] // what a later run changed in the alert since this draft was written
   angle: string | null // tracker/angles.py key the draft was written from
+  // "New draft with notes" (tracker/redraft.py): your note and the shows you added or left out
+  instructions: { note: string; add: string[]; drop: string[]; added?: string[]; left_out?: string[] } | null
   created_at: string
   status: 'pending' | 'approved' | 'filmed' | 'rejected'
   notes: string | null
@@ -434,6 +443,7 @@ const staticApi = {
     snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all)),
   setAlertStatus: readOnly,
   regenerate: readOnly,
+  candidates: () => Promise.resolve<DraftCandidate[]>([]),
   lookupContext: readOnly,
   slides: (id: number) => snapshot<Record<string, SlideDeck>>('slides').then((all) => {
     if (!all[id]) throw new Error('No slides for this idea in the snapshot')
@@ -495,8 +505,11 @@ const liveApi = {
   alerts: (status: 'open' | 'dismissed' | 'all') => req<Alert[]>(`/api/alerts?status=${status}`),
   setAlertStatus: (id: number, status: Alert['status']) =>
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  regenerate: (id: number, angle?: string) =>
-    req<Job>(`/api/alerts/${id}/draft${angle ? `?angle=${encodeURIComponent(angle)}` : ''}`, { method: 'POST' }),
+  regenerate: (id: number, angle?: string, notes?: RedraftRequest) =>
+    req<Job>(`/api/alerts/${id}/draft${angle ? `?angle=${encodeURIComponent(angle)}` : ''}`,
+             { method: 'POST', ...(notes ? { body: JSON.stringify(notes) } : {}) }),
+  candidates: (id: number, q?: string) =>
+    req<DraftCandidate[]>(`/api/alerts/${id}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   slides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides`),
   saveSlides: (id: number, overrides: SlideDeck['overrides']) =>
     req<SlideDeck>(`/api/alerts/${id}/slides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),

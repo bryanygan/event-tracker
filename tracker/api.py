@@ -24,8 +24,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
-               opportunities,
-               planner, posts, publish, remote, scoring, slides, trends, watchlist)
+               opportunities, planner, posts, publish, redraft, remote, scoring, slides, trends, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -186,8 +185,9 @@ def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
         a["angles"] = angles.angles_for(a["facts"])
         a["context"] = context.cached(c, context.subject(a["facts"]))
         a["context_supported"] = context.subject(a["facts"]) is not None
-        a["drafts"] = [drafts.draft_row(d, a["facts"]) for d in c.execute(
-            "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],))]
+        # Only the newest draft explains its changes (that reads the events table); older ones just list them
+        a["drafts"] = [drafts.draft_row(d, a["facts"], c if i == 0 else None) for i, d in enumerate(c.execute(
+            "SELECT * FROM drafts WHERE alert_id=? ORDER BY id DESC", (a["id"],)))]
     return alerts
 
 
@@ -306,14 +306,27 @@ def web_context_usage(c=Depends(get_db)):
     return context.usage(c)
 
 
+class DraftRequest(BaseModel):
+    """'New draft with notes': your note to the model and the shows to add (event ids) or leave out (show keys)."""
+    note: str | None = None
+    add: list[str] = []
+    drop: list[str] = []
+
+
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)
-def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
+def regenerate(alert_id: int, angle: str | None = None, body: DraftRequest | None = None, c=Depends(get_db)):
     row = c.execute("SELECT facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
     if not row:
         raise HTTPException(404)
     facts = json.loads(row["facts"])
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
+    try:
+        instructions = redraft.validate(body.note, body.add, body.drop, facts) if body else None
+    except redraft.RedraftError as exc:
+        raise HTTPException(400, str(exc))
+    if instructions and angle and drafts.needs_llm(facts, angle) is False:
+        raise HTTPException(400, "This angle is drafted from a template with no model, so notes would be ignored")
 
     use_llm = drafts.needs_llm(facts, angle)
     provider = "claude" if llm.uses_claude() else "ollama"
@@ -332,15 +345,25 @@ def regenerate(alert_id: int, angle: str | None = None, c=Depends(get_db)):
                 with llm.model_session():
                     progress("Writing the draft")
                     started = time.monotonic()
-                    drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
+                    drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress, instructions=instructions)
                     if not retried:  # remember a clean single generation's time for the next estimate
                         _gen_seconds[provider] = min(max(time.monotonic() - started, 2.0), 300.0)
             else:  # templated format + chosen angle: no model, done in a moment
-                drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress)
+                drafts.draft_alert(job_conn, alert_id, angle=angle, progress=progress, instructions=instructions)
     estimate = (OLLAMA_START_SECONDS if cold else 0) + _gen_seconds[provider] if use_llm else 2
-    return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else ""), work,
+    return _start_job(f"draft for alert {alert_id}" + (f" ({angle} angle)" if angle else "")
+                      + (" with your notes" if instructions else ""), work,
                       alert_id=alert_id, step="Starting the model" if cold else "Writing the draft",
                       estimate=round(estimate))
+
+
+@app.get("/api/alerts/{alert_id}/candidates")
+def draft_candidates(alert_id: int, q: str | None = None, c=Depends(get_db)):
+    """Shows you could add to a list idea's next draft, each with why the idea left it out (redraft.py)."""
+    row = c.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
+    if not row:
+        raise HTTPException(404)
+    return redraft.candidates(c, dict(row), (q or "").strip() or None)
 
 
 class DraftUpdate(BaseModel):
