@@ -346,6 +346,8 @@ export type Summary = {
   has_tm_key: boolean
   generated_at?: string // static snapshots only
   edit_url?: string | null // static snapshots only: the editable dashboard through the tunnel, if set up
+  showcase?: boolean // the public showcase (tracker/showcase.py): cleaned data, no listening history
+  repo_url?: string | null // showcase only: the code on GitHub
   publish?: { at: string; ok: boolean; message: string; url?: string } | null
   source_problems?: { source: string; error: string }[]
   posts_this_week: number
@@ -464,6 +466,8 @@ function snapshot<T>(name: string): Promise<T> {
   })
   return snapshots[name] as Promise<T>
 }
+// The snapshot holds two weeks of news; the tab's day filter is applied here. Feed dates are ISO strings in UTC.
+const since = (days: number) => new Date(Date.now() - days * 864e5).toISOString().slice(0, 19)
 const readOnly = () => Promise.reject(new Error('Read-only snapshot: make changes on the local dashboard'))
 
 const staticApi = {
@@ -471,8 +475,8 @@ const staticApi = {
   job: () => Promise.resolve<Job>({ name: null, started: null, finished: null, error: null, running: false }),
   alerts: (status: 'open' | 'dismissed' | 'all', kind = '') =>
     snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all.filter((a) => (a.kind === 'vinyl') === (kind === 'vinyl')))),
-  vinyl: () => Promise.resolve<VinylOverview>({ enabled: false, synced_at: null, pending_lookups: 0, value: null, records: [],
-                                                formats: {}, manual_formats: [] }),
+  vinyl: () => snapshot<VinylOverview>('vinyl').catch(() => ({ enabled: false, synced_at: null, pending_lookups: 0, value: null,
+                                                                 records: [], formats: {}, manual_formats: [] })),
   vinylSync: readOnly,
   vinylIdea: readOnly,
   setAlertStatus: readOnly,
@@ -517,10 +521,15 @@ const staticApi = {
   createTrend: readOnly,
   updateTrend: readOnly,
   deleteTrend: readOnly,
-  news: (_days: number, _mine = false) => Promise.resolve<NewsArticle[]>([]),
-  newsSources: () => Promise.resolve<NewsHealth>({ sources: [], checks: [] }),
+  news: (days: number, mine = false) => snapshot<NewsArticle[]>('news').catch(() => [] as NewsArticle[])
+    .then((all) => all.filter((a) => a.seen_at >= since(days) && (!mine || a.artists.length > 0))),
+  newsSources: () => snapshot<NewsHealth>('news_sources').catch(() => ({ sources: [], checks: [] })),
   watchlist: () => Promise.resolve<WatchArtist[]>([]),
-  stories: (_days: number, _origin?: Story['origin'], _sort?: 'score' | 'recent') => Promise.resolve<Story[]>([]),
+  stories: (days: number, origin?: Story['origin'], sort: 'score' | 'recent' = 'score') =>
+    snapshot<Story[]>('stories').catch(() => [] as Story[]).then((all) => {
+      const out = all.filter((s) => s.last_seen >= since(days) && (!origin || s.origin === origin))
+      return sort === 'recent' ? [...out].sort((x, y) => y.last_seen.localeCompare(x.last_seen)) : out
+    }),
   storyFeedback: readOnly,
   sendStory: readOnly,
   discover: (_status: Candidate['status'] = 'new') =>

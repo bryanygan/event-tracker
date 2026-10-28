@@ -117,7 +117,12 @@ export default function App() {
 
       {STATIC && (
         <div className="banner">
-          {summary?.edit_url
+          {summary?.showcase
+            ? <>Read-only demo of a tool I built for my Philly events TikTok. It reads Ticketmaster, venue calendars,
+              music news and my Discogs collection, scores what's worth posting, and drafts scripts whose facts are
+              checked against the data. Nothing posts automatically. Real data, updated after each run
+              {summary.repo_url ? <> · <a href={summary.repo_url}>code on GitHub</a></> : null}.</>
+            : summary?.edit_url
             ? <>Read-only copy, updated after each run. To make changes, open the <a href={summary.edit_url}>live
               dashboard</a>.</>
             : <>Read-only copy of the dashboard. Copy buttons work; edits and draft status changes happen on the

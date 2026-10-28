@@ -75,6 +75,13 @@ team domain into these notes. Read them from the Cloudflare API when needed.
 - Verified after the first deploy: main URL, `/data/*.json`, and the per-deployment `<hash>.` URL all 302 to the
   Access login.
 
+## Public showcase (2026-10-28)
+
+- Pages project named by `SHOWCASE_PROJECT` in `.env` (no login: it's meant to be public, for the user's resume).
+  Created with `python -m tracker.showcase --create`; the pipeline re-uploads after the 6:30 and 16:30 runs.
+- The custom subdomain is attached by the user in the Cloudflare dashboard (Workers & Pages → project → Custom
+  domains); the token has no DNS permission and isn't widened for this.
+
 ## Useful commands
 
 ```powershell

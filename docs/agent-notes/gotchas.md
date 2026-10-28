@@ -239,3 +239,12 @@
 - Research and writing are separate calls: the writer returns structured JSON (claims with source numbers), while
   the web-search pass is read for its citations, which come back on plain text blocks.
 - No real artist names in vinyl tests or comments: the fixtures use the invented names.
+
+## Public showcase (showcase.py, 2026-10-28)
+
+- It's **public**, unlike the old snapshot. `clean()` drops listening data (`my_plays`, `your_plays`, `plays`,
+  `seen_live`, `tier`), notes, costs and run errors, and scrubs "(N plays)" / "🎧" out of strings. A new field
+  that carries personal data must be added to `PRIVATE_KEYS`.
+- `leaks()` then refuses the upload if any `.env` value (except `_PUBLIC_SETTINGS`), the phone-editing host or
+  its domain, the repo's local path, "plays.db" or "N plays" appears in the JSON. Its messages never echo a secret.
+- Watchlist and trend notes are hidden in static mode (`!STATIC`); Discover stays empty there.

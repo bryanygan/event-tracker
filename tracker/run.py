@@ -20,7 +20,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, context, db, detectors, drafts, genres, publish, store, vinyl, watchlist
+from . import config, context, db, detectors, drafts, genres, publish, showcase, store, vinyl, watchlist
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import experiences, venue_calendars
@@ -234,6 +234,7 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
     if not midday:
         published = publish.publish(conn)  # no-op unless Cloudflare Pages is configured; never raises
         log.info("Web snapshot: %s", published)
+        log.info("Showcase: %s", showcase.publish_showcase(conn))  # no-op unless SHOWCASE_PROJECT is set; never raises
     return {"run_id": run_id, "events": len(events), "changes": counts, "new_alerts": len(new_alert_ids),
             "drafts": len(made)}
 
