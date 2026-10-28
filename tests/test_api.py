@@ -30,6 +30,9 @@ def test_summary_and_events(client):
     assert s["upcoming_events"] == 1 and s["open_alerts"] == 1 and s["pending_drafts"] == 1
     events = client.get("/api/events", params={"q": "joy", "days": 40000}).json()
     assert events[0]["headliner"] == "Mt. Joy"
+    # A search looks past the date range: this show is decades out
+    assert [e["headliner"] for e in client.get("/api/events", params={"q": "mtjoy", "days": 7}).json()] == ["Mt. Joy"]
+    assert client.get("/api/events", params={"days": 7}).json() == []
 
 
 def test_alerts_include_drafts_and_can_be_dismissed(client):

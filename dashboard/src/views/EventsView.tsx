@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, type EventKind, type EventRow } from '../api'
 import ManualEvents from './ManualEvents'
 
@@ -31,19 +31,35 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
   const [genres, setGenres] = useState<string[]>([])
   const [events, setEvents] = useState<EventRow[] | null>(null)
 
+  const searchBox = useRef<HTMLInputElement>(null)
+
   useEffect(() => { api.genres().then(setGenres) }, [refreshKey])
+  useEffect(() => {  // "/" jumps to the search box, as on most sites
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) && !t.isContentEditable) {
+        e.preventDefault()
+        searchBox.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   useEffect(() => {
     const t = setTimeout(() => api.events({ q, genre, kind, days }).then(setEvents), 200) // debounce typing
     return () => clearTimeout(t)
   }, [q, genre, kind, days, refreshKey, added])
 
+  const searching = q.trim() !== ''
   const newCutoff = Date.now() - 3 * 24 * 3600 * 1000
   const shown = (events ?? []).filter((e) => !mine || e.my_plays > 0)
   return (
     <>
       <ManualEvents onChange={() => setAdded((n) => n + 1)} />
       <div className="toolbar">
-        <input placeholder="Search artist or venue" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input ref={searchBox} type="search" className="event-search" placeholder="Search artist, venue or genre  ( / )"
+          title="Every word has to match; searches all upcoming dates" value={q} onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setQ('') }} />
         <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)}>
           {KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
@@ -51,11 +67,13 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
           <option value="">All genres</option>
           {genres.map((g) => <option key={g}>{g}</option>)}
         </select>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+        <select value={searching ? 'all' : days} disabled={searching} title={searching ? 'A search covers every upcoming date' : ''}
+          onChange={(e) => setDays(Number(e.target.value))}>
+          {searching && <option value="all">All upcoming dates</option>}
           {[7, 14, 30, 60, 120, 240].map((d) => <option key={d} value={d}>Next {d} days</option>)}
         </select>
         <label className="small"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> 🎧 artists I listen to</label>
-        <span className="muted small">{shown.length} events</span>
+        <span className="muted small">{searching ? `${shown.length} ${shown.length === 1 ? 'match' : 'matches'}` : `${shown.length} events`}</span>
       </div>
       <div className="table-wrap">
         <table className="events">
@@ -86,6 +104,7 @@ export default function EventsView({ refreshKey }: { refreshKey: number }) {
             ))}
           </tbody>
         </table>
+        {events && searching && shown.length === 0 && <p className="muted small">No upcoming events match “{q.trim()}”.</p>}
       </div>
     </>
   )

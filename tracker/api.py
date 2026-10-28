@@ -24,7 +24,8 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
-               opportunities, planner, posts, publish, redraft, remote, scoring, slides, trends, watchlist)
+               opportunities, planner, posts, publish, redraft, remote, scoring, search, slides, trends,
+               watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -520,11 +521,11 @@ EVENT_KINDS = {"music": scoring.is_music, "sports": scoring.is_game, "comedy": s
 def list_events(q: str = "", genre: str = "", kind: str = "", days: int = 60, limit: int = 300, c=Depends(get_db)):
     today = datetime.now(ZoneInfo(config.TIMEZONE)).date()
     end = (today.fromordinal(today.toordinal() + days)).isoformat()
-    rows = [e for e in upcoming_events(c, today.isoformat()) if e["local_date"] <= end]
-    if q:
-        ql = q.lower()
-        rows = [e for e in rows if ql in (e["name"] or "").lower() or ql in (e["headliner"] or "").lower()
-                or ql in (e["venue_name"] or "").lower()]
+    rows = upcoming_events(c, today.isoformat())
+    if q.strip():  # a search looks at every upcoming date, not just the next `days`
+        rows = [e for e in rows if search.matches(e, q)]
+    else:
+        rows = [e for e in rows if e["local_date"] <= end]
     if genre:
         rows = [e for e in rows if e["genre"] == genre]
     if kind in EVENT_KINDS:
