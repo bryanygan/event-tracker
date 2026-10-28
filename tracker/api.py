@@ -25,7 +25,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
                opportunities, planner, posts, publish, redraft, remote, scoring, search, slides, trends,
-               watchlist)
+               vinyl, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -171,12 +171,15 @@ def source_health(c=Depends(get_db)):
 
 
 @app.get("/api/alerts")
-def list_alerts(status: str = "open", limit: int = 100, c=Depends(get_db)):
+def list_alerts(status: str = "open", limit: int = 100, kind: str = "", c=Depends(get_db)):
+    """Ideas for the Alerts tab. Vinyl ideas live on the Vinyl tab: they're left out unless kind=vinyl."""
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
     if where is None:
         raise HTTPException(400, "status must be open, dismissed or all")
+    pillar = "a.kind = ?" if kind == config.VINYL_KIND else "a.kind != ?"
     alerts = [dict(r) for r in c.execute(
-        f"SELECT * FROM alerts a WHERE {where} ORDER BY a.created_at DESC, a.score DESC LIMIT ?", (limit,))]
+        f"SELECT * FROM alerts a WHERE {where} AND {pillar} ORDER BY a.created_at DESC, a.score DESC LIMIT ?",
+        (config.VINYL_KIND, limit))]
     posted = posts.posts_by_alert(c)
     news = music.news_index(c)  # cross-pillar (M8): the acts' recent music stories, shown on event cards
     for a in alerts:
@@ -312,14 +315,17 @@ class DraftRequest(BaseModel):
     note: str | None = None
     add: list[str] = []
     drop: list[str] = []
+    deep: bool = False  # vinyl: add a web-search pass to the research ("Dig deeper", ~10-20 cents)
 
 
 @app.post("/api/alerts/{alert_id}/draft", status_code=202)
 def regenerate(alert_id: int, angle: str | None = None, body: DraftRequest | None = None, c=Depends(get_db)):
-    row = c.execute("SELECT facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
+    row = c.execute("SELECT kind, facts FROM alerts WHERE id=?", (alert_id,)).fetchone()
     if not row:
         raise HTTPException(404)
     facts = json.loads(row["facts"])
+    if row["kind"] == config.VINYL_KIND:
+        return _vinyl_draft(alert_id, body)
     if angle and not angles.find(facts, angle):
         raise HTTPException(400, f"no angle {angle!r} for this alert")
     try:
@@ -356,6 +362,24 @@ def regenerate(alert_id: int, angle: str | None = None, body: DraftRequest | Non
                       + (" with your notes" if instructions else ""), work,
                       alert_id=alert_id, step="Starting the model" if cold else "Writing the draft",
                       estimate=round(estimate))
+
+
+def _vinyl_draft(alert_id: int, body: DraftRequest | None):
+    """A vinyl draft: sources gathered, written and claim-checked by Claude (vinyl_research.py)."""
+    if not llm.uses_claude():
+        raise HTTPException(400, "Vinyl drafts are written by Claude, and ANTHROPIC_API_KEY isn't set")
+    note = (body.note or "").strip()[:redraft.MAX_NOTE] if body and body.note else None
+    instructions = {"note": note} if note else None
+    deep = bool(body and body.deep)
+
+    def progress(step: str, extra_generation: bool = False):
+        _job["step"] = step
+
+    def work():
+        with closing(conn()) as job_conn:
+            drafts.draft_alert(job_conn, alert_id, progress=progress, instructions=instructions, deep=deep)
+    return _start_job(f"vinyl draft for idea {alert_id}" + (" (dig deeper)" if deep else ""), work,
+                      alert_id=alert_id, step="Gathering sources", estimate=150 if deep else 60)
 
 
 @app.get("/api/alerts/{alert_id}/candidates")
@@ -809,6 +833,41 @@ def trigger_publish():
         if not result.startswith("published"):
             raise RuntimeError(result)
     return _start_job("publish snapshot", work)
+
+
+# ---------- vinyl (tracker/vinyl.py) ----------
+
+@app.get("/api/vinyl")
+def vinyl_overview(c=Depends(get_db)):
+    return vinyl.overview(c)
+
+
+@app.post("/api/vinyl/sync", status_code=202)
+def vinyl_sync():
+    """Read the collection from Discogs now (the daily runs do this too), then raise this period's ideas."""
+    if not config.DISCOGS_TOKEN:
+        raise HTTPException(400, "DISCOGS_TOKEN isn't set in .env")
+
+    def work():
+        with closing(conn()) as job_conn:
+            result = vinyl.refresh(job_conn)
+        if result.get("sync_error") or result.get("ideas_error"):
+            raise RuntimeError(result.get("sync_error") or result.get("ideas_error"))
+    return _start_job("Discogs sync", work)
+
+
+class VinylIdea(BaseModel):
+    format: str
+
+
+@app.post("/api/vinyl/{instance_id}/idea", status_code=201)
+def vinyl_idea(instance_id: int, body: VinylIdea, c=Depends(get_db)):
+    try:
+        return {"alert_id": vinyl.make_idea(c, instance_id, body.format)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except KeyError:
+        raise HTTPException(404, "No such record in your collection") from None
 
 
 @app.post("/api/run", status_code=202)

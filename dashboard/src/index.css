@@ -262,3 +262,18 @@ input.grow { flex: 1; }
 .your-notes { margin-bottom: 8px; }
 .toolbar input.event-search { min-width: 280px; }
 @media (max-width: 640px) { .toolbar input.event-search { min-width: 0; width: 100%; } }
+
+/* Vinyl tab */
+.vinyl-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.section-title { font-size: 1.05rem; margin: 22px 0 6px; }
+table.vinyl img.cover { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; display: block; }
+table.vinyl td { vertical-align: top; }
+.vinyl-sources { margin: 8px 0; }
+.vinyl-sources ol { padding-left: 22px; margin: 6px 0; }
+.vinyl-sources .claims { list-style: none; padding-left: 0; margin: 6px 0; }
+.claim .verdict { display: inline-block; width: 1.2em; font-weight: 700; }
+.claim.supported .verdict { color: var(--accent); }
+.claim.partly .verdict { color: var(--warn-text); }
+.claim.unsupported .verdict { color: var(--error); }
+.vinyl-numbers { list-style: none; padding-left: 0; margin: 6px 0; }
+.vinyl-numbers li { margin: 2px 0; overflow-wrap: anywhere; }

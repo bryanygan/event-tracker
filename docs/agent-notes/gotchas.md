@@ -217,3 +217,25 @@
 - Slides use `redraft.edited_facts` (the newest draft's edits), whatever that draft's status.
 - Tests stub `llm.generate` with lambdas that don't take `note`: drafts.py passes it only when set (`_note`).
 - Ticket URLs aren't always unique per listing; `_find` checks name and date after matching the URL.
+
+## Vinyl (vinyl.py, vinyl_research.py, 2026-10-28)
+- Kind `vinyl` for every vinyl idea; the format lives in `facts.format` (`vinyl_lore`, `vinyl_value`...). Vinyl
+  ideas are left out of `/api/alerts` unless `kind=vinyl` (the Vinyl tab), and `draft_pending` never drafts
+  them: a researched draft is Sonnet + a Haiku claim check (a few cents), so it only runs on a click.
+- Ideas are raised once per period (`save_ideas` skips existing keys) and never refreshed: prices move weekly
+  and refreshing would churn drafts. Weekly/daily story picks are skipped when this period's key exists, or
+  they'd use up records from the day's other picks (`recently_featured` counts every idea raised in 90 days).
+- Discogs: one row per copy (`instance_id`); two pressings of an album are two rows sharing a master. Artist
+  names lose Discogs' "(2)" suffix. `album_title` strips edition tags for MusicBrainz and Wikipedia.
+- "Colored vinyl" needs a color word in the format's free text (`is_colored`): that text also holds things like
+  "10th Anniversary" or "Cover Smear" (a variant name).
+- Discogs' suggested prices are by condition from recent sales; we show Near Mint and say "Discogs suggests".
+- Sources: a Wikipedia page is only used when its title matches the album (ignoring "(… album)") and its text
+  names the artist and calls it an album/mixtape/EP near the top. A lookup that found nothing leaves a
+  `checked:album`/`checked:artist` marker row in `vinyl_sources` so it isn't retried every draft (60 days).
+- Dig deeper uses the basic `web_search_20250305` tool: with `_20260209` (dynamic filtering) the text came back
+  without citations. It keeps only the passages Claude's search cited (`cited_text`), per URL, as `web` sources;
+  the claim check reads those, never Claude's own summary. Searches are logged at $0.01 each in `llm_calls`.
+- Research and writing are separate calls: the writer returns structured JSON (claims with source numbers), while
+  the web-search pass is read for its citations, which come back on plain text blocks.
+- No real artist names in vinyl tests or comments: the fixtures use the invented names.

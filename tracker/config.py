@@ -452,3 +452,20 @@ NEWS_EXCERPT_CHARS = 300        # the feed's own summary, cut short; never the a
 CATALOG_ARTISTS_PER_CHECK = 16  # release catalogs per 30-min news check (Deezer + iTunes at ~20/min): each artist ~every 10 h
 WATCHLIST_IDS_PER_RUN = 40     # artists per 6:30 / 4:30 run: Deezer + MusicBrainz id + MusicBrainz links (~100 s at 1/s)
 NEWS_USER_AGENT = "PhillyEventsTracker/0.1 (personal project; reads public music-news feeds every 30 minutes)"
+
+# Vinyl videos (tracker/vinyl.py, vinyl_research.py): your Discogs collection as a content pillar. The token is a
+# personal access token (Discogs Settings → Developers); it also tells us whose collection to read.
+DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN", "").strip()
+VINYL_KIND = "vinyl"
+VINYL_COLLECTION_REFRESH_HOURS = 20   # the collection list itself (2 calls for ~200 records)
+VINYL_DETAILS_REFRESH_DAYS = 30       # have/want counts, rating, pressing notes, credits
+VINYL_PRICES_REFRESH_DAYS = 7         # Discogs' suggested prices
+VINYL_MAX_LOOKUPS_PER_RUN = 120       # Discogs calls per sync after the collection list (~2 minutes)
+VINYL_LIST_SIZE = 5                   # records in a "top 5" idea
+VINYL_STORY_REPEAT_DAYS = 90          # a record isn't picked for another story idea for this long
+# Story drafts are researched (sources fetched, then written only from them) and need more care than an event
+# blurb, so they use Sonnet; the claim check against the sources uses the cheap model.
+VINYL_STORY_MODEL = os.getenv("VINYL_STORY_MODEL", "claude-sonnet-5-5").strip()
+VINYL_CHECK_MODEL = os.getenv("VINYL_CHECK_MODEL", "claude-haiku-5-5").strip()
+VINYL_WEB_SEARCHES = 6                # "Dig deeper": web searches per record, at $10 per 1,000
+WEB_SEARCH_PRICE = 0.01

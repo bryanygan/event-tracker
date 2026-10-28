@@ -20,7 +20,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, context, db, detectors, drafts, genres, publish, store, watchlist
+from . import config, context, db, detectors, drafts, genres, publish, store, vinyl, watchlist
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import experiences, venue_calendars
@@ -199,6 +199,8 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
                     log.info("Watchlist ids looked up: %d", watchlist.resolve_ids(conn, limit=config.WATCHLIST_IDS_PER_RUN))
             except Exception as exc:  # never fail the run over the music pillar
                 log.warning("Watchlist refresh failed: %s", exc)
+        if not (midday or from_cache):  # vinyl pillar: Discogs sync within budget, then this period's ideas
+            log.info("Vinyl: %s", vinyl.refresh(conn))  # never raises
         try:
             setlistfm.enrich_history(conn, limit=config.MIDDAY_SETLIST_ARTISTS if midday else setlistfm.MAX_ARTISTS_PER_RUN)
         except Exception as exc:

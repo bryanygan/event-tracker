@@ -261,3 +261,18 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   and spacing are ignored ("drstatic", "renee", "nova union"); "sixers"/"phils" map to Ticketmaster's team names.
   A search covers all upcoming dates (the date filter shows "All upcoming dates" while searching); "/" focuses
   the box, Esc clears it. "Add a show" in New draft with notes uses the same matcher. 2 new tests (434).
+- 2026-10-28 `feature/vinyl`: a Vinyl tab and a third content pillar from the user's Discogs collection
+  (`DISCOGS_TOKEN` in .env; the token names the user, so no username in the repo). `fetchers/discogs.py`
+  (60/min, 429 backoff), `vinyl.py` (sync within a per-run budget: collection list daily, details 30 days,
+  suggested prices 7 days, MusicBrainz first release dates once), 11 formats: most unique pressings, most
+  valuable, most wanted, same album different pressings, new pickups, by the numbers, worth looking into
+  (artists you play with no vinyl yet, via Discogs search; plays never enter facts), underrated of the day,
+  underappreciated album, the story behind it, album anniversaries (post_by on the day). `vinyl_research.py`:
+  sources (Discogs data, MusicBrainz, Wikipedia album + artist pages, cached), Sonnet writes from FACTS +
+  numbered SOURCES and lists its claims with source numbers, Haiku checks each claim against the cited text,
+  unbacked claims and unsourced numbers become warnings; Dig deeper adds a web-search pass. Drafts store
+  `drafts.sources`. Queue: pillar/lane `vinyl`. 10 new tests (444). Real check on a DB copy: first sync 332
+  Discogs calls for 164 records (~6 min), MusicBrainz dated 93 albums before it started shedding load (the rest
+  fill in over runs). Drafts: a story $0.038 (21 claims, all backed), a top-5 list $0.040, Dig deeper $0.18
+  (14 web sources). Fixed on the way: Discogs vs Wikipedia album titles (a longer title on Discogs), comma names,
+  countdown ranks, rounding in the number check, the model writing the creator's opinions.

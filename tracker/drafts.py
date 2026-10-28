@@ -22,6 +22,7 @@ def draft_row(r, alert_facts: dict, conn=None) -> dict:
     d["onscreen"] = json.loads(d["onscreen"] or "[]")
     d["warnings"] = json.loads(d["warnings"] or "[]")
     d["instructions"] = ins = json.loads(d.get("instructions") or "null")
+    d["sources"] = json.loads(d.get("sources") or "null")  # vinyl stories: sources and checked claims
     written_from = d.pop("facts")
     if not written_from:
         d["facts_changes"] = []
@@ -59,13 +60,17 @@ def _note(note: str | None) -> dict:
 
 
 def draft_alert(conn, alert_id: int, model: str | None = None, angle: str | None = None, progress=_quiet,
-                instructions: dict | None = None) -> int:
+                instructions: dict | None = None, deep: bool = False) -> int:
     """Generate one draft for an alert, optionally from a chosen angle (angles.py). Assumes Ollama is
     reachable when needs_llm(). Returns draft id. `progress(step, extra_generation)` hears what it's doing,
     for the dashboard's progress bar; extra_generation=True means a retry just added another model call.
-    `instructions`: your note and the shows you added or left out (redraft.validate)."""
+    `instructions`: your note and the shows you added or left out (redraft.validate). `deep`: vinyl only, add a
+    web-search pass to the research."""
     alert = conn.execute("SELECT * FROM alerts WHERE id=?", (alert_id,)).fetchone()
     facts = json.loads(alert["facts"])
+    if alert["kind"] == config.VINYL_KIND:  # researched and written by Claude (vinyl_research.py)
+        from . import vinyl_research
+        return vinyl_research.draft(conn, alert, facts, progress, instructions, deep=deep)
     if music_formats.is_music(facts):
         return _draft_music(conn, alert, facts, model, angle, progress, instructions)
     chosen = angles.find(facts, angle) if angle else None
@@ -191,11 +196,13 @@ def _save(conn, alert, facts: dict, out: dict, warnings: list[str], angle: str |
 
 
 def draft_pending(conn, limit: int | None = None) -> list[int]:
-    """Draft the highest-scoring alerts that don't have a draft yet."""
+    """Draft the highest-scoring alerts that don't have a draft yet. Vinyl ideas wait for your click: their
+    researched drafts cost more than an event blurb."""
     if limit is None:
         limit = MAX_CLAUDE_DRAFTS_PER_RUN if llm.uses_claude() else MAX_DRAFTS_PER_RUN
     ids = [r["id"] for r in conn.execute(
-        "SELECT id FROM alerts WHERE status='new' ORDER BY score DESC LIMIT ?", (limit,))]
+        "SELECT id FROM alerts WHERE status='new' AND kind != ? ORDER BY score DESC LIMIT ?",
+        (config.VINYL_KIND, limit))]
     return _draft_all(conn, ids)
 
 

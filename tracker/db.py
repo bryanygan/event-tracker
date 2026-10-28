@@ -179,7 +179,8 @@ CREATE TABLE IF NOT EXISTS drafts (
     notes TEXT,
     facts TEXT,                     -- JSON: the alert's facts this draft was written from
     angle TEXT,                     -- angles.py key the draft was written from (NULL = default)
-    instructions TEXT               -- JSON: your note + shows added/left out for this draft (redraft.py)
+    instructions TEXT,              -- JSON: your note + shows added/left out for this draft (redraft.py)
+    sources TEXT                    -- JSON: a vinyl story's sources and claims (vinyl_research.py)
 );
 
 -- Videos you actually published, logged by hand (nothing here is read from TikTok). See tracker/posts.py.
@@ -457,6 +458,57 @@ CREATE TABLE IF NOT EXISTS api_cache (
     fetched_at TEXT NOT NULL
 );
 
+-- Your record collection, read from Discogs (tracker/vinyl.py). One row per copy you own (Discogs' instance id):
+-- two pressings of the same album are two rows. Everything here is Discogs' or MusicBrainz's data.
+CREATE TABLE IF NOT EXISTS vinyl_records (
+    instance_id INTEGER PRIMARY KEY,
+    release_id INTEGER NOT NULL,
+    master_id INTEGER,
+    artist TEXT NOT NULL,           -- Discogs' disambiguation suffix removed ("Nova Vale (2)" -> "Nova Vale")
+    artists TEXT,                   -- JSON: each credited artist's name, so "Static, The Echo" stays one artist
+    title TEXT NOT NULL,
+    year INTEGER,                   -- this pressing's year (a reissue's, not the album's)
+    formats TEXT,                   -- JSON: Discogs' format list (name, descriptions, free text like "Translucent Red")
+    labels TEXT,                    -- JSON [{name, catno}]
+    genres TEXT,                    -- JSON
+    styles TEXT,                    -- JSON
+    cover_url TEXT,
+    date_added TEXT,                -- when you added it to your Discogs collection
+    my_rating INTEGER,              -- your Discogs rating, 0 = none
+    in_collection INTEGER NOT NULL DEFAULT 1,  -- 0 once it's gone from your Discogs collection
+    synced_at TEXT NOT NULL,
+    have INTEGER,                   -- Discogs users who own this pressing
+    want INTEGER,                   -- ... and who want it
+    rating_avg REAL,
+    rating_count INTEGER,
+    lowest_price REAL,              -- cheapest copy for sale right now (USD)
+    num_for_sale INTEGER,
+    released TEXT,                  -- this pressing's release date
+    country TEXT,
+    notes TEXT,                     -- the release page's notes (pressing details, often limits like "1,000 copies")
+    credits TEXT,                   -- JSON [{name, role}]
+    details_at TEXT,
+    prices TEXT,                    -- JSON: Discogs' suggested price by condition (USD)
+    prices_at TEXT,
+    original_date TEXT,             -- the album's first release date (MusicBrainz release group)
+    mb_release_group TEXT,
+    mb_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_vinyl_release ON vinyl_records(release_id);
+
+-- What a vinyl story was researched from (vinyl_research.py): fetched text, kept so a draft can be checked
+-- against it later. subject = "release:<id>".
+CREATE TABLE IF NOT EXISTS vinyl_sources (
+    id INTEGER PRIMARY KEY,
+    subject TEXT NOT NULL,
+    kind TEXT NOT NULL,             -- wikipedia, discogs, musicbrainz, web
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    text TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    UNIQUE(subject, url)
+);
+
 -- Claude API calls for drafts (tracker/llm.py): the daily cap and the cost on the Runs tab.
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,
@@ -499,7 +551,9 @@ _ADDED_COLUMNS = {
     "alerts": {"updated_at": "TEXT", "event_ids": "TEXT", "post_by": "TEXT", "expires_at": "TEXT",
                "shortlisted": "INTEGER NOT NULL DEFAULT 0", "snoozed_until": "TEXT", "note": "TEXT",
                "planned_for": "TEXT", "series": "TEXT"},
-    "drafts": {"facts": "TEXT", "angle": "TEXT", "instructions": "TEXT"},
+    "vinyl_records": {"artists": "TEXT"},
+    "drafts": {"facts": "TEXT", "angle": "TEXT", "instructions": "TEXT",
+               "sources": "TEXT"},  # vinyl stories: JSON {sources: [{n, title, url, kind}], claims: [...]}
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
     "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
                           "seen_live": "INTEGER NOT NULL DEFAULT 0",  # music.py (M5)

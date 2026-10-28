@@ -265,6 +265,23 @@ def evaluate_music(alert: dict, story: dict | None, ctx: dict, draft: dict | Non
     }
 
 
+def evaluate_vinyl(alert: dict, draft: dict | None, posts: list[dict], now: datetime) -> dict:
+    """A vinyl idea (vinyl.py): evergreen, so its score is the format's base plus timing for anniversaries;
+    the reasons are the idea's own."""
+    expires = _dt(alert["expires_at"])
+    expired = bool(expires and now > expires)
+    score = alert["score"]
+    caveats = []
+    if not draft:
+        caveats.append("Drafted on request: a researched story costs a few cents, so it isn't written automatically")
+    elif draft["warnings"]:
+        caveats.append(f"{len(draft['warnings'])} claim(s) to check against the sources")
+    return {"score": score, "band": music._band(score), "coverage": 1.0, "components": [],
+            "reasons": list(alert["facts"].get("why") or []), "caveats": caveats, "post_by": alert["post_by"],
+            "expires_at": alert["expires_at"], "stage": stage(alert, draft, posts, expired, now),
+            "rules_version": 1, "trend_notes": [], "lane": "vinyl"}
+
+
 ACTIVE_STAGES = ("new", "shortlisted", "review", "needs_refresh", "approved", "filmed")
 
 
@@ -297,7 +314,12 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
         shows = a["facts"].get("shows") or ([a["facts"]["show"]] if a["facts"].get("show") else [])
         links = [{"label": f"{s.get('artist') or s.get('event_name')} · {s.get('date')}", "url": s["url"]}
                  for s in shows if s.get("url")]
-        if a["kind"] in config.MUSIC_KINDS:
+        if a["kind"] == config.VINYL_KIND:
+            opp = evaluate_vinyl(a, draft, posts_for.get(a["id"], []), now)
+            recs = [a["facts"]["record"]] if a["facts"].get("record") else a["facts"].get("records") or []
+            links = [{"label": f"{r['artist']} · {r['title']}", "url": r["discogs_url"]} for r in recs
+                     if r.get("discogs_url")]
+        elif a["kind"] in config.MUSIC_KINDS:
             story = None
             if a["kind"] == "music_story":
                 try:
@@ -320,7 +342,8 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             "format": a["facts"].get("format") or a["kind"],  # planned_for/series/format: the Calendar tab
             "your_plays": a["facts"].get("your_plays") or 0,
             "links": links[:6],
-            "pillar": "music" if a["kind"] in config.MUSIC_KINDS else "events",
+            "pillar": "music" if a["kind"] in config.MUSIC_KINDS else "vinyl" if a["kind"] == config.VINYL_KIND
+                      else "events",
             "draft": None if draft is None else {k: draft[k] for k in ("id", "status", "hook", "warnings", "facts_changes")},
             "posts": [{"id": p["id"], "url": p["url"], "posted_at": p["posted_at"]} for p in posts_for.get(a["id"], [])],
             **opp,

@@ -77,3 +77,20 @@ class MusicBrainzClient:
         if len(exact) == 1:
             return exact[0]["id"], False
         return None, len(exact) > 1
+
+    def find_release_group(self, artist: str, title: str) -> dict | None:
+        """The album (release group) by this artist with this title, for its first release date (vinyl.py).
+        Only an exact title match (ignoring case and punctuation) with a strong score; else None.
+        Returns {"id", "title", "first_release_date", "primary_type"}."""
+        def esc(s: str) -> str:
+            return s.replace("\\", "\\\\").replace('"', '\\"')
+        r = self._get("https://musicbrainz.org/ws/2/release-group",
+                      {"query": f'releasegroup:"{esc(title)}" AND artist:"{esc(artist)}"', "limit": 5})
+        from ..search import fold
+        for g in r.json().get("release-groups", []):
+            credit = " ".join(c.get("name", "") + c.get("joinphrase", "") for c in g.get("artist-credit") or [])
+            if (int(g.get("score", 0)) >= MIN_SCORE and fold(g.get("title")) == fold(title)
+                    and fold(artist.split(",")[0]) in fold(credit)):
+                return {"id": g["id"], "title": g["title"], "first_release_date": g.get("first-release-date") or None,
+                        "primary_type": g.get("primary-type")}
+        return None
