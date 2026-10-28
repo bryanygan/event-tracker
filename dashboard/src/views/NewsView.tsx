@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type NewsArticle, type NewsArtistTag, type NewsHealth, type NewsSource } from '../api'
+import { api, STATIC, type NewsArticle, type NewsArtistTag, type NewsHealth, type NewsSource } from '../api'
 import DiscoverView from './DiscoverView'
 import StoriesList from './StoriesList'
 import WatchlistPanel from './WatchlistPanel'
@@ -107,7 +107,7 @@ export default function NewsView({ refreshKey }: { refreshKey: number }) {
         : shown.length > 0 && <ArticleTable articles={shown} showSource />}
       </>}
 
-      <WatchlistPanel refreshKey={refreshKey} />
+      {!STATIC && <WatchlistPanel refreshKey={refreshKey} />}
 
       <h3>Sources</h3>
       <SourcesTable sources={health?.sources ?? []} youtube={health?.youtube} />

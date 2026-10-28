@@ -276,3 +276,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   fill in over runs). Drafts: a story $0.038 (21 claims, all backed), a top-5 list $0.040, Dig deeper $0.18
   (14 web sources). Fixed on the way: Discogs vs Wikipedia album titles (a longer title on Discogs), comma names,
   countdown ranks, rounding in the number check, the model writing the creator's opinions.
+- Public showcase (`feature/showcase`): the user wants a read-only copy on a subdomain of their own site for
+  their resume. Reuses the static build (vinyl, news, stories and calendar now read from snapshot files) with a
+  cleaned export (`tracker/showcase.py`) to its own Pages project, re-uploaded after each pipeline run, plus a
+  "built by me" banner linking the repo. User's choices: auto-update, show drafts, include analytics, add the
+  subdomain themselves. 3 new tests (447). Export from a live-DB copy: no leaks; queue, vinyl and news render.

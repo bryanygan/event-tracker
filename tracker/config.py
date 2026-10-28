@@ -25,6 +25,9 @@ CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 PAGES_PROJECT = os.getenv("PAGES_PROJECT", "").strip()
 PAGES_ALLOW_PUBLIC = os.getenv("PAGES_ALLOW_PUBLIC", "") == "1"  # skip the Access check (not recommended)
+# Public read-only showcase (tracker/showcase.py): its own Pages project, cleaned data, no login. Empty = off.
+SHOWCASE_PROJECT = os.getenv("SHOWCASE_PROJECT", "").strip()
+SHOWCASE_REPO_URL = os.getenv("SHOWCASE_REPO_URL", "https://github.com/bryanygan/event-tracker").strip()
 
 # Web context on idea cards (tracker/context.py). Leave empty to turn lookups off.
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()

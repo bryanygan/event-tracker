@@ -81,7 +81,7 @@ export default function QueueView({ refreshKey, busy, job, summary, onJob, onCha
           artists and how well it’s sourced. It’s a hint for what to make next, not a view prediction.
         </span>
       </div>
-      <TrendNotes onChange={changed} />
+      {!STATIC && <TrendNotes onChange={changed} />}
       {shown.length === 0 && <p className="muted">Nothing here.</p>}
       {shown.map((i) => (
         <QueueCard key={i.alert_id} item={i} alert={alerts.find((a) => a.id === i.alert_id)} busy={busy} job={job}
