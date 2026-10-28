@@ -23,7 +23,7 @@ commented code over abstraction.
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | **Retired 2026-10-22** (Pages project + its Access app deleted, PAGES_PROJECT blank); code kept, off |
-| Public showcase | `tracker/showcase.py` | Branch `feature/showcase` 2026-10-28: public read-only copy for the user's resume (own Pages project, cleaned data, leak scan before upload; custom subdomain added by the user) |
+| Public showcase | `tracker/showcase.py` | Merged and live 2026-10-28: public read-only copy for the user's resume (own Pages project, cleaned data, leak scan before upload; custom subdomain added by the user) |
 | Phone editing | `tracker/remote.py` | Live dashboard through a Cloudflare Tunnel hostname; requests need a verified Access login (off until configured) |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
 | Tests | `tests/` | 96 pytest tests, no network. `tests/factory.py` builds TM-shaped events |
