@@ -198,12 +198,12 @@ GROUP_BY = ("format", "video_style", "pillar", "music_format")
 
 
 def group_name(post: dict, group_by: str) -> str | None:
-    """pillar: events or music (from the format). music_format: the music video format (a story's kind decides
-    it: album announcement, collab...), music posts only."""
+    """pillar: events, music or vinyl (from the format). music_format: the music video format (a story's kind
+    decides it: album announcement, collab...), music posts only."""
     from .music_formats import format_key
     music = (post["format"] or "") in config.MUSIC_KINDS
     if group_by == "pillar":
-        return "music" if music else "events"
+        return "music" if music else "vinyl" if (post["format"] or "").startswith("vinyl_") else "events"
     if group_by == "music_format":
         return format_key({**(post["facts_snapshot"] or {}), "format": post["format"]}) if music else None
     return post[group_by] or "unknown"

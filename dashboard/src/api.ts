@@ -19,7 +19,7 @@ export type ShowFacts = {
 }
 
 // A new draft with your notes: `add` are event ids, `drop` are show keys ("artist|date")
-export type RedraftRequest = { note?: string; add?: string[]; drop?: string[] }
+export type RedraftRequest = { note?: string; add?: string[]; drop?: string[]; deep?: boolean } // deep: vinyl web research
 
 // A show you could add to a list idea, and why the idea left it out
 export type DraftCandidate = { id: string; artist: string; date: string; venue: string; genre: string | null; score: number
@@ -40,6 +40,8 @@ export type Draft = {
   angle: string | null // tracker/angles.py key the draft was written from
   // "New draft with notes" (tracker/redraft.py): your note and the shows you added or left out
   instructions: { note: string; add: string[]; drop: string[]; added?: string[]; left_out?: string[] } | null
+  // Vinyl stories (tracker/vinyl_research.py): what the draft was written from, and each claim's check
+  sources: { sources: VinylSource[]; claims: VinylClaim[]; deep: boolean } | null
   created_at: string
   status: 'pending' | 'approved' | 'filmed' | 'rejected'
   notes: string | null
@@ -48,7 +50,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'experience' | 'things_to_do' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'experience' | 'things_to_do' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists' | 'vinyl'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -252,8 +254,8 @@ export type QueueItem = {
   series: string | null // your series, else the format's default
   series_set: string | null // the series you typed (null = the default)
   format: string
-  lane: 'lane' | 'other' | 'sports' | 'music' | 'local'
-  pillar: 'events' | 'music' // music: a music story you sent, or a music roundup (tracker/music_formats.py)
+  lane: 'lane' | 'other' | 'sports' | 'music' | 'local' | 'vinyl'
+  pillar: 'events' | 'music' | 'vinyl' // music: a story you sent or a roundup (music_formats.py); vinyl: vinyl.py
 }
 
 // Editorial calendar (tracker/planner.py)
@@ -425,6 +427,22 @@ export type NewsHealth = {
   youtube?: { enabled: boolean; units_today: number; daily_cap: number }
 }
 
+// Vinyl (tracker/vinyl.py): your Discogs collection and its video ideas
+export type VinylSource = { n: number; title: string; url: string; kind: string }
+export type VinylClaim = { text: string; sources: number[]; verdict: 'supported' | 'partly' | 'unsupported'; note: string }
+export type VinylRecord = {
+  instance_id: number; release_id: number; artist: string; title: string; pressing: string; year: number | null
+  album_first_released: string | null; cover_url: string | null; date_added: string | null
+  have: number | null; want: number | null; rating_avg: number | null; rating_count: number | null
+  suggested_price: number | null; price_condition: string | null; lowest_price: number | null
+  unique_score: number | null; unique_why: string[]; styles: string[]; url: string
+}
+export type VinylOverview = {
+  enabled: boolean; synced_at: string | null; pending_lookups: number
+  value: { minimum: string; median: string; maximum: string } | null
+  records: VinylRecord[]; formats: Record<string, string>; manual_formats: string[]
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
   if (!res.ok) {
@@ -451,8 +469,12 @@ const readOnly = () => Promise.reject(new Error('Read-only snapshot: make change
 const staticApi = {
   summary: () => snapshot<Summary>('summary'),
   job: () => Promise.resolve<Job>({ name: null, started: null, finished: null, error: null, running: false }),
-  alerts: (status: 'open' | 'dismissed' | 'all') =>
-    snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all)),
+  alerts: (status: 'open' | 'dismissed' | 'all', kind = '') =>
+    snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all.filter((a) => (a.kind === 'vinyl') === (kind === 'vinyl')))),
+  vinyl: () => Promise.resolve<VinylOverview>({ enabled: false, synced_at: null, pending_lookups: 0, value: null, records: [],
+                                                formats: {}, manual_formats: [] }),
+  vinylSync: readOnly,
+  vinylIdea: readOnly,
   setAlertStatus: readOnly,
   regenerate: readOnly,
   candidates: () => Promise.resolve<DraftCandidate[]>([]),
@@ -513,7 +535,11 @@ const staticApi = {
 const liveApi = {
   summary: () => req<Summary>('/api/summary'),
   job: () => req<Job>('/api/job'),
-  alerts: (status: 'open' | 'dismissed' | 'all') => req<Alert[]>(`/api/alerts?status=${status}`),
+  alerts: (status: 'open' | 'dismissed' | 'all', kind = '') => req<Alert[]>(`/api/alerts?status=${status}${kind ? `&kind=${kind}` : ''}`),
+  vinyl: () => req<VinylOverview>('/api/vinyl'),
+  vinylSync: () => req<Job>('/api/vinyl/sync', { method: 'POST' }),
+  vinylIdea: (instanceId: number, format: string) =>
+    req<{ alert_id: number }>(`/api/vinyl/${instanceId}/idea`, { method: 'POST', body: JSON.stringify({ format }) }),
   setAlertStatus: (id: number, status: Alert['status']) =>
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   regenerate: (id: number, angle?: string, notes?: RedraftRequest) =>

@@ -5,6 +5,7 @@ import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 import { RedraftForm } from './RedraftForm'
 import { SlidesOverlay } from './SlidesOverlay'
+import { VinylFacts, VinylSources, VINYL_LABELS, VINYL_STORY_FORMATS } from './VinylView'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_tour: 'Just announced',
@@ -20,6 +21,7 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   new_music_friday: 'New Music Friday',
   upcoming_albums: 'Upcoming albums',
   emerging_artists: 'Artists to watch',
+  vinyl: 'Vinyl',
 }
 // Formats whose script comes from Python (tracker/templates.py, tracker/music_formats.py): an angle drafts instantly
 const TEMPLATED = ['presale', 'status_change', 'team_week', 'big_game', 'experience', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
@@ -67,7 +69,7 @@ export default function AlertsView({ refreshKey, busy, job, onJob, onChange }: P
         )}
         <select value={kind} onChange={(e) => setKind(e.target.value as Alert['kind'] | '')}>
           <option value="">All types</option>
-          {Object.entries(KIND_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(KIND_LABEL).filter(([k]) => k !== 'vinyl').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <span className="muted small">{shown.length} alerts</span>
       </div>
@@ -219,6 +221,12 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
     try { await onRegenerate(undefined, notes); setNotesOpen(false) } finally { setSending(false) }
   }
   const [slidesOpen, setSlidesOpen] = useState(false)
+  const isVinyl = alert.kind === 'vinyl'
+  const story = isVinyl && VINYL_STORY_FORMATS.includes(String(alert.facts.format))
+  const digDeeper = async () => {
+    setSending(true); setStartError(null); setDone(null)
+    try { await onRegenerate(undefined, { deep: true }) } catch (e) { setStartError(String(e)) } finally { setSending(false) }
+  }
   const shows: ShowFacts[] = alert.facts.shows ?? (alert.facts.show ? [alert.facts.show] : [])
   // Roundups: the "my N picks" cut (best by notability), starred in the facts table
   const picks = ((alert.facts.picks as ShowFacts[] | undefined) ?? []).map((s) => `${s.artist}|${s.date}`)
@@ -230,7 +238,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
   return (
     <section className={`card kind-${alert.kind}`}>
       <div className="card-head">
-        <span className="pill">{KIND_LABEL[alert.kind]}</span>
+        <span className="pill">{isVinyl ? `💿 ${VINYL_LABELS[String(alert.facts.format)] ?? KIND_LABEL.vinyl}` : KIND_LABEL[alert.kind]}</span>
         <h2>{alert.title}</h2>
         {Number(alert.facts.your_plays) > 0 && (
           <span className="pill new" title="your plays in the last 2 years">🎧 {String(alert.facts.your_plays)} plays</span>
@@ -244,7 +252,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       </div>
       {alert.updated_at && <p className="muted small">Facts refreshed {fmtWhen(alert.updated_at)} (new shows, cancellations or sale changes).</p>}
 
-      <details className="facts">
+      {isVinyl ? <VinylFacts facts={alert.facts} open={!latest} /> : <details className="facts">
         <summary>Facts ({music
           ? alert.kind === 'music_story' ? `${sources.length} source${sources.length === 1 ? '' : 's'}` : `${items.length} listed`
           : `${shows.length} show${shows.length === 1 ? '' : 's'}`}) — the only things the draft is allowed to say</summary>
@@ -266,7 +274,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
           </tbody>
         </table>
         <pre>{JSON.stringify(Object.fromEntries(Object.entries(alert.facts).filter(([k]) => !['shows', 'show', 'your_plays', 'picks'].includes(k))), null, 2)}</pre>
-      </details>
+      </details>}
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
       {alert.music_news && alert.music_news.length > 0 && <MusicNewsList items={alert.music_news} />}
@@ -312,13 +320,17 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
       )}
       <div className="actions">
         {!STATIC && <button onClick={() => draft()} disabled={busy || sending}>
-          {mine || sending ? 'Drafting…' : latest ? 'New draft' : 'Write draft'}
+          {mine || sending ? 'Drafting…' : latest ? 'New draft' : isVinyl ? 'Research & write draft' : 'Write draft'}
+        </button>}
+        {!STATIC && story && <button className="ghost" onClick={digDeeper} disabled={busy || sending}
+                                     title="adds a web search for interviews and articles (~10-20 cents), then writes a new draft">
+          Dig deeper (web search)
         </button>}
         {!STATIC && !notesOpen && <button className="ghost" onClick={() => setNotesOpen(true)} disabled={busy || sending}
                                           title="tell the AI what to include, leave out or emphasize">
           New draft with notes…
         </button>}
-        <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>
+        {!isVinyl && <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>}
         {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}
@@ -393,6 +405,7 @@ function DraftView({ draft, alertId, onChange }: { draft: Draft; alertId: number
       )}
       {block('Hook', 'hook')}
       {block('Script (voiceover)', 'script', 6)}
+      {draft.sources && <VinylSources record={draft.sources} />}
       <div className="field">
         <div className="field-head">
           <label>On-screen text (from data)</label>

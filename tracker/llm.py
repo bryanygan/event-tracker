@@ -467,15 +467,16 @@ def claude_usage(conn, now: datetime | None = None) -> dict:
             "cap": config.CLAUDE_DAILY_CAP, "month_calls": row["n"], "month_cost_usd": round(row["cost"], 4)}
 
 
-def _claude_chat(conn, model: str, prompt: str, schema: dict, system: str = SYSTEM_PROMPT) -> dict:
+def _claude_chat(conn, model: str, prompt: str, schema: dict, system: str = SYSTEM_PROMPT,
+                 max_tokens: int = 2000, timeout: float = 60.0) -> dict:
     """One Claude call with the reply constrained to the draft schema. Logged (tokens, cost) even on failure."""
     import anthropic
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=60.0)
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=timeout)
     usage, error = None, None
     try:
         resp = client.messages.create(
             model=model,
-            max_tokens=2000,
+            max_tokens=max_tokens,
             system=system,
             output_config={"effort": config.CLAUDE_EFFORT, "format": {"type": "json_schema",
                                                         "schema": {**schema, "additionalProperties": False}}},
