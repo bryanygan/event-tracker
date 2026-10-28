@@ -256,3 +256,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   listing had been filled with Deezer's genre until a Ticketmaster name lookup filed it as Pop (same genre
   family, so Deezer doesn't override). Also fixed `test_roundups_genres` hard-coded dates that expired 2026-10-25.
   6 new tests (432).
+- 2026-10-28 `feature/event-search`: smarter Events tab search (`tracker/search.py`, copied in `api.ts` for the
+  phone snapshot). Every word must match one of name/headliner/support/venue/genre; case, accents, punctuation
+  and spacing are ignored ("drstatic", "renee", "nova union"); "sixers"/"phils" map to Ticketmaster's team names.
+  A search covers all upcoming dates (the date filter shows "All upcoming dates" while searching); "/" focuses
+  the box, Esc clears it. "Add a show" in New draft with notes uses the same matcher. 2 new tests (434).

@@ -260,3 +260,5 @@ input.grow { flex: 1; }
 .redraft-search { display: flex; gap: 8px; margin-top: 6px; }
 .redraft-search input { flex: 1; min-width: 0; }
 .your-notes { margin-bottom: 8px; }
+.toolbar input.event-search { min-width: 280px; }
+@media (max-width: 640px) { .toolbar input.event-search { min-width: 0; width: 100%; } }

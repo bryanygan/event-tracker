@@ -16,7 +16,7 @@ import re
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, search
 from .detectors import event_facts, fmt_date
 from .scoring import is_game, is_music, upcoming_events
 
@@ -233,7 +233,7 @@ def candidates(conn, alert: dict, q: str | None = None, today: date | None = Non
         if e["status"] in ("cancelled", "postponed") or show_key(event_facts(e)) in have:
             continue
         if q:
-            if q.casefold() not in f"{e['headliner']} {e['name']} {e['venue_name']}".casefold():
+            if not search.matches(e, q):
                 continue
         elif not window or not (window[0] <= e["local_date"] <= window[1]):
             continue

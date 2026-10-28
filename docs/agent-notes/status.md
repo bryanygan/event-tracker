@@ -93,6 +93,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | Claude drafts | Live 2026-10-22 (`c90ed9f`) |
 | Cleanup | Live 2026-10-22 (`d292940`, `d58a4c1`): Deezer genre check, 20 Claude drafts/run, `--redraft-local` (23 alerts redrafted), genre refresh in live alerts |
 | P1-13 editorial calendar | Built 2026-10-22 on `feature/calendar`, NOT merged (user said wait): `tracker/planner.py`, `/api/calendar`, a separate last Calendar tab, no warnings |
+| Event search | Branch `feature/event-search` 2026-10-28: every word must match, forgiving about accents/punctuation, searches all upcoming dates (`search.py`) |
 | Drafts with notes | Merged and live 2026-10-26: "New draft with notes…" (note to the AI, add/leave out shows with reasons), "Removed" lines say why (`redraft.py`) |
 | Health + low-memory guard | Merged and live 2026-10-24: Sources table on Runs, banner for any failing source or stopped run, Ollama won't start under 3.5 GB free |
 | P2-14 | Merged and live 2026-10-24 (first 6:30/16:30 run baselines the new team and comedy feeds): more teams, comedy, Center City District + waterfront, events you add by hand, things-to-do roundup. Survey: `experience-sources.md` |

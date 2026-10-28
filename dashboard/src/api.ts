@@ -190,6 +190,18 @@ export type EventRow = {
 
 export type EventKind = '' | 'music' | 'sports' | 'comedy' | 'local'
 
+// Event search, a copy of tracker/search.py: case, accents, punctuation and word order don't matter,
+// and every word has to match one of the fields
+const SEARCH_FIELDS = ['name', 'headliner', 'support', 'venue_name', 'genre', 'subgenre'] as const
+const NICKNAMES: Record<string, string> = { sixers: '76ers', phils: 'phillies' }
+const fold = (s: string | null | undefined) =>
+  (s ?? '').replace(/&/g, ' and ').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+export function matchesSearch(e: EventRow, q: string): boolean {
+  const haystack = SEARCH_FIELDS.map((f) => fold(e[f])).join('|')
+  return q.replace(/&/g, ' and ').split(/\s+/).map(fold).filter(Boolean)
+    .map((w) => NICKNAMES[w] ?? w).every((w) => haystack.includes(w))
+}
+
 // Events you add yourself (tracker/manual_events.py): every fact is yours, nothing is looked up
 export type ManualEvent = {
   id: number
@@ -456,9 +468,8 @@ const staticApi = {
   events: ({ q = '', genre = '', days = 60 }: { q?: string; genre?: string; kind?: EventKind; days?: number }) =>
     snapshot<EventRow[]>('events').then((all) => {
       const end = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10)
-      const ql = q.toLowerCase()
-      return all.filter((e) => e.local_date <= end && (!genre || e.genre === genre) &&
-        (!ql || [e.name, e.headliner, e.venue_name].some((s) => s?.toLowerCase().includes(ql))))
+      return all.filter((e) => (!genre || e.genre === genre) &&
+        (q.trim() ? matchesSearch(e, q) : e.local_date <= end))
     }),
   manualEvents: () => Promise.resolve({ events: [] as ManualEvent[], categories: [] as string[] }),
   createManualEvent: readOnly,
