@@ -184,7 +184,8 @@ const IMAGE_TOP = 200
 const IMAGE_HEIGHTS = [820, 640, 480] // the photo gives way before long text gets tiny
 const imageBottom = (h: number) => IMAGE_TOP + h + 60
 
-function drawImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, credit: string, h: number) {
+// Photos fill the frame (cropped); posters are drawn whole over a blurred copy, so no text on them is cut
+function drawImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, credit: string, h: number, poster: boolean) {
   const x = SAFE.left, y = IMAGE_TOP, w = W - 2 * SAFE.left
   const scale = Math.max(w / img.width, h / img.height)
   const sw = w / scale, sh = h / scale
@@ -192,13 +193,20 @@ function drawImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, credit:
   ctx.beginPath()
   ctx.roundRect(x, y, w, h, 36)
   ctx.clip()
+  if (poster) ctx.filter = 'blur(28px) brightness(0.55)'
   ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h)
+  if (poster) {
+    ctx.filter = 'none'
+    const k = Math.min(w / img.width, h / img.height)
+    const dw = img.width * k, dh = img.height * k
+    ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh)
+  }
   ctx.restore()
   font(ctx, 26, 600)
   ctx.fillStyle = 'rgba(255,255,255,0.7)'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  const line = fit(ctx, `Photo: ${credit}`, w, 1, 26, 20, 600).lines[0]
+  const line = fit(ctx, `${poster ? 'Poster' : 'Photo'}: ${credit}`, w, 1, 26, 20, 600).lines[0]
   ctx.fillText(line, x, y + h + 14)
 }
 
@@ -247,7 +255,7 @@ export async function renderSlide(canvas: HTMLCanvasElement, m: SlideManifest, s
       if (blocks.reduce((s, b) => s + b.h, 0) <= SAFE.bottom - top && !blocks.some((b) => b.cut)) break
     }
     if (img && slide.image && (k >= 0.8 || imgH === IMAGE_HEIGHTS[IMAGE_HEIGHTS.length - 1])) {
-      drawImage(ctx, img, slide.image.credit, imgH)
+      drawImage(ctx, img, slide.image.credit, imgH, slide.image.rights === 'promo')
       break
     }
   }

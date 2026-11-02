@@ -248,3 +248,17 @@
 - `leaks()` then refuses the upload if any `.env` value (except `_PUBLIC_SETTINGS`), the phone-editing host or
   its domain, the repo's local path, "plays.db" or "N plays" appears in the JSON. Its messages never echo a secret.
 - Watchlist and trend notes are hidden in static mode (`!STATIC`); Discover stays empty there.
+
+## Show posters (posters.py, 2026-11-02)
+
+- Ticketmaster images are mostly artist press photos (`/dam/a/`); `/dam/e/` is made for the event; `/dam/c/` is a
+  generic category picture. The real Philly posters come from the venue calendars (Tixr, DICE, the venues' own
+  sites). When a venue show duplicates a Ticketmaster one, `drop_duplicates` keeps the venue image on the TM event
+  as `venue_image_url` (40 TM shows on the first run).
+- A poster is never a fact: it can show an old date, venue or lineup (e.g. a show relocated after the poster).
+  `warnings()` flags date changes, rescheduled/cancelled status, "relocated" in the name, and venue/bill changes
+  since the poster was saved.
+- Slide images with rights "promo" are drawn whole (contain, over a blurred copy) and credited "Poster: <venue>".
+  Showcase strips them (`_without_promo`) and every `image_url`.
+- Coverage on the first real run: 274 upcoming shows have a venue poster, but only 14 of 85 open ideas, because
+  most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those (not built).

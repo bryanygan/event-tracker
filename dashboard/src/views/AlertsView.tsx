@@ -5,6 +5,7 @@ import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 import { RedraftForm } from './RedraftForm'
 import { SlidesOverlay } from './SlidesOverlay'
+import PostersPanel from './PostersPanel'
 import { VinylFacts, VinylSources, VINYL_LABELS, VINYL_STORY_FORMATS } from './VinylView'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
@@ -278,6 +279,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
       {alert.music_news && alert.music_news.length > 0 && <MusicNewsList items={alert.music_news} />}
+      {!STATIC && !isVinyl && !music && shows.length > 0 && <PostersPanel alertId={alert.id} />}
 
       {alert.angles.length > 0 && (
         <details className="angles" open={!latest && !NARROW}>

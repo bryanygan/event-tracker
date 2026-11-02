@@ -264,6 +264,19 @@ CREATE TABLE IF NOT EXISTS slide_decks (
     updated_at TEXT NOT NULL
 );
 
+-- Show posters saved for drafts and slides (tracker/posters.py), one per event; files in data/posters/
+CREATE TABLE IF NOT EXISTS posters (
+    event_id TEXT PRIMARY KEY,
+    image_url TEXT NOT NULL,        -- the event's image when saved; a new one is downloaded again
+    kind TEXT NOT NULL,             -- poster (venue's own), event_image (Ticketmaster, made for the event)
+    file TEXT,                      -- name under data/posters/ (NULL when the download failed)
+    content_type TEXT,
+    bytes INTEGER,
+    fetched_at TEXT NOT NULL,
+    error TEXT,
+    seen TEXT                       -- JSON: the listing when saved (date, time, venue, name), for warnings
+);
+
 -- Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py), for the record.
 CREATE TABLE IF NOT EXISTS remote_edits (
     id INTEGER PRIMARY KEY,
@@ -542,7 +555,8 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 # existing database, so add any that are missing. (Old unused columns are left in place.)
 _ADDED_COLUMNS = {
     # P2-14: last day of a multi-day event (a market open for six weeks), and which source listed it
-    "events": {"end_date": "TEXT", "source": "TEXT"},
+    "events": {"end_date": "TEXT", "source": "TEXT",
+               "venue_image_url": "TEXT"},  # the venue's own poster for a Ticketmaster show (tracker/posters.py)
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",

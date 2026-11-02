@@ -115,6 +115,9 @@ def _date_from_weekday(label: str, today: date) -> date | None:
     return None
 
 
+_IMG = re.compile(r'<img[^>]+?(?:data-src|src)="(https://[^"]+\.(?:jpe?g|png|webp)[^"]*)"', re.I)
+
+
 def parse_rhp(page: str, today: date | None = None) -> list[dict]:
     """The 'rhp' WordPress events plugin (Johnny Brenda's, Kung Fu Necktie)."""
     today = today or date.today()
@@ -133,6 +136,7 @@ def parse_rhp(page: str, today: date | None = None) -> list[dict]:
         price = re.search(r'rhp-event__cost-text--list[^>]*>\s*\$?([\d.]+)', block)
         link = re.search(r'href="(https://www\.etix\.com/ticket/[^"]+)"', block)
         cta = re.search(r'class="rhp-event-cta ([\w-]+)', block)
+        image = _IMG.search(block)  # the show's poster (the venue's own upload)
         name = _text(title.group(1))
         lineup = [p.strip() for p in re.split(r"\s+[~/]\s+", name) if p.strip()]  # "A ~ B ~ C" bills
         items.append({
@@ -142,6 +146,7 @@ def parse_rhp(page: str, today: date | None = None) -> list[dict]:
             "offers": {"url": link and link.group(1), "price": price and price.group(1),
                        "availability": "SoldOut" if cta and "sold" in cta.group(1) else "InStock"},
             "performer": [{"name": p} for p in lineup] if len(lineup) > 1 else "Organization",
+            "image": image and html.unescape(image.group(1)),
         })
     return items
 
@@ -159,6 +164,7 @@ def parse_philamoca(page: str, today: date | None = None) -> list[dict]:
         show = re.search(r'Show<span>:</span></span>\s*<time[^>]*datetime="(\d\d:\d\d)"', block) or \
             re.search(r'event__details-value" datetime="(\d\d:\d\d)"', block)
         price = re.search(r'Tickets<span>:</span></span>\s*<span class="event__detail-value">\s*\$?([\d.]+)', block)
+        image = _IMG.search(block)
         items.append({
             "@type": "Event",
             "name": _text(title.group(1)),
@@ -169,6 +175,7 @@ def parse_philamoca(page: str, today: date | None = None) -> list[dict]:
                        "availability": "SoldOut" if "sold" in state else "InStock"},
             "eventStatus": "EventCancelled" if "cancel" in state else None,
             "performer": "Organization",
+            "image": image and html.unescape(image.group(1)),
         })
     return items
 
@@ -332,5 +339,11 @@ def drop_duplicates(calendar_events: list[dict], tm_events: list[dict]) -> tuple
     by_date: dict[str, list[dict]] = {}
     for t in tm_events:
         by_date.setdefault(t["local_date"], []).append(t)
-    kept = [c for c in calendar_events if not any(same_show(c, t) for t in by_date.get(c["local_date"], []))]
+    kept = []
+    for c in calendar_events:
+        twin = next((t for t in by_date.get(c["local_date"], []) if same_show(c, t)), None)
+        if twin is None:
+            kept.append(c)
+        elif c.get("image_url"):  # Ticketmaster's copy wins, but the venue's image is usually the Philly poster
+            twin["venue_image_url"] = c["image_url"]
     return kept, len(calendar_events) - len(kept)

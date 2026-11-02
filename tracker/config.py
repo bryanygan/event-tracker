@@ -463,6 +463,7 @@ VINYL_KIND = "vinyl"
 VINYL_COLLECTION_REFRESH_HOURS = 20   # the collection list itself (2 calls for ~200 records)
 VINYL_DETAILS_REFRESH_DAYS = 30       # have/want counts, rating, pressing notes, credits
 VINYL_PRICES_REFRESH_DAYS = 7         # Discogs' suggested prices
+POSTERS_PER_RUN = 60                  # show posters saved after a run (tracker/posters.py); the rest on open
 VINYL_MAX_LOOKUPS_PER_RUN = 120       # Discogs calls per sync after the collection list (~2 minutes)
 VINYL_LIST_SIZE = 5                   # records in a "top 5" idea
 VINYL_STORY_REPEAT_DAYS = 90          # a record isn't picked for another story idea for this long

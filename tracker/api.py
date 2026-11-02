@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
-               opportunities, planner, posts, publish, redraft, remote, scoring, search, slides, trends,
+               opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, slides, trends,
                vinyl, watchlist)
 from .scoring import upcoming_events
 
@@ -253,6 +253,23 @@ def calendar(start: str | None = None, c=Depends(get_db)):
     except ValueError:
         raise HTTPException(400, "start must be YYYY-MM-DD")
     return planner.calendar(c, start=first)
+
+
+@app.get("/api/alerts/{alert_id}/posters")
+def alert_posters(alert_id: int, c=Depends(get_db)):
+    """The idea's show posters (tracker/posters.py): labelled, saved locally, with why one may be out of date."""
+    try:
+        return posters.for_alert(c, alert_id)
+    except KeyError:
+        raise HTTPException(404)
+
+
+@app.get("/api/posters/{event_id}")
+def poster_image(event_id: str, c=Depends(get_db)):
+    found = posters.file_for(c, event_id)
+    if not found:
+        raise HTTPException(404, "No saved poster for this show")
+    return FileResponse(found[0], media_type=found[1], headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/api/alerts/{alert_id}/slides")

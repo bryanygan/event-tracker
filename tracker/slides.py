@@ -10,9 +10,9 @@ what you saved and the dashboard warns; "Rebuild" builds a new base from the cur
 edit only where the default it replaced is unchanged. An edit on a date that moved is dropped and reported,
 never silently carried over.
 
-Rights: no artist photos, album art or music are fetched or suggested. Images are opt-in uploads (data:
-URLs, so nothing is fetched from the web and the canvas stays exportable), each with a required credit and
-a rights basis stored in the manifest.
+Rights: no artist photos, album art or music are fetched or suggested. Images are opt-in (data: URLs, so
+the canvas stays exportable): your uploads, or a show's poster you pick (tracker/posters.py, rights "promo",
+drawn whole instead of cropped). Each has a required credit and a rights basis stored in the manifest.
 """
 from __future__ import annotations
 
@@ -35,6 +35,7 @@ RIGHTS = {
     "licensed": "Licensed (I have a license)",
     "permission": "Used with the owner's permission",
     "open": "Public domain / Creative Commons (credited)",
+    "promo": "Show poster from the venue or artist, credited (promo use, not a license)",
 }
 _DATA_URL = re.compile(r"data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}")
 

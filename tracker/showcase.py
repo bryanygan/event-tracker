@@ -30,7 +30,8 @@ STATUS_FILE = config.DATA_DIR / "showcase_status.json"
 
 # Keys dropped wherever they appear: listening history, private notes, costs
 PRIVATE_KEYS = {"my_plays", "your_plays", "plays", "seen_live", "my_bucket", "tier", "notes", "cost_usd",
-                "month_cost_usd", "drafting", "publish", "edit_url", "error", "metrics_due"}
+                "month_cost_usd", "drafting", "publish", "edit_url", "error", "metrics_due",
+                "image_url"}  # show posters and artist photos belong to their owners: not on the public site
 # Play counts written into reason lines and titles ("in your rotation (412 plays)", ", 88 plays", "🎧 ")
 _SCRUB = [(re.compile(r"\s*\(\d[\d,]* plays?\)"), ""), (re.compile(r",\s*\d[\d,]* plays?\b"), ""),
           (re.compile(r"🎧\s?\d*"), "")]
@@ -94,6 +95,15 @@ def leaks(site_dir: Path) -> list[str]:
     return problems
 
 
+def _without_promo(decks: dict) -> dict:
+    """Slide decks minus the show posters you put on slides (rights "promo"): fine on TikTok, not here."""
+    for d in decks.values():
+        for s in d["manifest"]["slides"]:
+            if (s.get("image") or {}).get("rights") == "promo":
+                del s["image"]
+    return decks
+
+
 def _runs(conn) -> list[dict]:
     return [{k: r[k] for k in ("id", "started_at", "finished_at", "source", "events_fetched", "api_calls", "ok")}
             for r in api.runs(limit=20, c=conn)]
@@ -135,7 +145,7 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
                                     for r in news_sources["checks"]]},
         "stories": api.news_stories(days=14, c=conn),
     }
-    files["slides"] = slides.export_all(conn, [a["id"] for a in alerts])
+    files["slides"] = _without_promo(slides.export_all(conn, [a["id"] for a in alerts]))
     for name, payload in files.items():
         (data / f"{name}.json").write_text(json.dumps(clean(payload), ensure_ascii=False), encoding="utf-8")
     (out_dir / "_headers").write_text(publish.HEADERS_FILE, encoding="utf-8")

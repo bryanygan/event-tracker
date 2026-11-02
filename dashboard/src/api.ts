@@ -79,6 +79,12 @@ export type WebContext = {
 // 9:16 slides (tracker/slides.py): words built from facts, your edits on top; drawn by slides/render.ts
 export type SlideKind = 'title' | 'show' | 'sales' | 'cta'
 export type SlideImage = { data_url: string; credit: string; rights: string }
+// A show's image from its listing (tracker/posters.py); `saved` ones are served from /api/posters/<event_id>
+export type Poster = {
+  event_id: string; name: string; venue: string | null; date: string
+  kind: 'poster' | 'event_image' | 'artist_photo'; label: string; source_url: string
+  saved: boolean; error: string | null; credit: string | null; warnings: string[]
+}
 export type Slide = {
   id: string; kind: SlideKind; fields: Record<string, string>
   hidden?: boolean; edited?: string[]; image?: SlideImage
@@ -488,6 +494,7 @@ const staticApi = {
     return all[id]
   }),
   saveSlides: readOnly,
+  posters: (_id: number) => Promise.resolve<Poster[]>([]), // posters stay off snapshots (they're the venues')
   rebuildSlides: readOnly,
   resetSlides: readOnly,
   updateDraft: readOnly,
@@ -557,6 +564,7 @@ const liveApi = {
   candidates: (id: number, q?: string) =>
     req<DraftCandidate[]>(`/api/alerts/${id}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   slides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides`),
+  posters: (id: number) => req<Poster[]>(`/api/alerts/${id}/posters`),
   saveSlides: (id: number, overrides: SlideDeck['overrides']) =>
     req<SlideDeck>(`/api/alerts/${id}/slides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
   rebuildSlides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides/rebuild`, { method: 'POST' }),

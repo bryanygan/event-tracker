@@ -281,3 +281,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   cleaned export (`tracker/showcase.py`) to its own Pages project, re-uploaded after each pipeline run, plus a
   "built by me" banner linking the repo. User's choices: auto-update, show drafts, include analytics, add the
   subdomain themselves. 3 new tests (447). Export from a live-DB copy: no leaks; queue, vinyl and news render.
+
+## 2026-11-02
+
+- Show posters (`feature/posters`): researched sources (venue Instagram via the official API, Mato, Bandsintown,
+  Songkick, poster archives); the posters already in our data are the cheap win. Venue parsers for Johnny
+  Brenda's, Kung Fu Necktie and PhilaMOCA now read each show's image; Ticketmaster duplicates keep the venue's.
+  New `tracker/posters.py` (label, save once, warnings), `/api/alerts/{id}/posters`, `/api/posters/{event_id}`,
+  Posters panel on event idea cards, "Use a show poster" in the slide editor (rights "promo", drawn whole).
+  Real check on a DB copy: 21 posters saved, none failed; 40 TM shows got a venue poster. 9 new tests (455).

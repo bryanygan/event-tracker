@@ -1,8 +1,9 @@
 // Full-screen 9:16 slide viewer/editor for one idea. Words come from the facts (tracker/slides.py);
 // edits are text only, plus optional images you have the rights to. Read-only in the static snapshot.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, STATIC, type Slide, type SlideDeck, type SlideImage, type SlideManifest, type SlideOverride } from '../api'
+import { api, STATIC, type Poster, type Slide, type SlideDeck, type SlideImage, type SlideManifest, type SlideOverride } from '../api'
 import { renderSlide, toBlob } from '../slides/render'
+import { posterSrc } from './PostersPanel'
 
 type Overrides = SlideDeck['overrides']
 
@@ -49,8 +50,8 @@ function tidy(base: SlideManifest, o: Overrides): Overrides {
   return out
 }
 
-// Shrink an uploaded photo to at most 1080 px wide (JPEG) so it stays well under the server's size cap
-async function readImage(file: File): Promise<string> {
+// Shrink an uploaded photo (or a saved poster) to at most 1080 px wide (JPEG) so it stays under the server's size cap
+async function readImage(file: Blob): Promise<string> {
   const url = URL.createObjectURL(file)
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -292,7 +293,7 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
                 </div>
               ))}
               {(slide.kind === 'title' || slide.kind === 'show') && (
-                <ImageEditor image={slide.image} rights={deck!.rights}
+                <ImageEditor image={slide.image} rights={deck!.rights} alertId={alertId}
                              onChange={(img) => edit(slide.id, 'image', img)} onError={setError} />
               )}
               <details className="slide-deck-opts">
@@ -315,7 +316,7 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
             </p>
           )}
           <p className="muted small">
-            No artist photos or music are added for you: only images you have the rights to. Dates and venues come from the
+            No artist photos or music are added for you: only images you pick, credited. Dates and venues come from the
             facts; if you change one by hand, double-check it before posting.
           </p>
         </div>
@@ -324,13 +325,23 @@ export function SlidesOverlay({ alertId, title, onClose }: { alertId: number; ti
   )
 }
 
-function ImageEditor({ image, rights, onChange, onError }: {
-  image?: SlideImage; rights: Record<string, string>
+function ImageEditor({ image, rights, alertId, onChange, onError }: {
+  image?: SlideImage; rights: Record<string, string>; alertId: number
   onChange: (img: SlideImage | null) => void; onError: (msg: string) => void
 }) {
   const [data, setData] = useState<string | null>(null)
   const [credit, setCredit] = useState('')
   const [basis, setBasis] = useState('')
+  const [posters, setPosters] = useState<Poster[] | null>(null)
+  const loadPosters = () => { if (!posters) api.posters(alertId).then(setPosters).catch((e) => onError(String(e.message ?? e))) }
+  const usePoster = async (p: Poster) => {
+    try {
+      const r = await fetch(posterSrc(p.event_id))
+      if (!r.ok) throw new Error('That poster is not saved yet')
+      onChange({ data_url: await readImage(await r.blob()), credit: p.credit ?? p.venue ?? 'venue', rights: 'promo' })
+    } catch (e) { onError(String((e as Error).message)) }
+  }
+  const usable = posters?.filter((p) => p.saved) ?? []
 
   if (image) {
     return (
@@ -344,6 +355,20 @@ function ImageEditor({ image, rights, onChange, onError }: {
     )
   }
   return (
+    <>
+    <details className="slide-image" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) loadPosters() }}>
+      <summary>Use a show poster (optional)</summary>
+      <p className="muted small">Shown whole, credited to the venue. Check it matches the facts: posters are made weeks ahead.</p>
+      {posters && usable.length === 0 && <p className="muted small">No saved posters for these shows.</p>}
+      <div className="poster-grid">
+        {usable.map((p) => (
+          <button key={p.event_id} className="poster-pick" onClick={() => usePoster(p)} title={p.warnings.join('\n') || `Use the ${p.label.toLowerCase()}`}>
+            <img src={posterSrc(p.event_id)} alt="" loading="lazy" />
+            <span className="small">{p.name}{p.warnings.length ? ' ⚠' : ''}</span>
+          </button>
+        ))}
+      </div>
+    </details>
     <details className="slide-image">
       <summary>Add your own image (optional)</summary>
       <p className="muted small">Only photos you took or have permission or a license to use. A credit is required.</p>
@@ -369,5 +394,6 @@ function ImageEditor({ image, rights, onChange, onError }: {
         Use this image
       </button>
     </details>
+    </>
   )
 }

@@ -124,12 +124,14 @@ def test_replaying_cache_never_touches_venue_sites(tmp_path, monkeypatch, two_ve
 # Trimmed copies of the real markup (2026-10-21).
 RHP_BLOCK = """<div class="col-12 eventWrapper rhpSingleEvent py-4 px-0 rhp-event__single-event--list">
 <div class="mb-0 eventMonth singleEventDate text-uppercase ">Thu, Oct 22</div>
+<img class="eventListImage" src="https://kfn.example/wp-content/uploads/2026/10/crucial-device.jpeg" alt="">
 <h2 class="font1by25 rhp-event__title--list lineHeight12"><a href="#">Crucial Device ~ Indigo Ranch ~ David E. Williams</a></h2>
 <span class="font0by75 rhp-event__time-text--list"> Doors: 6 pm // Show: 7 pm </span>
 <span class="rhp-event__cost-text--list"> $15.26 </span>
 <span id="ctaspan-1" class="rhp-event-cta on-sale"><a href="https://www.etix.com/ticket/p/73209820/x?partner_id=100">Buy</a></span>
 </div>"""
 PHILAMOCA_BLOCK = """<a class="event event--tickets-available" href="https://www.etix.com/ticket/p/81103812/">
+<img src="https://pm.example/wp-content/uploads/2026/09/paul-collins-768x960.jpg?v=1&amp;x=2" alt="">
 <div class="event__info"><h3 class="event__heading"><span class="event__title">Paul Collins&#8217; Beat</span></h3>
 <ul class="event__details"><li class="event__detail event__detail--tickets"><div>
 <span class="event__detail-label">Tickets<span>:</span></span> <span class="event__detail-value">$25</span></div></li>
@@ -159,6 +161,7 @@ def test_rhp_parser():
     assert (ev["local_date"], ev["local_time"], ev["price_min"]) == ("2026-10-22", "19:00:00", 15.26)  # show, not doors
     assert [a["name"] for a in ev["attractions"]] == ["Crucial Device", "Indigo Ranch", "David E. Williams"]
     assert ev["id"] == "cal:kfn:etix-73209820" and ev["status"] == "onsale"
+    assert ev["image_url"] == "https://kfn.example/wp-content/uploads/2026/10/crucial-device.jpeg"  # the poster
 
 
 @responses.activate
@@ -169,4 +172,5 @@ def test_philamoca_parser_and_label_junk_filter():
     [ev] = vc.fetch_venue(venue)  # the "Philly Premiere" screening is dropped by its label
     assert (ev["name"], ev["local_date"], ev["local_time"], ev["price_min"]) == \
         ("Paul Collins’ Beat", "2026-10-29", "20:00:00", 25.0)
+    assert ev["image_url"] == "https://pm.example/wp-content/uploads/2026/09/paul-collins-768x960.jpg?v=1&x=2"
     assert vc.is_junk("Sandy Loaf’s SMOKERS LOUNGE + short films") and vc.is_junk("TROLL 2 w/ George Hardy in attendance!")

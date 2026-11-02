@@ -99,7 +99,7 @@ def upsert_events(conn: sqlite3.Connection, run_id: int, events: list[dict], *, 
 
         old = conn.execute("SELECT * FROM events WHERE id=?", (ev["id"],)).fetchone()
         cols = ["name", "url", "image_url", "local_date", "local_time", "status", "segment", "genre",
-                "subgenre", "price_min", "price_max", "currency", "onsale_start", "onsale_end", "end_date", "source"]
+                "subgenre", "price_min", "price_max", "currency", "onsale_start", "onsale_end", "end_date", "source", "venue_image_url"]
         values = [ev.get(c) for c in cols]  # end_date/source: only multi-day listings and non-TM sources set them
         venue_id = v["id"] if v else None
 
