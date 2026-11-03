@@ -461,6 +461,48 @@ VINYL_COLLECTION_REFRESH_HOURS = 20   # the collection list itself (2 calls for 
 VINYL_DETAILS_REFRESH_DAYS = 30       # have/want counts, rating, pressing notes, credits
 VINYL_PRICES_REFRESH_DAYS = 7         # Discogs' suggested prices
 POSTERS_PER_RUN = 60                  # show posters saved after a run (tracker/posters.py); the rest on open
+
+# Show posters from Instagram (tracker/instagram.py): Meta's Business Discovery reads other professional accounts'
+# public posts through your own creator account. Token from the Graph API Explorer (instagram_basic,
+# instagram_manage_insights, pages_show_list, pages_read_engagement); empty = off. Read only: nothing is posted.
+META_ACCESS_TOKEN = os.getenv("META_ACCESS_TOKEN", "").strip()
+GRAPH_URL = "https://graph.facebook.com/v25.0"
+# Meta's usage meter read ~75% after ~50 Business Discovery calls in an hour (2026-11-03), and we also stop at 75%.
+INSTAGRAM_HOURLY_CAP = 40       # our calls per hour
+INSTAGRAM_PER_RUN = 35          # after a 6:30/16:30 run: each venue's newest posts, then older pages for history
+INSTAGRAM_PER_OPEN = 4          # accounts looked up when you open an idea's posters (artists, stale venues)
+INSTAGRAM_REFRESH_HOURS = 20    # an account's newest posts are re-read after this long
+INSTAGRAM_HISTORY_DAYS = 200    # how far back a venue's posts are read once (announcements come months early)
+INSTAGRAM_HANDLE_DAYS = 30      # an artist's handle (from MusicBrainz), or that they have none, is kept this long
+# Venue name as Ticketmaster/the calendars list it -> its Instagram, taken from the link on the venue's own site
+# and confirmed with Business Discovery (2026-11-03). Underground Arts, World Cafe Live, NOTO and Subaru Park
+# had no account we could confirm.
+INSTAGRAM_VENUES = {
+    "Punch Line Philly": "punchlinephilly", "Punch Line Philly Callback Bar": "punchlinephilly",
+    "Xfinity Mobile Arena": "xfinitymobilearena",
+    "MilkBoy Philadelphia": "milkboyphilly",
+    "Ardmore Music Hall": "ardmoremusichall",
+    "Nikki Lopez Philly": "nikkilopezphilly",
+    "The Fillmore Philadelphia": "fillmorephilly", "The Foundry": "fillmorephilly",
+    "The Queen": "queenwilmington",
+    "Brooklyn Bowl Philadelphia": "bbowlphilly",
+    "Union Transfer": "uniontransfer",
+    "Theatre of Living Arts": "tlaphilly",
+    "The Met Presented by Highmark": "themetphilly",
+    "The Ave Live": "theavelive",
+    "PhilaMOCA": "philamoca",
+    "Keswick Theatre": "keswicktheatre",
+    "Johnny Brenda's": "johnnybrendas",
+    "Kung Fu Necktie": "kungfunecktie_bar",
+    "Warehouse on Watts": "wowphilly",
+    "Franklin Music Hall": "franklinmusichall",
+    "The Liacouras Center": "liacourascenter",
+    "Freedom Mortgage Pavilion": "freedommortgagepavilion",
+    "Skyline Stage at Highmark Mann": "highmarkmann", "TD Pavilion at the Mann": "highmarkmann",
+    "Kimmel Cultural Campus": "ensembleartsphilly", "Academy of Music": "ensembleartsphilly",
+    "Academy of Music - PA": "ensembleartsphilly", "Marian Anderson Hall - Kimmel Center": "ensembleartsphilly",
+    "Perelman Theater - Kimmel Center": "ensembleartsphilly",
+}
 VINYL_MAX_LOOKUPS_PER_RUN = 120       # Discogs calls per sync after the collection list (~2 minutes)
 VINYL_LIST_SIZE = 5                   # records in a "top 5" idea
 VINYL_STORY_REPEAT_DAYS = 90          # a record isn't picked for another story idea for this long

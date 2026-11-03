@@ -293,3 +293,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - Slides removed at the user's request (talking videos, the poster is the visual): slides.py, the overlay and
   renderer, its endpoints, snapshot file and tests. Posters panel gained Download (named after the show) and the
   credit line. Request body cap 12 MB -> 1 MB (slide photos were the only big writes). 429 tests.
+
+## 2026-11-03
+
+- Meta setup with the user (their app, Page and creator account); token in .env, never expires.
+  I printed the token once while finding a `META_ACCESS_TOKEN-` typo; told the user, who made a new one.
+- `tracker/instagram.py`: Business Discovery for 22 confirmed venue accounts (newest posts each run, history back
+  200 days) and artists (handle from MusicBrainz "social network" links); text matching to shows; images of
+  matches saved; hourly caps; `/api/instagram/{media_id}`; entries in the Posters panel with the post's date, why
+  it matched, carousel and undated warnings. On a DB copy: 54 of 85 open ideas have an Instagram poster. 441 tests.

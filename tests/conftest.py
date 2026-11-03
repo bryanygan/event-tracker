@@ -21,6 +21,7 @@ def no_real_services(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "LISTENING_DB", "")       # or read the user's real listening history
     monkeypatch.setattr(config, "PERPLEXITY_API_KEY", "")  # or spend money on web lookups
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")   # or on Claude drafts
+    monkeypatch.setattr(config, "META_ACCESS_TOKEN", "")   # or read Instagram through the user's account
     monkeypatch.setattr(config, "DRAFT_PROVIDER", "ollama")
     for name in ("REMOTE_HOST", "CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD"):  # or trust the real tunnel setup
         monkeypatch.setattr(config, name, "")

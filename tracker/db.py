@@ -268,6 +268,31 @@ CREATE TABLE IF NOT EXISTS posters (
 );
 
 -- Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py), for the record.
+-- Instagram accounts read with Business Discovery (tracker/instagram.py): venues and artists.
+CREATE TABLE IF NOT EXISTS instagram_accounts (
+    handle TEXT PRIMARY KEY,
+    fetched_at TEXT,                -- newest posts last read (UTC ISO)
+    history_cursor TEXT,            -- next older page still to read; NULL once history is read (or never needed)
+    history_done INTEGER NOT NULL DEFAULT 0,
+    error TEXT                      -- last failure, e.g. the account isn't a public professional account
+);
+
+-- Their posts: captions kept to match shows; the image is saved only for a post that matches a show.
+CREATE TABLE IF NOT EXISTS instagram_posts (
+    media_id TEXT PRIMARY KEY,
+    handle TEXT NOT NULL,
+    posted_at TEXT NOT NULL,        -- UTC ISO
+    media_type TEXT,                -- IMAGE, CAROUSEL_ALBUM (first image), VIDEO (its cover)
+    caption TEXT,
+    image_url TEXT,                 -- Instagram's CDN link; signed, so it stops working after a while
+    permalink TEXT,
+    file TEXT,                      -- saved under data/posters/ once matched to a show
+    content_type TEXT,
+    error TEXT,
+    fetched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_instagram_posts_handle ON instagram_posts(handle, posted_at);
+
 CREATE TABLE IF NOT EXISTS remote_edits (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL,
@@ -561,7 +586,7 @@ _ADDED_COLUMNS = {
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
     "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
                           "seen_live": "INTEGER NOT NULL DEFAULT 0",  # music.py (M5)
-                          "links": "TEXT",  # JSON [{type: homepage|youtube|blog, url}] from MusicBrainz (M8)
+                          "links": "TEXT",  # JSON [{type: homepage|youtube|blog|instagram, url}] from MusicBrainz (M8)
                           "links_checked_at": "TEXT"},
     "stories": {"origin": "TEXT NOT NULL DEFAULT 'news'"},
     # M8: an artist's own channel (artist_id = whose), and where a source came from (config, or musicbrainz links)

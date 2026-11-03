@@ -76,11 +76,13 @@ export type WebContext = {
   id: number; answer: string; provider: string; created_at: string; fresh: boolean
   sources: { id: number; title: string | null; url: string; date: string | null }[]
 }
-// A show's image from its listing (tracker/posters.py); `saved` ones are served from /api/posters/<event_id>
+// A show's image from its listing (tracker/posters.py) or a matching Instagram post (tracker/instagram.py)
 export type Poster = {
-  event_id: string; name: string; venue: string | null; date: string
-  kind: 'poster' | 'event_image' | 'artist_photo'; label: string; source_url: string
+  key: string; event_id: string; name: string; venue: string | null; date: string
+  kind: 'poster' | 'event_image' | 'artist_photo' | 'instagram'; label: string; source_url: string
   saved: boolean; error: string | null; credit: string | null; warnings: string[]
+  image: string | null; download: string | null // served by the API once saved
+  match?: string; posted_at?: string; caption?: string // Instagram posts (tracker/instagram.py)
 }
 export type ContextUsage ={ today: number; auto_today: number; cap: number; auto_cap: number; cost_today_usd: number; enabled: boolean }
 

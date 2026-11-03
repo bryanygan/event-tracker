@@ -252,4 +252,27 @@
   offers a Download named "<date> <show> - <venue>.<ext>" (`?download=1`) and the credit line. Showcase strips
   every `image_url` and has no posters endpoint. The empty `slide_decks` table is left in old databases, unused.
 - Coverage on the first real run: 274 upcoming shows have a venue poster, but only 14 of 85 open ideas, because
-  most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those (not built).
+  most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those.
+
+## Instagram posters (instagram.py, 2026-11-03)
+
+- Setup that worked: Meta app use case "Manage messaging & content on Instagram" with **Facebook login** (one
+  setup per app); permissions must be added to the use case before the Graph API Explorer grants them. Business
+  Discovery needs `instagram_basic`, `instagram_manage_insights`, `pages_read_engagement` (and `pages_show_list`
+  to find the account); missing `instagram_manage_insights` gives "(#10) Application does not have permission".
+  The extended user token reports "expires: never". The token also carries publish/message scopes: unused.
+- Never put the token in a URL: `_graph` sends `Authorization: Bearer`, so requests' exceptions and logs can't
+  carry it. When checking `.env`, never grep a line that could hold a value (a typo'd `KEY-value` line printed
+  the token once, 2026-11-03).
+- Business Discovery paging has `cursors.after` but no `next`: a full page (PAGE_SIZE) means there may be more.
+- Meta's `x-app-usage` reached ~75% after ~50 calls in an hour, so the real budget is ~100/hour, not 200. Caps:
+  40 of ours an hour, 35 per run, 4 per idea opened, and nothing while Meta's meter is at 75%+.
+- Instagram image links are signed and expire, so venue posts matching an upcoming show are saved during the
+  run (`save_venue_matches`); an older match whose link died shows "Open the post".
+- Venue handles were taken from each venue's site and confirmed by lookup; @undergroundarts (2 posts) looked
+  wrong and was left out, as were World Cafe Live, NOTO and Subaru Park.
+- Multi-night/recurring acts at a venue (`repeats`) only match posts that name the date. Weekly lineup posts are
+  carousels: we save the first image and say so.
+- First real pass on a DB copy: 22 venues, 183 of 797 upcoming shows there matched; 54 of 85 open event ideas got
+  an Instagram poster (14 had a listing poster before). Artist accounts (MusicBrainz handle) were only tested
+  offline: Meta's meter was at 75% by then.

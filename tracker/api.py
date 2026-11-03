@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from contextlib import closing
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -23,8 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
-               opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, trends,
+from . import (angles, config, context, db, discovery, drafts, health, instagram, listening, llm, manual_events,
+               music, news, opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, trends,
                vinyl, watchlist)
 from .scoring import upcoming_events
 
@@ -273,6 +274,20 @@ def poster_image(event_id: str, download: bool = False, c=Depends(get_db)):
     name = posters.download_name(c, event_id, found[0]) if download else None
     return FileResponse(found[0], media_type=found[1], filename=name,
                         headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/api/instagram/{media_id}")
+def instagram_image(media_id: str, download: bool = False, event_id: str | None = None, c=Depends(get_db)):
+    """A saved Instagram poster (tracker/instagram.py); `download` names it after the show when event_id is given."""
+    found = instagram.file_for(c, media_id)
+    if not found:
+        raise HTTPException(404, "No saved image for this post")
+    path, ctype, handle, day = found
+    name = None
+    if download:
+        name = posters.download_name(c, event_id, path) if event_id and posters._event(c, event_id) \
+            else f"{day} @{handle}{Path(path).suffix}"
+    return FileResponse(path, media_type=ctype, filename=name, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.post("/api/alerts/{alert_id}/context")

@@ -20,7 +20,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from . import config, context, db, detectors, drafts, genres, posters, publish, showcase, store, vinyl, watchlist
+from . import config, context, db, detectors, drafts, genres, instagram, posters, publish, showcase, store, vinyl, watchlist
 from .fetchers import deezer, setlistfm
 from .fetchers import ticketmaster as tm
 from .fetchers import experiences, venue_calendars
@@ -205,6 +205,10 @@ def run(from_cache: bool = False, make_drafts: bool = True, conn=None, midday: b
                 log.info("Posters: %d saved or retried", posters.prefetch(conn))
             except Exception as exc:
                 log.warning("Posters failed: %s", exc)
+            try:
+                log.info("Instagram posters: %s", instagram.refresh(conn))
+            except Exception as exc:  # refresh catches its own; this is for a bug, never the token (it's in a header)
+                log.warning("Instagram posters failed: %s", type(exc).__name__)
         try:
             setlistfm.enrich_history(conn, limit=config.MIDDAY_SETLIST_ARTISTS if midday else setlistfm.MAX_ARTISTS_PER_RUN)
         except Exception as exc:

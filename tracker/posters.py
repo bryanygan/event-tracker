@@ -21,7 +21,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo
 
 import requests
@@ -73,6 +73,28 @@ def _sniff(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+def save_image(url: str, stem: str, session=None) -> tuple[str, str, int]:
+    """Download one image into POSTER_DIR as <stem>.<ext>: (file name, content type, bytes).
+    Raises ValueError (not https, too big, not an image) or requests.RequestException."""
+    if urlparse(url).scheme != "https":
+        raise ValueError("not an https link")
+    r = (session or requests).get(url, headers={"User-Agent": _UA}, timeout=30, stream=True)
+    r.raise_for_status()
+    data = b""
+    for chunk in r.iter_content(65536):
+        data += chunk
+        if len(data) > MAX_BYTES:
+            raise ValueError("over 8 MB")
+    sniffed = _sniff(data)
+    if not sniffed:
+        raise ValueError("not a PNG, JPEG or WebP image")
+    ext, ctype = sniffed
+    POSTER_DIR.mkdir(parents=True, exist_ok=True)
+    file = f"{stem}.{ext}"
+    (POSTER_DIR / file).write_bytes(data)
+    return file, ctype, len(data)
+
+
 def _event(conn, event_id: str):
     return conn.execute("""SELECT e.id, e.name, e.image_url, e.venue_image_url, e.source, e.local_date, e.local_time, e.status,
                                   e.venue_id, v.name AS venue_name
@@ -93,23 +115,7 @@ def fetch(conn, event_id: str, session=None) -> dict | None:
     file = error = ctype = None
     size = 0
     try:
-        if urlparse(url).scheme != "https":
-            raise ValueError("not an https link")
-        r = (session or requests).get(url, headers={"User-Agent": _UA}, timeout=30, stream=True)
-        r.raise_for_status()
-        data = b""
-        for chunk in r.iter_content(65536):
-            data += chunk
-            if len(data) > MAX_BYTES:
-                raise ValueError("over 8 MB")
-        sniffed = _sniff(data)
-        if not sniffed:
-            raise ValueError("not a PNG, JPEG or WebP image")
-        ext, ctype = sniffed
-        POSTER_DIR.mkdir(parents=True, exist_ok=True)
-        file = f"{hashlib.sha1(event_id.encode()).hexdigest()[:16]}.{ext}"
-        (POSTER_DIR / file).write_bytes(data)
-        size = len(data)
+        file, ctype, size = save_image(url, hashlib.sha1(event_id.encode()).hexdigest()[:16], session)
     except (requests.RequestException, ValueError, OSError) as exc:
         error = str(exc)[:200]
         log.info("Poster for %s not saved: %s", event_id, error)
@@ -177,31 +183,37 @@ def warnings(conn, event, poster: dict | None) -> list[str]:
 
 
 def for_alert(conn, alert_id: int, fetch_missing: int = 8) -> list[dict]:
-    """One entry per show in the idea that has an image: what it is, where to get it, and its warnings.
-    Downloads up to `fetch_missing` posters not saved yet."""
+    """One entry per show in the idea that has an image, then its Instagram posters (tracker/instagram.py): what
+    each is, where to get it, and its warnings. Downloads up to `fetch_missing` listing posters not saved yet."""
+    from . import instagram
     alert = conn.execute("SELECT id, facts, event_ids FROM alerts WHERE id=?", (alert_id,)).fetchone()
     if not alert:
         raise KeyError(alert_id)
+    ids = _alert_event_ids(conn, alert)
+    from_instagram = instagram.for_shows(conn, ids)
     out = []
-    for event_id in _alert_event_ids(conn, alert):
+    for event_id in ids:
         e = _event(conn, event_id)
         url, kind = image_of(e) if e else (None, None)
-        if kind not in LABELS:
-            continue
-        poster = None
-        if kind in USABLE:
-            row = conn.execute("SELECT * FROM posters WHERE event_id=?", (event_id,)).fetchone()
-            poster = dict(row) if row and row["image_url"] == url else None
-            if poster is None and fetch_missing > 0:
-                fetch_missing -= 1
-                poster = fetch(conn, event_id)
-        out.append({
-            "event_id": event_id, "name": e["name"], "venue": e["venue_name"], "date": e["local_date"],
-            "kind": kind, "label": LABELS[kind], "source_url": url,
-            "saved": bool(poster and poster.get("file")), "error": poster and poster.get("error"),
-            "credit": e["venue_name"] if kind == "poster" else "Ticketmaster" if kind == "event_image" else None,
-            "warnings": warnings(conn, e, poster) if kind in USABLE else [],
-        })
+        if kind in LABELS:
+            poster = None
+            if kind in USABLE:
+                row = conn.execute("SELECT * FROM posters WHERE event_id=?", (event_id,)).fetchone()
+                poster = dict(row) if row and row["image_url"] == url else None
+                if poster is None and fetch_missing > 0:
+                    fetch_missing -= 1
+                    poster = fetch(conn, event_id)
+            saved = bool(poster and poster.get("file"))
+            out.append({
+                "key": event_id, "event_id": event_id, "name": e["name"], "venue": e["venue_name"],
+                "date": e["local_date"], "kind": kind, "label": LABELS[kind], "source_url": url,
+                "saved": saved, "error": poster and poster.get("error"),
+                "credit": e["venue_name"] if kind == "poster" else "Ticketmaster" if kind == "event_image" else None,
+                "warnings": warnings(conn, e, poster) if kind in USABLE else [],
+                "image": f"/api/posters/{quote(event_id, safe='')}" if saved else None,
+                "download": f"/api/posters/{quote(event_id, safe='')}?download=1" if saved else None,
+            })
+        out += from_instagram.get(event_id, [])
     return out
 
 
