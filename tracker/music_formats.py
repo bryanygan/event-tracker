@@ -1,5 +1,5 @@
 """Music video ideas, step 6 (docs/agent-notes/music-roadmap.md M6): formats, angles, release-status wording, on-screen
-lines, music fact checks and the catalog roundups. No LLM in here: llm.py, drafts.py and slides.py call into it.
+lines, music fact checks and the catalog roundups. No LLM in here: llm.py and drafts.py call into it.
 
 Formats (the roadmap's table; hooks are templates built from facts, never claims that something is trending):
 - `music_story` (Send to queue): drafted by the model in one of the story formats below, around a status phrase it

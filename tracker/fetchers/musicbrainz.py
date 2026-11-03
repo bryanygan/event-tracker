@@ -52,12 +52,15 @@ class MusicBrainzClient:
         raise requests.RequestException("MusicBrainz rate limit (503)")
 
     def links(self, mbid: str) -> list[dict]:
-        """The artist's own pages MusicBrainz lists: [{"type": homepage|youtube|blog, "url"}], ended links skipped."""
+        """The artist's own pages MusicBrainz lists: [{"type": homepage|youtube|blog|instagram, "url"}], ended links
+        skipped."""
         r = self._get(f"{SEARCH_URL}/{mbid}", {"inc": "url-rels"})
         out = []
         for rel in r.json().get("relations") or []:
             kind = LINK_TYPES.get(rel.get("type"))
             url = (rel.get("url") or {}).get("resource")
+            if rel.get("type") == "social network" and "instagram.com/" in (url or ""):
+                kind = "instagram"  # tracker/instagram.py: their tour posters
             if kind and url and not rel.get("ended"):
                 out.append({"type": kind, "url": url})
         return out

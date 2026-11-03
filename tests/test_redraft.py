@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from tracker import api, db, detectors, drafts, llm, redraft, slides, store
+from tracker import api, db, detectors, drafts, llm, redraft, store
 from tracker.fetchers import ticketmaster as tm
 from tests.factory import tm_event
 
@@ -73,8 +73,6 @@ def test_draft_with_an_added_show_and_a_note(conn, monkeypatch):
     # the idea itself still leaves Glass Hours out: that isn't reported as a change since the draft
     d = drafts.draft_row(row, facts, conn)
     assert d["facts_changes"] == [] and d["instructions"]["note"].startswith("Lead with")
-    # the slides list the same shows as the script
-    assert "Glass Hours" in json.dumps(slides.deck(conn, a["id"])["manifest"])
 
 
 def test_leaving_a_show_out(conn, monkeypatch):

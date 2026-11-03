@@ -76,23 +76,13 @@ export type WebContext = {
   id: number; answer: string; provider: string; created_at: string; fresh: boolean
   sources: { id: number; title: string | null; url: string; date: string | null }[]
 }
-// 9:16 slides (tracker/slides.py): words built from facts, your edits on top; drawn by slides/render.ts
-export type SlideKind = 'title' | 'show' | 'sales' | 'cta'
-export type SlideImage = { data_url: string; credit: string; rights: string }
-export type Slide = {
-  id: string; kind: SlideKind; fields: Record<string, string>
-  hidden?: boolean; edited?: string[]; image?: SlideImage
-  pick?: boolean // a roundup's 3-5 picks (tracker/slides.py)
-}
-export type SlideManifest = {
-  version: number; format: string | null; theme: string; brand: string
-  shows_total: number; shows_on_slides: number; slides: Slide[]
-}
-export type SlideOverride = Record<string, string | boolean | SlideImage | null>
-export type SlideDeck = {
-  alert_id: number; saved: boolean; base: SlideManifest; manifest: SlideManifest
-  overrides: Record<string, SlideOverride>; facts_changes: string[]; updated_at: string | null
-  rights: Record<string, string>; dropped?: string[]
+// A show's image from its listing (tracker/posters.py) or a matching Instagram post (tracker/instagram.py)
+export type Poster = {
+  key: string; event_id: string; name: string; venue: string | null; date: string
+  kind: 'poster' | 'event_image' | 'artist_photo' | 'instagram'; label: string; source_url: string
+  saved: boolean; error: string | null; credit: string | null; warnings: string[]
+  image: string | null; download: string | null // served by the API once saved
+  match?: string; posted_at?: string; caption?: string // Instagram posts (tracker/instagram.py)
 }
 export type ContextUsage ={ today: number; auto_today: number; cap: number; auto_cap: number; cost_today_usd: number; enabled: boolean }
 
@@ -483,13 +473,7 @@ const staticApi = {
   regenerate: readOnly,
   candidates: () => Promise.resolve<DraftCandidate[]>([]),
   lookupContext: readOnly,
-  slides: (id: number) => snapshot<Record<string, SlideDeck>>('slides').then((all) => {
-    if (!all[id]) throw new Error('No slides for this idea in the snapshot')
-    return all[id]
-  }),
-  saveSlides: readOnly,
-  rebuildSlides: readOnly,
-  resetSlides: readOnly,
+  posters: (_id: number) => Promise.resolve<Poster[]>([]), // posters stay off snapshots (they're the venues')
   updateDraft: readOnly,
   events: ({ q = '', genre = '', days = 60 }: { q?: string; genre?: string; kind?: EventKind; days?: number }) =>
     snapshot<EventRow[]>('events').then((all) => {
@@ -556,11 +540,7 @@ const liveApi = {
              { method: 'POST', ...(notes ? { body: JSON.stringify(notes) } : {}) }),
   candidates: (id: number, q?: string) =>
     req<DraftCandidate[]>(`/api/alerts/${id}/candidates${q ? `?q=${encodeURIComponent(q)}` : ''}`),
-  slides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides`),
-  saveSlides: (id: number, overrides: SlideDeck['overrides']) =>
-    req<SlideDeck>(`/api/alerts/${id}/slides`, { method: 'PUT', body: JSON.stringify({ overrides }) }),
-  rebuildSlides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides/rebuild`, { method: 'POST' }),
-  resetSlides: (id: number) => req<SlideDeck>(`/api/alerts/${id}/slides`, { method: 'DELETE' }),
+  posters: (id: number) => req<Poster[]>(`/api/alerts/${id}/posters`),
   lookupContext: (id: number, refresh = false) =>
     req<{ context: WebContext; usage: ContextUsage }>(`/api/alerts/${id}/context${refresh ? '?refresh=true' : ''}`, { method: 'POST' }),
   updateDraft: (id: number, fields: Partial<Pick<Draft, 'status' | 'notes' | 'hook' | 'script' | 'caption' | 'hashtags'>>) =>

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import requests
 
-from . import api, config, db, posts, remote, slides
+from . import api, config, db, posts, remote
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +107,6 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
         "analytics": {g: api.analytics(group_by=g, c=conn) for g in posts.GROUP_BY},
         "trends": api.list_trends(c=conn),  # your own notes; the snapshot sits behind Cloudflare Access
     }
-    files["slides"] = slides.export_all(conn, [a["id"] for a in files["alerts"]])
     for name, payload in files.items():
         (data / f"{name}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     (out_dir / "_headers").write_text(HEADERS_FILE, encoding="utf-8")

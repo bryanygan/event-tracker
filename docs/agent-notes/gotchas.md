@@ -148,15 +148,6 @@
 - Tests that re-ingest with `store.upsert_events` must send the whole listing again: shows left out are marked
   removed (that's the real behavior), which silently drops them from `upcoming_events`.
 
-## Slides / canvas checks
-
-- Headless Edge can't click, so to screenshot the slides overlay, bundle a scratch entry that mounts it with
-  `dashboard/node_modules/.bin/esbuild ... --define:import.meta.env={"VITE_STATIC":"0"}` (without it `api.ts`
-  throws and the page is blank) and drop it in `dashboard/dist/` (gitignored; the API serves any file there).
-- Headless Edge with a reused `--user-data-dir` caches JS: add `?v=<timestamp>` to script URLs between rebuilds.
-- Canvas text fitting: check every word fits the line *before* wrapping at a size, or the largest size wins by
-  splitting "weekend" into "weeken / d".
-
 ## Integration (2026-10-22)
 
 - `tracker.run --from-cache` still calls Deezer (free) for enrichment. For a no-network re-detect on a DB
@@ -214,7 +205,6 @@
 - `drafts.facts` stays the ALERT's facts at writing time; `drafts.instructions` holds the edits (plus `added`/
   `left_out` labels). `draft_row` filters the user's own edits out of `facts_changes` by those labels, which
   must match `detectors._show_label` ("artist (date)").
-- Slides use `redraft.edited_facts` (the newest draft's edits), whatever that draft's status.
 - Tests stub `llm.generate` with lambdas that don't take `note`: drafts.py passes it only when set (`_note`).
 - Ticket URLs aren't always unique per listing; `_find` checks name and date after matching the URL.
 
@@ -248,3 +238,41 @@
 - `leaks()` then refuses the upload if any `.env` value (except `_PUBLIC_SETTINGS`), the phone-editing host or
   its domain, the repo's local path, "plays.db" or "N plays" appears in the JSON. Its messages never echo a secret.
 - Watchlist and trend notes are hidden in static mode (`!STATIC`); Discover stays empty there.
+
+## Show posters (posters.py, 2026-11-02)
+
+- Ticketmaster images are mostly artist press photos (`/dam/a/`); `/dam/e/` is made for the event; `/dam/c/` is a
+  generic category picture. The real Philly posters come from the venue calendars (Tixr, DICE, the venues' own
+  sites). When a venue show duplicates a Ticketmaster one, `drop_duplicates` keeps the venue image on the TM event
+  as `venue_image_url` (40 TM shows on the first run).
+- A poster is never a fact: it can show an old date, venue or lineup (e.g. a show relocated after the poster).
+  `warnings()` flags date changes, rescheduled/cancelled status, "relocated" in the name, and venue/bill changes
+  since the poster was saved.
+- The poster is the video's visual (the user makes talking videos; Slides was removed 2026-11-02). The panel
+  offers a Download named "<date> <show> - <venue>.<ext>" (`?download=1`) and the credit line. Showcase strips
+  every `image_url` and has no posters endpoint. The empty `slide_decks` table is left in old databases, unused.
+- Coverage on the first real run: 274 upcoming shows have a venue poster, but only 14 of 85 open ideas, because
+  most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those.
+
+## Instagram posters (instagram.py, 2026-11-03)
+
+- Setup that worked: Meta app use case "Manage messaging & content on Instagram" with **Facebook login** (one
+  setup per app); permissions must be added to the use case before the Graph API Explorer grants them. Business
+  Discovery needs `instagram_basic`, `instagram_manage_insights`, `pages_read_engagement` (and `pages_show_list`
+  to find the account); missing `instagram_manage_insights` gives "(#10) Application does not have permission".
+  The extended user token reports "expires: never". The token also carries publish/message scopes: unused.
+- Never put the token in a URL: `_graph` sends `Authorization: Bearer`, so requests' exceptions and logs can't
+  carry it. When checking `.env`, never grep a line that could hold a value (a typo'd `KEY-value` line printed
+  the token once, 2026-11-03).
+- Business Discovery paging has `cursors.after` but no `next`: a full page (PAGE_SIZE) means there may be more.
+- Meta's `x-app-usage` reached ~75% after ~50 calls in an hour, so the real budget is ~100/hour, not 200. Caps:
+  40 of ours an hour, 35 per run, 4 per idea opened, and nothing while Meta's meter is at 75%+.
+- Instagram image links are signed and expire, so venue posts matching an upcoming show are saved during the
+  run (`save_venue_matches`); an older match whose link died shows "Open the post".
+- Venue handles were taken from each venue's site and confirmed by lookup; @undergroundarts (2 posts) looked
+  wrong and was left out, as were World Cafe Live, NOTO and Subaru Park.
+- Multi-night/recurring acts at a venue (`repeats`) only match posts that name the date. Weekly lineup posts are
+  carousels: we save the first image and say so.
+- First real pass on a DB copy: 22 venues, 183 of 797 upcoming shows there matched; 54 of 85 open event ideas got
+  an Instagram poster (14 had a listing poster before). Artist accounts (MusicBrainz handle) were only tested
+  offline: Meta's meter was at 75% by then.

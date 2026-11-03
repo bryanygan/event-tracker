@@ -4,7 +4,7 @@ import { api, STATIC, type Alert, type ContextUsage, type Draft, type Job, type 
 import { fmtWhen } from '../App'
 import { PostForm } from './PostsView'
 import { RedraftForm } from './RedraftForm'
-import { SlidesOverlay } from './SlidesOverlay'
+import PostersPanel from './PostersPanel'
 import { VinylFacts, VinylSources, VINYL_LABELS, VINYL_STORY_FORMATS } from './VinylView'
 
 export const KIND_LABEL: Record<Alert['kind'], string> = {
@@ -220,7 +220,6 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
     setSending(true); setStartError(null); setDone(null)
     try { await onRegenerate(undefined, notes); setNotesOpen(false) } finally { setSending(false) }
   }
-  const [slidesOpen, setSlidesOpen] = useState(false)
   const isVinyl = alert.kind === 'vinyl'
   const story = isVinyl && VINYL_STORY_FORMATS.includes(String(alert.facts.format))
   const digDeeper = async () => {
@@ -278,6 +277,7 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
 
       {alert.context_supported && <WebContextView alertId={alert.id} initial={alert.context} />}
       {alert.music_news && alert.music_news.length > 0 && <MusicNewsList items={alert.music_news} />}
+      {!STATIC && !isVinyl && !music && shows.length > 0 && <PostersPanel alertId={alert.id} />}
 
       {alert.angles.length > 0 && (
         <details className="angles" open={!latest && !NARROW}>
@@ -330,12 +330,10 @@ export function AlertCard({ alert, busy, job, onRegenerate, onStatus, onDraftCha
                                           title="tell the AI what to include, leave out or emphasize">
           New draft with notes…
         </button>}
-        {!isVinyl && <button className="ghost" onClick={() => setSlidesOpen(true)} title="9:16 slides built from the facts">Slides</button>}
         {!STATIC && (alert.status !== 'dismissed'
           ? <button className="ghost" onClick={() => onStatus('dismissed')}>Dismiss</button>
           : <button className="ghost" onClick={() => onStatus(alert.drafts.length ? 'drafted' : 'new')}>Restore</button>)}
       </div>
-      {slidesOpen && <SlidesOverlay alertId={alert.id} title={alert.title} onClose={() => setSlidesOpen(false)} />}
     </section>
   )
 }

@@ -21,7 +21,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import api, config, db, posts, publish, slides, vinyl
+from . import api, config, db, posts, publish, vinyl
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,8 @@ STATUS_FILE = config.DATA_DIR / "showcase_status.json"
 
 # Keys dropped wherever they appear: listening history, private notes, costs
 PRIVATE_KEYS = {"my_plays", "your_plays", "plays", "seen_live", "my_bucket", "tier", "notes", "cost_usd",
-                "month_cost_usd", "drafting", "publish", "edit_url", "error", "metrics_due"}
+                "month_cost_usd", "drafting", "publish", "edit_url", "error", "metrics_due",
+                "image_url"}  # show posters and artist photos belong to their owners: not on the public site
 # Play counts written into reason lines and titles ("in your rotation (412 plays)", ", 88 plays", "🎧 ")
 _SCRUB = [(re.compile(r"\s*\(\d[\d,]* plays?\)"), ""), (re.compile(r",\s*\d[\d,]* plays?\b"), ""),
           (re.compile(r"🎧\s?\d*"), "")]
@@ -135,7 +136,6 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
                                     for r in news_sources["checks"]]},
         "stories": api.news_stories(days=14, c=conn),
     }
-    files["slides"] = slides.export_all(conn, [a["id"] for a in alerts])
     for name, payload in files.items():
         (data / f"{name}.json").write_text(json.dumps(clean(payload), ensure_ascii=False), encoding="utf-8")
     (out_dir / "_headers").write_text(publish.HEADERS_FILE, encoding="utf-8")

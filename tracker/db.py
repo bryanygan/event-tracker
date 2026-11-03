@@ -254,17 +254,45 @@ CREATE TABLE IF NOT EXISTS trend_notes (
     updated_at TEXT
 );
 
--- 9:16 slide decks (tracker/slides.py): manifest built from facts + your edits, one deck per alert.
-CREATE TABLE IF NOT EXISTS slide_decks (
-    alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
-    base TEXT NOT NULL,             -- JSON manifest as built from `facts` (no edits)
-    facts TEXT NOT NULL,            -- JSON: the alert's facts the base was built from
-    overrides TEXT NOT NULL,        -- JSON: your edits by slide id (text, hidden, image + credit/rights)
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+-- Show posters saved as the visual for drafts (tracker/posters.py), one per event; files in data/posters/
+CREATE TABLE IF NOT EXISTS posters (
+    event_id TEXT PRIMARY KEY,
+    image_url TEXT NOT NULL,        -- the event's image when saved; a new one is downloaded again
+    kind TEXT NOT NULL,             -- poster (venue's own), event_image (Ticketmaster, made for the event)
+    file TEXT,                      -- name under data/posters/ (NULL when the download failed)
+    content_type TEXT,
+    bytes INTEGER,
+    fetched_at TEXT NOT NULL,
+    error TEXT,
+    seen TEXT                       -- JSON: the listing when saved (date, time, venue, name), for warnings
 );
 
 -- Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py), for the record.
+-- Instagram accounts read with Business Discovery (tracker/instagram.py): venues and artists.
+CREATE TABLE IF NOT EXISTS instagram_accounts (
+    handle TEXT PRIMARY KEY,
+    fetched_at TEXT,                -- newest posts last read (UTC ISO)
+    history_cursor TEXT,            -- next older page still to read; NULL once history is read (or never needed)
+    history_done INTEGER NOT NULL DEFAULT 0,
+    error TEXT                      -- last failure, e.g. the account isn't a public professional account
+);
+
+-- Their posts: captions kept to match shows; the image is saved only for a post that matches a show.
+CREATE TABLE IF NOT EXISTS instagram_posts (
+    media_id TEXT PRIMARY KEY,
+    handle TEXT NOT NULL,
+    posted_at TEXT NOT NULL,        -- UTC ISO
+    media_type TEXT,                -- IMAGE, CAROUSEL_ALBUM (first image), VIDEO (its cover)
+    caption TEXT,
+    image_url TEXT,                 -- Instagram's CDN link; signed, so it stops working after a while
+    permalink TEXT,
+    file TEXT,                      -- saved under data/posters/ once matched to a show
+    content_type TEXT,
+    error TEXT,
+    fetched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_instagram_posts_handle ON instagram_posts(handle, posted_at);
+
 CREATE TABLE IF NOT EXISTS remote_edits (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL,
@@ -542,7 +570,8 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
 # existing database, so add any that are missing. (Old unused columns are left in place.)
 _ADDED_COLUMNS = {
     # P2-14: last day of a multi-day event (a market open for six weeks), and which source listed it
-    "events": {"end_date": "TEXT", "source": "TEXT"},
+    "events": {"end_date": "TEXT", "source": "TEXT",
+               "venue_image_url": "TEXT"},  # the venue's own poster for a Ticketmaster show (tracker/posters.py)
     "attractions": {"fans": "INTEGER", "popularity": "INTEGER", "popularity_checked_at": "TEXT",
                     "setlistfm_mbid": "TEXT", "last_area_show_date": "TEXT", "last_area_show_venue": "TEXT", "last_area_show_acts": "INTEGER",
                     "history_checked_back_to": "TEXT", "history_checked_at": "TEXT",
@@ -557,7 +586,7 @@ _ADDED_COLUMNS = {
     "posts": {"opportunity_snapshot": "TEXT", "series": "TEXT"},
     "artist_identities": {"itunes_id": "INTEGER", "releases_checked_at": "TEXT",  # catalog.py (M4)
                           "seen_live": "INTEGER NOT NULL DEFAULT 0",  # music.py (M5)
-                          "links": "TEXT",  # JSON [{type: homepage|youtube|blog, url}] from MusicBrainz (M8)
+                          "links": "TEXT",  # JSON [{type: homepage|youtube|blog|instagram, url}] from MusicBrainz (M8)
                           "links_checked_at": "TEXT"},
     "stories": {"origin": "TEXT NOT NULL DEFAULT 'news'"},
     # M8: an artist's own channel (artist_id = whose), and where a source came from (config, or musicbrainz links)

@@ -281,3 +281,24 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   cleaned export (`tracker/showcase.py`) to its own Pages project, re-uploaded after each pipeline run, plus a
   "built by me" banner linking the repo. User's choices: auto-update, show drafts, include analytics, add the
   subdomain themselves. 3 new tests (447). Export from a live-DB copy: no leaks; queue, vinyl and news render.
+
+## 2026-11-02
+
+- Show posters (`feature/posters`): researched sources (venue Instagram via the official API, Mato, Bandsintown,
+  Songkick, poster archives); the posters already in our data are the cheap win. Venue parsers for Johnny
+  Brenda's, Kung Fu Necktie and PhilaMOCA now read each show's image; Ticketmaster duplicates keep the venue's.
+  New `tracker/posters.py` (label, save once, warnings), `/api/alerts/{id}/posters`, `/api/posters/{event_id}`,
+  Posters panel on event idea cards, "Use a show poster" in the slide editor (rights "promo", drawn whole).
+  Real check on a DB copy: 21 posters saved, none failed; 40 TM shows got a venue poster. 9 new tests (455).
+- Slides removed at the user's request (talking videos, the poster is the visual): slides.py, the overlay and
+  renderer, its endpoints, snapshot file and tests. Posters panel gained Download (named after the show) and the
+  credit line. Request body cap 12 MB -> 1 MB (slide photos were the only big writes). 429 tests.
+
+## 2026-11-03
+
+- Meta setup with the user (their app, Page and creator account); token in .env, never expires.
+  I printed the token once while finding a `META_ACCESS_TOKEN-` typo; told the user, who made a new one.
+- `tracker/instagram.py`: Business Discovery for 22 confirmed venue accounts (newest posts each run, history back
+  200 days) and artists (handle from MusicBrainz "social network" links); text matching to shows; images of
+  matches saved; hourly caps; `/api/instagram/{media_id}`; entries in the Posters panel with the post's date, why
+  it matched, carousel and undated warnings. On a DB copy: 54 of 85 open ideas have an Instagram poster. 441 tests.

@@ -245,7 +245,7 @@ on-sale can't be detected). Opinion angles ("I'd pick this over…") are left to
 - UI: a collapsed "Trend notes (N active)" panel on "What to post" (no new tab, to keep phones uncluttered),
   pills on matching queue cards. The snapshot exports `trends.json` read-only (it's behind Cloudflare Access).
 
-## 9:16 slides (P1-11, 2026-10-22; `tracker/slides.py`, `dashboard/src/slides/render.ts`)
+## 9:16 slides (P1-11, 2026-10-22; REMOVED 2026-11-02: the user makes talking videos and uses the show poster as the visual. History only.)
 
 - **Python decides the words, the browser draws.** The manifest (title, one slide per show up to 8, ticket
   times for presales/new shows, CTA) is built from facts only, deterministically, and checked by

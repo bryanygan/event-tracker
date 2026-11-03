@@ -61,7 +61,7 @@ export default function DiscoverView({ refreshKey, onQueued }: { refreshKey: num
         <span className="muted small">{data ? `${shown.length} artists` : 'Loading…'}</span>
         {!STATIC && picked.length > 0 && (
           <button disabled={picked.length < 2 || picked.length > 8} onClick={makeIdea}
-                  title="A video idea in What to post: one slide per artist, with why they're here as the facts">
+                  title="A video idea in What to post: each artist with why they're here as the facts">
             {picked.length < 2 ? 'Pick at least 2 for a video idea' : picked.length > 8 ? 'Pick up to 8' : `Make an “Artists to watch” idea (${picked.length})`}
           </button>
         )}
