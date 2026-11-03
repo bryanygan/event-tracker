@@ -148,15 +148,6 @@
 - Tests that re-ingest with `store.upsert_events` must send the whole listing again: shows left out are marked
   removed (that's the real behavior), which silently drops them from `upcoming_events`.
 
-## Slides / canvas checks
-
-- Headless Edge can't click, so to screenshot the slides overlay, bundle a scratch entry that mounts it with
-  `dashboard/node_modules/.bin/esbuild ... --define:import.meta.env={"VITE_STATIC":"0"}` (without it `api.ts`
-  throws and the page is blank) and drop it in `dashboard/dist/` (gitignored; the API serves any file there).
-- Headless Edge with a reused `--user-data-dir` caches JS: add `?v=<timestamp>` to script URLs between rebuilds.
-- Canvas text fitting: check every word fits the line *before* wrapping at a size, or the largest size wins by
-  splitting "weekend" into "weeken / d".
-
 ## Integration (2026-10-22)
 
 - `tracker.run --from-cache` still calls Deezer (free) for enrichment. For a no-network re-detect on a DB
@@ -214,7 +205,6 @@
 - `drafts.facts` stays the ALERT's facts at writing time; `drafts.instructions` holds the edits (plus `added`/
   `left_out` labels). `draft_row` filters the user's own edits out of `facts_changes` by those labels, which
   must match `detectors._show_label` ("artist (date)").
-- Slides use `redraft.edited_facts` (the newest draft's edits), whatever that draft's status.
 - Tests stub `llm.generate` with lambdas that don't take `note`: drafts.py passes it only when set (`_note`).
 - Ticket URLs aren't always unique per listing; `_find` checks name and date after matching the URL.
 
@@ -258,7 +248,8 @@
 - A poster is never a fact: it can show an old date, venue or lineup (e.g. a show relocated after the poster).
   `warnings()` flags date changes, rescheduled/cancelled status, "relocated" in the name, and venue/bill changes
   since the poster was saved.
-- Slide images with rights "promo" are drawn whole (contain, over a blurred copy) and credited "Poster: <venue>".
-  Showcase strips them (`_without_promo`) and every `image_url`.
+- The poster is the video's visual (the user makes talking videos; Slides was removed 2026-11-02). The panel
+  offers a Download named "<date> <show> - <venue>.<ext>" (`?download=1`) and the credit line. Showcase strips
+  every `image_url` and has no posters endpoint. The empty `slide_decks` table is left in old databases, unused.
 - Coverage on the first real run: 274 upcoming shows have a venue poster, but only 14 of 85 open ideas, because
   most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those (not built).

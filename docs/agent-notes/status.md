@@ -23,7 +23,7 @@ commented code over abstraction.
 | Dashboard API | `tracker/api.py` | FastAPI on 127.0.0.1:8765, serves `dashboard/dist`, one background job at a time |
 | Dashboard UI | `dashboard/src/` | React 19 + TS + Vite. Tabs: Alerts & drafts, Events, Runs |
 | Web snapshot | `tracker/publish.py`, `dashboard/.env.static` | **Retired 2026-10-22** (Pages project + its Access app deleted, PAGES_PROJECT blank); code kept, off |
-| Show posters | `tracker/posters.py`, `views/PostersPanel.tsx` | Branch `feature/posters` 2026-11-02: each show's image from its listing, labelled (venue poster / Ticketmaster event image / artist photo), saved once to data/posters, warnings when the listing moved; usable whole on slides (rights "promo"); kept off the showcase. Instagram (Business Discovery) not built yet: needs the user's Meta app |
+| Show posters | `tracker/posters.py`, `views/PostersPanel.tsx` | Branch `feature/posters` 2026-11-02: each show's image from its listing, labelled (venue poster / Ticketmaster event image / artist photo), saved once to data/posters, warnings when the listing moved, Download named after the show; kept off the showcase. Slides removed (user makes talking videos). Instagram (Business Discovery) not built yet: needs the user's Meta app |
 | Public showcase | `tracker/showcase.py` | Merged and live 2026-10-28: public read-only copy for the user's resume (own Pages project, cleaned data, leak scan before upload; custom subdomain added by the user) |
 | Phone editing | `tracker/remote.py` | Live dashboard through a Cloudflare Tunnel hostname; requests need a verified Access login (off until configured) |
 | Scheduling | `scripts/install_tasks.ps1`, `uninstall_tasks.ps1` | Installed on the machine (see below) |
@@ -88,7 +88,7 @@ Proposed approach: measure which notable venues are missing, then read those ven
 | P1-08 3–5 pick / genre-cut roundups | Merged 2026-10-22: `picks` on weekend/stacked-month facts + "picks" angle; "your lane this weekend" cut (`weekend_lane:` key) |
 | P1-10 genre completeness | Merged 2026-10-22: `tracker/genres.py` (artist genre fill + capped TM name lookup for venue-calendar acts) |
 | P1-09 manual trend notes | Merged 2026-10-22: `tracker/trends.py`, `/api/trends`, collapsed panel on "What to post"; fills "search" (rules 2026-10-22.B) |
-| P1-11 9:16 slides | Merged 2026-10-22: fact-built manifest (`tracker/slides.py`), canvas renderer, "Slides" overlay |
+| P1-11 9:16 slides | Merged 2026-10-22; removed 2026-11-02 on `feature/posters` (user makes talking videos; the show poster is the visual) |
 | P2-15 phone editing | Live 2026-10-22 (`d9b0fac`): REMOTE_HOST route added to the user's existing tunnel (the ttspotslideshow one) + its own Access app ("Admin Only"); user's first 3 phone edits audited ok |
 | P1-12 midday check | Live 2026-10-22 (`PhillyEvents-Midday`, 11:30 AM): `--midday`, no LLM/lookups/publish; one-run-at-a-time lock |
 | Draft progress bar | Live 2026-10-22: job carries alert_id/step/estimate/elapsed; bar + step under the card's buttons, scroll to the new draft |

@@ -1,11 +1,11 @@
-"""Music news M6: drafting formats, status wording, music fact checks, roundups, slides, analytics
-(tracker/music_formats.py and its hooks in llm.py, drafts.py, slides.py, posts.py, context.py)."""
+"""Music news M6: drafting formats, status wording, music fact checks, roundups, analytics
+(tracker/music_formats.py and its hooks in llm.py, drafts.py, posts.py, context.py)."""
 import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from tracker import catalog, config, context, db, drafts, llm, music, music_formats as mf, opportunities, posts, slides, watchlist
+from tracker import catalog, config, context, db, drafts, llm, music, music_formats as mf, opportunities, posts, watchlist
 from tests.test_stories import T0, art, build
 
 NOW = T0 + timedelta(hours=6)
@@ -145,10 +145,6 @@ def test_new_music_friday_lists_the_weeks_releases_from_the_catalogs(conn):
     item = next(i for i in opportunities.queue(conn, THURSDAY) if i["alert_id"] == alert_id)
     assert item["pillar"] == "music" and item["series"] == "New Music Friday" and item["lane"] == "music"
     assert item["reasons"][0].startswith("3 releases this week")
-    deck = slides.build(facts_of(conn, alert_id))
-    assert [s["kind"] for s in deck["slides"]] == ["title", "show", "show", "show", "cta"]
-    assert deck["slides"][1]["fields"] == {"date": "ALBUM", "time": "", "artist": "Nova Vale", "venue": "“Glass Hours”",
-                                          "extra": ""}
 
 
 def test_upcoming_albums_from_preorders_and_dated_announcements(conn):
@@ -164,21 +160,6 @@ def test_upcoming_albums_from_preorders_and_dated_announcements(conn):
     assert "Nova Vale, “Glass Hours”, out Friday, November 6." in script
     assert llm.check_facts({"hook": mf.fallback_hook(a["facts"]), "script": script,
                             "caption": mf.caption_for(a["facts"])}, a["facts"]) == []
-
-
-def test_slides_for_a_story_with_conflicting_dates_and_a_philly_show():
-    facts = {"format": "music_story", "story_type": "album_announcement", "artist": "Nova Vale",
-             "release_title": "Glass Hours", "release_status": "announced",
-             "release_dates_reported": [{"date": "Fri, Nov 6", "from": "Feed-A"}, {"date": "Fri, Nov 13", "from": "Feed-B"}],
-             "philly_shows": [{"date": "Sun, Nov 8", "venue": "The Fillmore Philadelphia"}],
-             "sources": [{"outlet": "Feed-A"}, {"outlet": "Feed-B"}]}
-    deck = slides.build(facts)
-    title, release, philly, cta = deck["slides"]
-    assert title["fields"]["kicker"] == "ALBUM ANNOUNCED" and title["fields"]["note"] == "via Feed-A, Feed-B"
-    assert release["fields"]["date"] == "DATE NOT SETTLED"
-    assert release["fields"]["extra"] == "Fri, Nov 6 per Feed-A · Fri, Nov 13 per Feed-B"
-    assert philly["fields"]["lines"] == "Sun, Nov 8: The Fillmore Philadelphia"
-    assert slides.validate(deck, {"release": {"extra": "my edit"}}) == {"release": {"extra": "my edit"}}
 
 
 def test_analytics_split_by_pillar_and_music_format(conn):

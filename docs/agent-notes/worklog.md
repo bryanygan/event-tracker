@@ -290,3 +290,6 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   New `tracker/posters.py` (label, save once, warnings), `/api/alerts/{id}/posters`, `/api/posters/{event_id}`,
   Posters panel on event idea cards, "Use a show poster" in the slide editor (rights "promo", drawn whole).
   Real check on a DB copy: 21 posters saved, none failed; 40 TM shows got a venue poster. 9 new tests (455).
+- Slides removed at the user's request (talking videos, the poster is the visual): slides.py, the overlay and
+  renderer, its endpoints, snapshot file and tests. Posters panel gained Download (named after the show) and the
+  credit line. Request body cap 12 MB -> 1 MB (slide photos were the only big writes). 429 tests.

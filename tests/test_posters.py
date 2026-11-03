@@ -1,3 +1,5 @@
+from urllib.parse import unquote
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -112,9 +114,6 @@ def test_prefetch_takes_open_event_ideas_within_the_limit(conn, monkeypatch):
 
 
 def test_showcase_drops_posters():
-    decks = {"1": {"manifest": {"slides": [{"id": "a", "image": {"rights": "promo"}}, {"id": "b", "image": {"rights": "own"}}]}}}
-    out = showcase._without_promo(decks)["1"]["manifest"]["slides"]
-    assert "image" not in out[0] and out[1]["image"]["rights"] == "own"
     assert "image_url" not in showcase.clean({"image_url": "https://static.tixr.com/a.jpg", "name": "x"})
 
 
@@ -131,3 +130,11 @@ def test_ticketmaster_show_keeps_the_venues_poster(conn):
     conn.execute("UPDATE events SET venue_image_url='https://static.tixr.com/a.jpg' WHERE id='e1'")
     s = FakeSession()
     assert posters.fetch(conn, "e1", s)["kind"] == "poster" and s.calls == ["https://static.tixr.com/a.jpg"]
+
+
+def test_download_is_named_after_the_show(conn, monkeypatch, tmp_path):
+    _event(conn, "e1", "https://static.tixr.com/a.jpg", source="underground-arts", name="Nova Vale: Live / Tour")
+    posters.fetch(conn, "e1", FakeSession())
+    monkeypatch.setattr(api, "conn", lambda: db.connect(tmp_path / "p.db"))
+    r = TestClient(api.app).get("/api/posters/e1?download=1")
+    assert r.status_code == 200 and "2027-03-06 Nova Vale Live Tour - Echo Hall.jpg" in unquote(r.headers["content-disposition"])

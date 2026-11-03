@@ -36,9 +36,6 @@ CONTEXT_CACHE_DAYS = 7      # reuse one lookup per artist this long
 CONTEXT_DAILY_CAP = 10      # all lookups per ET day, failures included (~$0.0016 each)
 CONTEXT_AUTO_PER_DAY = 5    # of which the pipeline may use this many, on "strong" ideas only
 
-# 9:16 slides (tracker/slides.py): the small line at the top of every slide. Editable per deck too.
-SLIDES_BRAND = os.getenv("SLIDES_BRAND", "PHILLY EVENTS").strip()
-
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 # Don't load the local model (~2.2 GB) unless this much RAM is free, so Homebridge and the rest keep ~1.3 GB.
@@ -164,7 +161,7 @@ MUSIC_AUTO_SEND_MIN = 80
 # month's albums), when there are at least MUSIC_ROUNDUP_MIN releases to list.
 MUSIC_KINDS = ("music_story", "new_music_friday", "upcoming_albums", "emerging_artists")
 MUSIC_ROUNDUP_MIN = 3
-MUSIC_ROUNDUP_MAX = 8      # releases listed, one slide each (slides.MAX_SHOWS), best first
+MUSIC_ROUNDUP_MAX = 8      # releases listed, best first
 MUSIC_ROUNDUP_PER_ARTIST = 2
 # Artist discovery and momentum (tracker/discovery.py, roadmap M7). Experimental, labelled as such on the dashboard.
 DISCOVERY_REFRESH_DAYS = 7         # similar artists and tag lists: rebuilt weekly from a week-long cache

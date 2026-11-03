@@ -3,7 +3,7 @@
 - Your note steers the model. It's an instruction, never a fact: the prompt says so, and check_facts still flags
   anything in the draft that isn't in the facts.
 - A show you add comes from the events table (event_facts), so its date, venue and price are data. A show you leave
-  out is dropped from the facts the draft (and the alert's slides) are built from.
+  out is dropped from the facts the draft is built from.
 - Both are saved on the draft (`drafts.instructions`). A later facts refresh is compared with the same edits
   applied, so a show you added isn't reported as "Removed" just because the idea itself still leaves it out.
 - `why_left_out` explains from the data why a show isn't in an idea (its genre, its score, its status), for the
@@ -257,12 +257,3 @@ def candidates(conn, alert: dict, q: str | None = None, today: date | None = Non
             seen.add(k)
             unique.append({k2: v for k2, v in c.items() if k2 != "_rank"})
     return unique[:limit]
-
-
-def edited_facts(conn, alert_id: int, facts: dict) -> dict:
-    """The alert's facts with its newest draft's show edits applied, so its slides list the same shows as the
-    script you'll read over them."""
-    row = conn.execute("SELECT instructions FROM drafts WHERE alert_id=? ORDER BY id DESC LIMIT 1",
-                       (alert_id,)).fetchone()
-    ins = json.loads(row["instructions"]) if row and row["instructions"] else None
-    return apply(conn, facts, ins)[0]

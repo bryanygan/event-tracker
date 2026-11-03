@@ -251,7 +251,6 @@ The full reasoning, including what was tried and rejected, is in
   Villanova and NCAA events)
 - An "under $40 this month" format (only ~15% of Ticketmaster events include prices)
 - Phone notifications for big presales (on hold until the pipeline has run cleanly for a while)
-- Slideshow / image generation from the on-screen text
 
 ## Credits
 

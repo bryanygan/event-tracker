@@ -19,8 +19,8 @@ export default function PostersPanel({ alertId }: { alertId: number }) {
     <details className="web-context posters" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) load() }}>
       <summary>🖼 Posters{posters ? ` (${saved.length} saved${posters.length > saved.length ? `, ${posters.length - saved.length} other` : ''})` : ''}</summary>
       <p className="muted small">
-        From each show's listing: venue posters are the Philly ones. They belong to the venue or artist: credit them,
-        and go by the facts, not the poster, for dates and openers. Use one on a slide from the Slides editor.
+        From each show's listing: venue posters are the Philly ones. They belong to the venue or artist: credit them
+        in the video, and go by the facts, not the poster, for dates and openers.
       </p>
       {error && <p className="warn small">{error}</p>}
       {!posters && !error && <p className="muted small">Loading…</p>}
@@ -38,6 +38,8 @@ export default function PostersPanel({ alertId }: { alertId: number }) {
                 <span className="pill">{p.label}</span>
                 <div><strong>{p.name}</strong></div>
                 <div className="muted">{p.venue} · {p.date}</div>
+                {p.saved && <a href={`${posterSrc(p.event_id)}?download=1`} download>Download</a>}
+                {p.saved && p.credit && <div className="muted">Credit: {p.credit}</div>}
                 {p.warnings.map((w, i) => <div key={i} className="warn">⚠ {w}</div>)}
               </figcaption>
             </figure>

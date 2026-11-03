@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, listening, llm, manual_events, music, news,
-               opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, slides, trends,
+               opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, trends,
                vinyl, watchlist)
 from .scoring import upcoming_events
 
@@ -36,7 +36,7 @@ DIST = config.ROOT / "dashboard" / "dist"
 # POST to it (run the pipeline, publish, spend web lookups) or, via DNS rebinding, read it.
 # (tests/conftest.py adds "testserver", the name FastAPI's TestClient sends.)
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
-MAX_BODY_BYTES = 12_000_000
+MAX_BODY_BYTES = 1_000_000
 
 
 def _hostname(value: str) -> str:
@@ -68,7 +68,7 @@ async def local_only(request: Request, call_next):
         if (phone and not origin) or (origin and _hostname(origin) not in allowed) \
                 or request.headers.get("sec-fetch-site") == "cross-site":
             return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
-        # Every write the dashboard makes is a small JSON body (slides with photos are the biggest). No length
+        # Every write the dashboard makes is a small JSON body. No length
         # header means no body (e.g. DELETE), unless it's chunked, which the dashboard never sends.
         size = request.headers.get("content-length", "0")
         if "transfer-encoding" in request.headers or not size.isdigit() or int(size) > MAX_BODY_BYTES:
@@ -265,51 +265,14 @@ def alert_posters(alert_id: int, c=Depends(get_db)):
 
 
 @app.get("/api/posters/{event_id}")
-def poster_image(event_id: str, c=Depends(get_db)):
+def poster_image(event_id: str, download: bool = False, c=Depends(get_db)):
+    """The saved poster; `download` names the file after the show, for your video editor."""
     found = posters.file_for(c, event_id)
     if not found:
         raise HTTPException(404, "No saved poster for this show")
-    return FileResponse(found[0], media_type=found[1], headers={"Cache-Control": "private, max-age=86400"})
-
-
-@app.get("/api/alerts/{alert_id}/slides")
-def get_slides(alert_id: int, c=Depends(get_db)):
-    """The idea's 9:16 slide manifest (built from facts, plus any saved edits)."""
-    found = slides.deck(c, alert_id)
-    if found is None:
-        raise HTTPException(404)
-    return found
-
-
-class SlidesSave(BaseModel):
-    overrides: dict
-
-
-@app.put("/api/alerts/{alert_id}/slides")
-def save_slides(alert_id: int, body: SlidesSave, c=Depends(get_db)):
-    try:
-        return slides.save(c, alert_id, body.overrides)
-    except KeyError:
-        raise HTTPException(404)
-    except slides.SlidesError as exc:
-        raise HTTPException(400, str(exc))
-
-
-@app.post("/api/alerts/{alert_id}/slides/rebuild")
-def rebuild_slides(alert_id: int, c=Depends(get_db)):
-    """Rebuild from the current facts, keeping edits whose underlying fact didn't change."""
-    try:
-        return slides.rebuild(c, alert_id)
-    except KeyError:
-        raise HTTPException(404)
-
-
-@app.delete("/api/alerts/{alert_id}/slides")
-def reset_slides(alert_id: int, c=Depends(get_db)):
-    found = slides.reset(c, alert_id)
-    if found is None:
-        raise HTTPException(404)
-    return found
+    name = posters.download_name(c, event_id, found[0]) if download else None
+    return FileResponse(found[0], media_type=found[1], filename=name,
+                        headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.post("/api/alerts/{alert_id}/context")

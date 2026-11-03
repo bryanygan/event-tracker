@@ -1,4 +1,4 @@
-"""Show posters as visuals for drafts and slides.
+"""Show posters: the visual for a show's video.
 
 Where they come from: the image each event already carries from its source, labelled by what it usually is.
 - Venue calendars (Tixr, DICE and the venues' own sites): the show's own Philly poster (`poster`). When the
@@ -10,15 +10,17 @@ Where they come from: the image each event already carries from its source, labe
 Posters and event images are downloaded once into data/posters/ (a batch after each run, the rest when you
 open an idea) and served from there. A poster is a picture, never a fact: it was made weeks before and can
 show an old date, venue or lineup, so `warnings` flags shows whose listing changed. Posters belong to the
-venue, promoter or artist: they're credited on slides and left out of the public showcase.
+venue, promoter or artist: credit them in the video, and they're left out of the public showcase.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -30,7 +32,7 @@ from .store import now_iso
 log = logging.getLogger(__name__)
 
 POSTER_DIR = config.DATA_DIR / "posters"
-USABLE = ("poster", "event_image")  # downloaded and offered for slides
+USABLE = ("poster", "event_image")  # downloaded and shown on the idea
 LABELS = {"poster": "Venue image (usually the poster)", "event_image": "Ticketmaster event image",
           "artist_photo": "Artist photo (not a poster)"}
 MAX_BYTES = 8_000_000
@@ -157,7 +159,7 @@ def prefetch(conn, limit: int = config.POSTERS_PER_RUN, pause: float = 0.5) -> i
 
 
 def warnings(conn, event, poster: dict | None) -> list[str]:
-    """Why the poster may not match the listing. The listing (our data) is what the script and slides say."""
+    """Why the poster may not match the listing. The listing (our data) is what the script says."""
     out = []
     for c in conn.execute("SELECT old_value, new_value FROM changes WHERE event_id=? AND kind='date' ORDER BY id",
                           (event["id"],)):
@@ -210,3 +212,12 @@ def file_for(conn, event_id: str) -> tuple[str, str] | None:
         return None
     path = POSTER_DIR / row["file"]
     return (str(path), row["content_type"]) if path.exists() else None
+
+
+def download_name(conn, event_id: str, path: str) -> str:
+    """Like "2027-03-06 Nova Vale - Echo Hall.jpg", so downloads sort by show date."""
+    e = _event(conn, event_id)
+    words = " - ".join(x for x in (e["name"], e["venue_name"]) if x) if e else event_id
+    safe = re.sub(r"[^\w .,&'()-]+", " ", words)
+    safe = re.sub(r"\s+", " ", safe).strip()[:90]
+    return f"{e['local_date'] + ' ' if e and e['local_date'] else ''}{safe}{Path(path).suffix}"
