@@ -502,6 +502,8 @@ INSTAGRAM_VENUES = {
     "Kimmel Cultural Campus": "ensembleartsphilly", "Academy of Music": "ensembleartsphilly",
     "Academy of Music - PA": "ensembleartsphilly", "Marian Anderson Hall - Kimmel Center": "ensembleartsphilly",
     "Perelman Theater - Kimmel Center": "ensembleartsphilly",
+    "NOTO": "notophl", "NOTO Philadelphia": "notophl",
+    "Underground Arts": "undrgroundarts",
 }
 VINYL_MAX_LOOKUPS_PER_RUN = 120       # Discogs calls per sync after the collection list (~2 minutes)
 VINYL_LIST_SIZE = 5                   # records in a "top 5" idea

@@ -11,26 +11,30 @@ export default function PostersPanel({ alertId }: { alertId: number }) {
     if (posters || error) return
     api.posters(alertId).then(setPosters).catch((e) => setError(String(e.message ?? e)))
   }
-  const saved = posters?.filter((p) => p.saved) ?? []
+  // A show's artist press photo only shows when that show has no poster at all
+  const shown = posters?.filter((p) => p.kind !== 'artist_photo'
+    || !posters.some((q) => q.event_id === p.event_id && q.kind !== 'artist_photo')) ?? null
+  const saved = shown?.filter((p) => p.saved) ?? []
   return (
     <details className="web-context posters" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) load() }}>
-      <summary>🖼 Posters{posters ? ` (${saved.length} saved${posters.length > saved.length ? `, ${posters.length - saved.length} other` : ''})` : ''}</summary>
+      <summary>🖼 Posters{shown ? ` (${saved.length} saved${shown.length > saved.length ? `, ${shown.length - saved.length} other` : ''})` : ''}</summary>
       <p className="muted small">
         From each show's listing and from the venue's and artist's Instagram. They belong to the venue or artist:
         credit them in the video, and go by the facts, not the poster, for dates and openers.
       </p>
       {error && <p className="warn small">{error}</p>}
       {!posters && !error && <p className="muted small">Loading… (the first time can take a few seconds)</p>}
-      {posters && posters.length === 0 && <p className="muted small">No posters found for these shows yet.</p>}
-      {posters && posters.length > 0 && (
+      {shown && shown.length === 0 && <p className="muted small">No posters found for these shows yet.</p>}
+      {shown && shown.length > 0 && (
         <div className="poster-grid">
-          {posters.map((p) => (
+          {shown.map((p) => (
             <figure key={p.key} className="poster">
               {p.image
                 ? <a href={p.image} target="_blank" rel="noreferrer"><img src={p.image} alt={`${p.name} poster`} loading="lazy" /></a>
+                : p.kind === 'artist_photo'
+                ? <a href={p.source_url} target="_blank" rel="noreferrer"><img src={p.source_url} alt={`${p.name} press photo`} loading="lazy" referrerPolicy="no-referrer" /></a>
                 : <a className="poster-missing muted small" href={p.source_url} target="_blank" rel="noreferrer">
-                    {p.kind === 'artist_photo' ? 'Artist photo ↗'
-                      : p.kind === 'instagram' ? `Open the post${p.error ? ` (${p.error})` : ''} ↗`
+                    {p.kind === 'instagram' ? `Open the post${p.error ? ` (${p.error})` : ''} ↗`
                       : `Not saved${p.error ? `: ${p.error}` : ''} ↗`}
                   </a>}
               <figcaption className="small">

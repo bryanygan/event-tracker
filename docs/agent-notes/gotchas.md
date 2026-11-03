@@ -269,8 +269,10 @@
   40 of ours an hour, 35 per run, 4 per idea opened, and nothing while Meta's meter is at 75%+.
 - Instagram image links are signed and expire, so venue posts matching an upcoming show are saved during the
   run (`save_venue_matches`); an older match whose link died shows "Open the post".
-- Venue handles were taken from each venue's site and confirmed by lookup; @undergroundarts (2 posts) looked
-  wrong and was left out, as were World Cafe Live, NOTO and Subaru Park.
+- Venue handles were taken from each venue's site and confirmed by lookup; @undergroundarts (2 posts) is not the
+  venue: the user gave @undrgroundarts and @notophl. World Cafe Live and Subaru Park are still unmapped.
+- The live DB only fills once the refresh runs: until then the panel showed nothing but artist press photos,
+  which the panel now shows as pictures, and only for shows with no other poster.
 - Multi-night/recurring acts at a venue (`repeats`) only match posts that name the date. Weekly lineup posts are
   carousels: we save the first image and say so.
 - First real pass on a DB copy: 22 venues, 183 of 797 upcoming shows there matched; 54 of 85 open event ideas got
