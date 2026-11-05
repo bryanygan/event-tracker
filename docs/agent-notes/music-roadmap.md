@@ -255,6 +255,39 @@ If small-artist coverage is poor, that decides how much weight M2's catalog chec
 **Rules check:** one request per feed per 30 minutes (within every source's limits, section 3.3), conditional
 requests where supported, nothing committed except the findings (no listening data in the write-up).
 
+**Done 2026-11-05** (collection 2026-10-23 to 10-30: 7.0 days, 337 runs, 1,535 articles, 4 fetch errors in all;
+full report with names in gitignored `data/m0/report.md`).
+
+- **Coverage:** 69 of 339 core artists were in a headline that week (most-played tier 26/76, middle 25/145,
+  25–49 plays 18/118). 287 watchlist articles collapsed to 130 stories; 34 of them ran in 2+ outlets.
+- **Small artists (the deciding number):** of 47 core artists with a Deezer release that week, feeds named 10.
+  By Deezer fans: 1M+ 4 of 6, 100k–1M 3 of 6, **under 100k 3 of 35 (9%)**. Feeds don't cover the underground
+  part of the watchlist, which confirms M4's catalog checks (New releases) as the main route for those artists, and
+  M7's discovery as more than an extra. Caveat: some tiny Deezer matches may be a different artist with the same name.
+- **Story types (title regex):** most watchlist headlines are "other" (gossip, interviews, business), then
+  singles, collaborations, tours and sensitive stories: what M3 classifies and M5 down-ranks.
+- **Per source** (new articles per day · watchlist share · stories only it caught) and the decision:
+
+  | Source | Per day | Watchlist | Only it | Terms read 2026-11-05 | Decision |
+  | --- | --- | --- | --- | --- | --- |
+  | HotNewHipHop | 31.7 | 34% | 25 | personal use; no clause on feeds or automated reading | keep |
+  | Billboard | 41.1 | 23% | 24 | terms page sends fetchers to a paid bot gateway (TollBit); the feed itself serves normally | keep |
+  | AllHipHop | 30.5 | 27% | 17 | terms page not found | keep |
+  | Pitchfork news | 5.9 | 20% | 5 | Condé Nast terms block fetchers; not read | keep |
+  | Stereogum | 12.5 | 12% | 5 | no commercial use or republishing; nothing on feeds | keep |
+  | Mixmag | 3.6 | 11% | 4 | terms page not found | keep |
+  | XXL | 4.6 | 33% | 4 | "RSS feeds may be republished so long as they are not modified"; general "no scripts" clause | keep |
+  | The Source | 14.2 | 19% | 4 | not read | keep |
+  | The FADER | 2.7 | 21% | 2 | not read | keep |
+  | Vibe | 1.7 | 18% | 1 | Billboard's owner (PMC) | keep (one cheap 304 most runs) |
+  | Pitchfork reviews | 3.2 | 6% | 0 | as Pitchfork | keep: the only review source |
+  | Uproxx Music | 0.6 | 11% | 5 (mostly older items) | bars access "through any automated means", naming robots and offline readers | **dropped** |
+  | Rated R&B | 1.0 | 0% | 0 | — | **dropped** |
+  | Line of Best Fit | 9.7 | 4% | 0 title matches | — | **dropped** |
+
+  The app reads feeds the sites publish for feed readers, keeps headline + excerpt + link, and never republishes
+  article text; videos are your own commentary. "Personal use" clauses are the common caveat across these sites.
+
 ### M1: RSS news discovery (M)
 
 Advice step 01: "Start with roughly 8–12 quality sources rather than dozens. Normalize articles, deduplicate

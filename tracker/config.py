@@ -409,22 +409,21 @@ WEEKEND_MAX_GAMES = 2             # the music weekend roundup keeps at most this
 # terms: checked 2026-10-23: robots.txt allows the feed path and any crawl-delay is <= 10 s. Dropped then: Dancing
 # Astronaut (feed hangs past 40 s), HipHopDX (stale), Complex / Pigeons & Planes / Resident Advisor (no feed).
 # Reddit is not used (decided 2026-10-23: the rap feeds replace it). `poll_minutes` slows one site if needed.
+# M0 (a week of these feeds, 2026-10-23..30) dropped: Uproxx (its terms bar robots and offline readers), Rated R&B
+# and Line of Best Fit (no headline about your artists all week). Dropped sources keep their articles.
 NEWS_TERMS_CHECKED = "robots.txt allows the feed, crawl-delay <= 10 s (checked 2026-10-23)"
 NEWS_SOURCES = [
     {"key": "pitchfork-news", "name": "Pitchfork news", "url": "https://pitchfork.com/feed/feed-news/rss", "niches": ["indie", "rap", "pop"]},
     {"key": "pitchfork-reviews", "name": "Pitchfork reviews", "url": "https://pitchfork.com/feed/feed-album-reviews/rss", "niches": ["indie", "rap", "pop"]},
     {"key": "stereogum", "name": "Stereogum", "url": "https://www.stereogum.com/feed/", "niches": ["indie", "pop"]},
     {"key": "fader", "name": "The FADER", "url": "https://www.thefader.com/feed", "niches": ["rap", "hyperpop", "rnb"]},
-    {"key": "rated-rnb", "name": "Rated R&B", "url": "https://ratedrnb.com/feed/", "niches": ["rnb"]},
     {"key": "mixmag", "name": "Mixmag", "url": "https://mixmag.net/rss.xml", "niches": ["edm"]},  # no pubDate: fetched_at stands in
-    {"key": "line-of-best-fit", "name": "Line of Best Fit", "url": "https://www.thelineofbestfit.com/feed", "niches": ["indie", "pop"]},
     {"key": "billboard", "name": "Billboard", "url": "https://www.billboard.com/feed/", "niches": ["pop", "rap", "rnb"]},
     {"key": "xxl", "name": "XXL", "url": "https://www.xxlmag.com/feed/", "niches": ["rap"]},
     {"key": "hotnewhiphop", "name": "HotNewHipHop", "url": "https://www.hotnewhiphop.com/feed", "niches": ["rap"]},
     {"key": "allhiphop", "name": "AllHipHop", "url": "https://allhiphop.com/feed/", "niches": ["rap"]},
     {"key": "the-source", "name": "The Source", "url": "https://thesource.com/feed/", "niches": ["rap"]},
     {"key": "vibe", "name": "Vibe", "url": "https://www.vibe.com/feed/", "niches": ["rap", "rnb"]},
-    {"key": "uproxx-music", "name": "Uproxx Music", "url": "https://uproxx.com/music/feed/", "niches": ["rap", "pop", "indie"]},
 ]
 # YouTube (roadmap M8), through the YouTube Data API v3: youtube.com's robots.txt disallows /feeds/videos.xml, so the
 # channel RSS feeds are not used. Off until YOUTUBE_API_KEY is set (free; Google Cloud console, YouTube Data API v3).

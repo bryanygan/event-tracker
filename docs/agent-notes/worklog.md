@@ -302,3 +302,12 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   200 days) and artists (handle from MusicBrainz "social network" links); text matching to shows; images of
   matches saved; hourly caps; `/api/instagram/{media_id}`; entries in the Posters panel with the post's date, why
   it matched, carousel and undated warnings. On a DB copy: 54 of 85 open ideas have an Instagram poster. 441 tests.
+- Live: the panel showed only artist press photos until the first venue refresh, run by hand (1,800 posts; 52 of
+  85 ideas). Added NOTO and Underground Arts (handles from the user). Press photos show as pictures, only for shows
+  with no poster.
+
+## 2026-11-05
+
+- M0 finished: re-ran `data/m0/report.py --releases` over the full week (rates now end at the last fetch; releases
+  limited to the collection week; "stories only this source caught" added). Read the sites' terms. Dropped Uproxx
+  (terms), Rated R&B and Line of Best Fit (nothing about the watchlist). Findings in music-roadmap.md M0.
