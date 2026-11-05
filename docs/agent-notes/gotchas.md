@@ -175,6 +175,10 @@
 
 - **youtube.com's robots.txt disallows `/feeds/videos.xml`.** The channel RSS feeds look like the free route but
   aren't allowed; YouTube goes through the Data API (YOUTUBE_API_KEY). Never log the request URL: it has the key.
+- **"Artist - Topic" channels stopped serving uploads (from ~2026-10-31):** channels.list still returns them, but
+  playlistItems on their uploads playlist is 404 `playlistNotFound`. MusicBrainz often lists them among an artist's
+  YouTube links. `ChannelGone` switches such a source off without a source problem (`youtube:gone:<key>` in
+  api_cache, retried after 30 days) and the artist's next link takes the slot.
 - **MusicBrainz 503s are often load-shedding, not our rate** (`Retry-After: 0`, X-RateLimit-Remaining high, ~1 in 3
   requests on 2026-10-24). Treating 503 as "stop for this run" left 331 of 335 artists without an mbid for days.
 - **Any new keyed API must be blanked in tests/conftest.py.** LAST_FM_API_KEY wasn't (M7), so every test that ran

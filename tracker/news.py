@@ -64,10 +64,13 @@ def sync_artist_channels(conn) -> int:
     (watchlist.resolve_ids). Muted or dropped artists' channels are disabled. Returns how many are enabled."""
     from .fetchers import youtube
     marks = ",".join("?" * len(watchlist.MATCHED_TIERS))
+    gone = channels_gone(conn, _now())
     keys = []
     for a in conn.execute(f"""SELECT id, name, links FROM artist_identities
                               WHERE muted=0 AND tier IN ({marks}) AND links IS NOT NULL""", watchlist.MATCHED_TIERS):
         refs = [r for r in (youtube.channel_ref(l["url"]) for l in json.loads(a["links"]) if l["type"] == "youtube") if r]
+        # A channel found unreadable gives its slot to the artist's next link
+        refs = [r for r in refs if "yt-artist:" + next(iter(r.values())) not in gone]
         for ref in refs[:ARTIST_CHANNELS_EACH]:
             key = "yt-artist:" + next(iter(ref.values()))
             if key in keys:  # two artists listing one channel (a duo and a member): the first keeps it
@@ -104,6 +107,14 @@ def _add_units(conn, now: datetime, units: int) -> None:
 CHANNEL_CACHE_DAYS = 30
 
 
+def channels_gone(conn, now: datetime) -> set[str]:
+    """Keys of YouTube sources found unreadable in the last CHANNEL_CACHE_DAYS (deleted channels, "Topic" channels).
+    They're switched off without a source problem, and tried again after that."""
+    since = (now - timedelta(days=CHANNEL_CACHE_DAYS)).isoformat()
+    return {r["key"][len("youtube:gone:"):] for r in
+            conn.execute("SELECT key FROM api_cache WHERE key LIKE 'youtube:gone:%' AND fetched_at > ?", (since,))}
+
+
 def _youtube_uploads(conn, client, source, now: datetime) -> list[dict]:
     """The channel's latest uploads. Its uploads-playlist id is looked up once and kept CHANNEL_CACHE_DAYS (a channel
     that doesn't exist is remembered too, so it costs nothing until then)."""
@@ -118,7 +129,7 @@ def _youtube_uploads(conn, client, source, now: datetime) -> list[dict]:
         conn.execute("INSERT OR REPLACE INTO api_cache (key, body, fetched_at) VALUES (?,?,?)",
                      (cache_key, json.dumps(channel), now.isoformat()))
     if not channel or not channel.get("uploads"):
-        raise news_rss.FeedError("channel not found or has no uploads")
+        raise youtube.ChannelGone("channel not found or has no uploads")
     return client.uploads(channel["uploads"])
 
 
@@ -188,6 +199,13 @@ def read_source(conn, session, source, now: datetime, youtube_client=None) -> di
     except youtube.QuotaExceeded as exc:
         result["error"], result["quota"] = str(exc), True
         conn.execute("UPDATE news_sources SET last_error=? WHERE id=?", (str(exc), source["id"]))
+    except youtube.ChannelGone as exc:  # nothing to fix on our side: switch it off quietly (channels_gone)
+        result["dropped"] = True
+        log.info("YouTube %s switched off: %s", source["name"], exc)
+        conn.execute("INSERT OR REPLACE INTO api_cache (key, body, fetched_at) VALUES (?,?,?)",
+                     (f"youtube:gone:{source['key']}", json.dumps(str(exc)), now.isoformat()))
+        conn.execute("UPDATE news_sources SET enabled=0, last_error=NULL, failures=0, last_fetched_at=? WHERE id=?",
+                     (now.isoformat(), source["id"]))
     except news_rss.FeedError as exc:
         result["error"] = str(exc)
         conn.execute("UPDATE news_sources SET last_error=?, failures=failures+1, last_fetched_at=? WHERE id=?",
@@ -213,8 +231,9 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
     session = session or requests.Session()
     results = []
     try:
+        gone = channels_gone(conn, now or _now())  # config outlets are re-enabled by seed_sources each run
         due = [s for s in conn.execute("SELECT * FROM news_sources WHERE enabled=1 ORDER BY id")
-               if is_due(s, now or _now())]
+               if is_due(s, now or _now()) and s["key"] not in gone]
         for i, source in enumerate(s for s in due if s["kind"] != "youtube"):
             if i:
                 time.sleep(0.5)  # every source is a different host; this just keeps the job gentle

@@ -29,6 +29,11 @@ class QuotaExceeded(FeedError):
     """The day's API quota is used up: stop reading YouTube until tomorrow."""
 
 
+class ChannelGone(FeedError):
+    """The channel or its uploads can't be read: deleted, or an auto-generated "Artist - Topic" channel, whose
+    uploads playlist the API stopped serving (404 playlistNotFound, seen 2026-11)."""
+
+
 def channel_ref(url: str) -> dict | None:
     """What a channel link says about the channel: {"id": UC...}, {"handle": "@x"} or {"user": x}; None for
     links the API can't resolve (custom /c/ URLs, single videos)."""
@@ -62,7 +67,7 @@ class YouTubeClient:
         if reasons & {"quotaExceeded", "dailyLimitExceeded", "rateLimitExceeded"}:
             raise QuotaExceeded("YouTube quota used up for today")
         if reasons & {"playlistNotFound", "channelNotFound"}:
-            raise FeedError("channel not found or has no uploads")
+            raise ChannelGone("channel not found or has no uploads")
         # Never echo the request URL: it carries the key
         raise FeedError(f"HTTP {r.status_code}" + (f" ({', '.join(sorted(r for r in reasons if r))})" if reasons else ""))
 

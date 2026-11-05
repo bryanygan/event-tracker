@@ -311,3 +311,6 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - M0 finished: re-ran `data/m0/report.py --releases` over the full week (rates now end at the last fetch; releases
   limited to the collection week; "stories only this source caught" added). Read the sites' terms. Dropped Uproxx
   (terms), Rated R&B and Line of Best Fit (nothing about the watchlist). Findings in music-roadmap.md M0.
+- YouTube source problems: the 9 failing artist channels were auto-generated "Topic" channels whose uploads the API
+  now 404s. Unreadable channels are switched off quietly and the artist's next MusicBrainz link is read instead
+  (DJ Khaled, Katy Perry, Ye got their real channels). 442 tests.

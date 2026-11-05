@@ -189,6 +189,34 @@ def test_the_daily_cap_and_a_used_up_quota_stop_youtube_reads(conn, monkeypatch)
     assert failed["failures"] == 0  # not the channel's fault: no back-off
 
 
+def test_an_unreadable_topic_channel_is_switched_off_and_the_next_link_takes_its_place(conn, monkeypatch):
+    monkeypatch.setattr(config, "YOUTUBE_API_KEY", "k")
+    topic, second, third = "UC" + "t" * 22, "UC" + "s" * 22, "UC" + "r" * 22
+    conn.execute("UPDATE artist_identities SET links=? WHERE name='Nova Vale'", (json.dumps(
+        [{"type": "youtube", "url": f"https://www.youtube.com/channel/{c}"} for c in (topic, second, third)]),))
+    conn.commit()
+
+    class TopicAPI(FakeAPI):  # the API lists the Topic channel but 404s its uploads playlist
+        def get(self, url, params=None, timeout=None, headers=None):
+            if params.get("playlistId") == "UU" + topic[2:]:
+                self.calls.append(("playlistItems", dict(params)))
+                r = requests.Response()
+                r.status_code, r._content = 404, json.dumps({"error": {"errors": [{"reason": "playlistNotFound"}]}}).encode()
+                return r
+            return super().get(url, params, timeout, headers)
+    out = news.run(conn, Session({FEED["url"]: [Resp(200, RSS)]}), NOW, youtube_client=youtube.YouTubeClient("k", TopicAPI(UPLOADS)))
+    assert not out["failed"]  # no source problem for a channel we can't fix
+    rows = {r["key"]: dict(r) for r in conn.execute("SELECT key, enabled, failures FROM news_sources")}
+    assert rows[f"yt-artist:{topic}"]["enabled"] == 0 and rows[f"yt-artist:{topic}"]["failures"] == 0
+    news.sync_artist_channels(conn)
+    rows = {r["key"]: r["enabled"] for r in conn.execute("SELECT key, enabled FROM news_sources")}
+    assert rows[f"yt-artist:{topic}"] == 0 and rows[f"yt-artist:{second}"] == 1 and rows[f"yt-artist:{third}"] == 1
+    # And it stays off on the next check instead of failing again
+    api_ = TopicAPI(UPLOADS)
+    news.run(conn, Session({FEED["url"]: [Resp(304)]}), NOW + timedelta(hours=7), youtube_client=youtube.YouTubeClient("k", api_))
+    assert all(c[1].get("playlistId") != "UU" + topic[2:] for c in api_.calls)
+
+
 def test_a_muted_artists_channel_is_disabled(conn):
     news.sync_artist_channels(conn)
     conn.execute("UPDATE artist_identities SET muted=1 WHERE name='Nova Vale'")
