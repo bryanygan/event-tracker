@@ -15,6 +15,7 @@ import html
 import json
 import logging
 import re
+import time
 import urllib.robotparser
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
@@ -180,20 +181,84 @@ def parse_philamoca(page: str, today: date | None = None) -> list[dict]:
     return items
 
 
-PARSERS = {"jsonld": lambda page, today=None: jsonld_events(page), "rhp": parse_rhp, "philamoca": parse_philamoca}
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+_SPAN = re.compile(r'm-date__(month|day|year)">([^<]*)<')
+MAX_RUN_DAYS = 14  # a date range longer than this is a season (a residency, a store's hours), not a run of shows
+
+
+def _card_dates(block: str) -> list[date]:
+    """'Nov. 10, 2026', or a range 'Nov. 7 - 8, 2026' / 'Dec. 30 - Jan. 2, 2027': every day it covers."""
+    first = block.split("m-date__rangeLast")[0]
+    parts = {"first": _SPAN.findall(first), "last": _SPAN.findall(block[len(first):])}
+    try:
+        days = []
+        for side in ("first", "last"):
+            month = next((_MONTHS.get(v.strip().lower()[:3]) for k, v in parts[side] if k == "month"), None)
+            day = next((int(v) for k, v in parts[side] if k == "day"), None)
+            year = next((int(re.sub(r"\D", "", v)) for k, v in parts[side] if k == "year"), None)
+            if day:
+                days.append([year, month or days[0][1], day])
+        end_year = days[-1][0] or days[0][0]
+        start_year = days[0][0] if days[0][0] and len(days) > 1 else end_year - (days[0][1] > days[-1][1])
+        end, start = date(end_year, *days[-1][1:]), date(start_year, *days[0][1:])  # "Dec. 30 - Jan. 2, 2027"
+    except (TypeError, ValueError, IndexError):
+        return []
+    if (end - start).days > MAX_RUN_DAYS:
+        return []
+    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
+
+def parse_eventitem(page: str, today: date | None = None) -> list[dict]:
+    """Event cards ('eventItem': title, dates, the venue's own image), the layout Xfinity Mobile Arena's site uses.
+    A card covering several nights becomes one entry per night, so each Ticketmaster night finds its twin."""
+    if page.lstrip().startswith('"'):  # the load-more endpoint answers with the HTML as a JSON string
+        page = json.loads(page)
+    items = []
+    for block in re.split(r'<div class="eventItem\b', page)[1:]:
+        title = re.search(r'<h3 class="title[^"]*">\s*<a href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not title:
+            continue
+        image = _IMG.search(block)
+        for d in _card_dates(block):
+            items.append({"@type": "Event", "name": _text(title.group(2)), "startDate": d.isoformat(),
+                          "url": title.group(1), "image": image and html.unescape(image.group(1))})
+    return items
+
+
+PARSERS = {"jsonld": lambda page, today=None: jsonld_events(page), "rhp": parse_rhp, "philamoca": parse_philamoca,
+           "eventitem": parse_eventitem}
+
+
+def _pages(venue: dict, session: requests.Session) -> list[str]:
+    """The venue's page, or for a paged calendar (venue["page_size"]: a "load more" endpoint whose URL takes an
+    {offset}) every page until one comes back short, a second apart."""
+    if not venue.get("page_size"):
+        r = session.get(venue["url"], headers={"User-Agent": UA}, timeout=45)  # PhilaMOCA can be slow
+        r.raise_for_status()
+        return [r.text]
+    out = []
+    for i in range(venue.get("max_pages", 40)):
+        if i:
+            time.sleep(1)
+        r = session.get(venue["url"].format(offset=i * venue["page_size"]), timeout=45,
+                        headers={"User-Agent": UA, "X-Requested-With": "XMLHttpRequest"})
+        r.raise_for_status()
+        out.append(r.text)
+        if len(re.findall(r'class=\\?"eventItem\b', r.text)) < venue["page_size"]:  # \" inside the JSON string
+            break
+    return out
 
 
 def fetch_venue(venue: dict, session: requests.Session | None = None) -> list[dict]:
     """Normalized upcoming shows for one configured venue. Raises SourceError on any failure."""
     session = session or requests.Session()
-    if not _robots_allows(venue["url"], session):
+    if not _robots_allows(venue["url"].replace("{offset}", "0"), session):
         raise SourceError("robots.txt disallows reading this page")
     try:
-        r = session.get(venue["url"], headers={"User-Agent": UA}, timeout=45)  # PhilaMOCA can be slow
-        r.raise_for_status()
+        pages = _pages(venue, session)
     except requests.RequestException as exc:
         raise SourceError(f"fetch failed: {exc}") from exc
-    raw = PARSERS[venue.get("parser", "jsonld")](r.text)
+    raw = [item for page in pages for item in PARSERS[venue.get("parser", "jsonld")](page)]
     if not raw:
         raise SourceError("no events found on the page (site changed?)")
     shows = {}

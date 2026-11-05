@@ -275,6 +275,15 @@
   run (`save_venue_matches`); an older match whose link died shows "Open the post".
 - Venue handles were taken from each venue's site and confirmed by lookup; @undergroundarts (2 posts) is not the
   venue: the user gave @undrgroundarts and @notophl. World Cafe Live and Subaru Park are still unmapped.
+- Runs vs repeats (2026-11-05): nights of one act at one venue within 3 days are a run (one announcement, so an
+  undated post fits every night, labelled so); other nights further apart are separate visits and need the date.
+- **Xfinity Mobile Arena's site has the real tour posters** (Ticketmaster only has artist photos). It's a
+  posters-only venue calendar (`posters_only`, parser `eventitem`): its "load more" endpoint caps at 6 events a
+  request, ~25 requests a second apart, needs `X-Requested-With`, and answers 406 to an `Accept: application/json`
+  header. Cards with a date range become one entry per night; ranges over 14 days (store hours) are skipped.
+- **2026-11-05: Meta answers every call "API access blocked." / "Cannot call API for app … on behalf of user …"
+  (code 200).** The app lost access to the user's account; only the user can fix it (app dashboard alerts,
+  Facebook's Business integrations, then a new token). Until then only saved Instagram posts show.
 - The live DB only fills once the refresh runs: until then the panel showed nothing but artist press photos,
   which the panel now shows as pictures, and only for shows with no other poster.
 - Multi-night/recurring acts at a venue (`repeats`) only match posts that name the date. Weekly lineup posts are

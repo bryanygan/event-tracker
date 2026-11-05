@@ -314,3 +314,7 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - YouTube source problems: the 9 failing artist channels were auto-generated "Topic" channels whose uploads the API
   now 404s. Unreadable channels are switched off quietly and the artist's next MusicBrainz link is read instead
   (DJ Khaled, Katy Perry, Ye got their real channels). 442 tests.
+- Olivia Rodrigo (Xfinity Mobile Arena) had no poster: Ticketmaster has only her press photo, the arena's one
+  Instagram post about her was undated and her two nights counted as "repeats", and Meta has blocked the app since
+  2026-11-05 15:29. Added the arena's site as a posters-only calendar (85 of 87 arena shows get its poster) and
+  the run-of-nights rule. 445 tests.

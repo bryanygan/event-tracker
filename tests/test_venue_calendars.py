@@ -174,3 +174,52 @@ def test_philamoca_parser_and_label_junk_filter():
         ("Paul Collins’ Beat", "2026-10-29", "20:00:00", 25.0)
     assert ev["image_url"] == "https://pm.example/wp-content/uploads/2026/09/paul-collins-768x960.jpg?v=1&x=2"
     assert vc.is_junk("Sandy Loaf’s SMOKERS LOUNGE + short films") and vc.is_junk("TROLL 2 w/ George Hardy in attendance!")
+
+
+ARENA = {"key": "arena", "name": "Xfinity Mobile Arena", "city": "Philadelphia", "parser": "eventitem",
+         "posters_only": True, "page_size": 2, "url": "https://arena.example/events_ajax/{offset}?per_page=2"}
+
+
+def card(title, slug, img, first, last=None):
+    """An 'eventItem' card as the arena's site renders it. first/last: (month, day, year or None)."""
+    def side(cls, m, d, y):
+        return (f'<span class="m-date__{cls}">' + (f'<span class="m-date__month">{m} </span>' if m else "")
+                + f'<span class="m-date__day"> {d}</span>' + (f'<span class="m-date__year">, {y}</span>' if y else "") + "</span>")
+    dates = side("singleDate", *first) if not last else side("rangeFirst", *first) + side("rangeLast", *last)
+    return (f'<div class="eventItem entry clearfix"><div class="thumb"><a href="https://arena.example/events/detail/{slug}">'
+            f'<img src="https://arena.example/assets/img/{img}" alt="x"/></a></div><div class="info clearfix">'
+            f'<div class="date">{dates}</div><h3 class="title  long_title">\n\t\t<a href="https://arena.example/events/'
+            f'detail/{slug}" title="More Info">{title}</a>\t</h3></div></div>')
+
+
+def test_eventitem_cards_runs_of_nights_and_new_year():
+    page = json.dumps(card("Nova Vale: The Glass Tour", "nv", "nv-760x460.png", ("Nov.", 7, None), (None, 8, 2026))
+                      + card("Kilo Moon &amp; Friends", "km", "km.png", ("Dec.", 10, 2026))
+                      + card("Holiday Ice", "ice", "ice.png", ("Dec.", 30, None), ("Jan.", 2, 2027))
+                      + card("Store Hours", "store", "s.png", ("Nov.", 1, None), ("Dec.", 31, 2026)))  # a season: skipped
+    items = vc.parse_eventitem(page)
+    assert [(i["name"], i["startDate"]) for i in items] == [
+        ("Nova Vale: The Glass Tour", "2026-11-07"), ("Nova Vale: The Glass Tour", "2026-11-08"),
+        ("Kilo Moon & Friends", "2026-12-10"),
+        ("Holiday Ice", "2026-12-30"), ("Holiday Ice", "2026-12-31"), ("Holiday Ice", "2027-01-01"), ("Holiday Ice", "2027-01-02")]
+    assert items[0]["image"] == "https://arena.example/assets/img/nv-760x460.png"
+    assert items[0]["url"] == "https://arena.example/events/detail/nv"
+
+
+@responses.activate
+def test_a_posters_only_calendar_pages_through_and_only_gives_ticketmaster_shows_their_poster(tmp_path, monkeypatch):
+    monkeypatch.setattr(vc.time, "sleep", lambda s: None)
+    monkeypatch.setattr(config, "VENUE_CALENDARS", [ARENA])
+    responses.get("https://arena.example/robots.txt", status=404)
+    responses.get("https://arena.example/events_ajax/0?per_page=2", body=json.dumps(
+        card("Nova Vale: The Glass Tour", "nv", "nv.png", ("Nov.", 7, None), (None, 8, 2026))
+        + card("Arena Store Hours", "store", "s.png", ("Nov.", 9, 2026))))
+    responses.get("https://arena.example/events_ajax/2?per_page=2", body=json.dumps(
+        card("Kilo Moon", "km", "km.png", ("Dec.", 10, 2026))))  # a short page: the last one
+    conn = db.connect(tmp_path / "a.db")
+    run_id = store.start_run(conn, "ticketmaster")
+    tm_events = [tm.normalize(tm_event(event_id=f"tm{d}", name="Nova Vale: The Glass Tour", date=f"2026-11-0{d}",
+                                       venue="Xfinity Mobile Arena")) for d in (7, 8)]
+    cal, first, failed = pipeline.fetch_calendars(conn, run_id, tm_events)
+    assert cal == [] and len(responses.calls) == 3  # robots + 2 pages; nothing added as a show
+    assert [e.get("venue_image_url") for e in tm_events] == ["https://arena.example/assets/img/nv.png"] * 2

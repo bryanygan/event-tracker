@@ -257,16 +257,17 @@ def match(post, show: dict) -> str | None:
     caption = post["caption"] or ""
     words, raw = _norm(caption), caption.casefold()
     dated = bool(_date_re(show["date"]).search(raw))
-    if not dated and show["repeats"]:  # another night of the same act there: only a post naming this date
+    if not dated and show["repeats"]:  # another visit by the same act there: only a post naming this date
         return None
+    run = " (for the run of nights, not one date)" if show.get("run") and not dated else ""
     if post["handle"] == show["venue_handle"]:
         for name in show["artists"]:
             n = _norm(name)
             if len(fold(name)) >= 3 and n in words and (dated or len(fold(name)) >= 5):
-                return _STRONG if dated else "names the artist"
+                return _STRONG if dated else "names the artist" + run
         for h in show["artist_handles"]:
             if f"@{h}" in raw or _norm(h) in words:
-                return _STRONG if dated else "tags the artist"
+                return _STRONG if dated else "tags the artist" + run
         return None
     if post["handle"] in show["artist_handles"]:
         venue_named = show["venue"] and _norm(show["venue"]) in words
@@ -290,13 +291,23 @@ def _shows(conn, event_ids: list[str]) -> list[dict]:
                     "venue_handle": config.INSTAGRAM_VENUES.get(e["venue_name"] or ""),
                     "artists": [a["name"] for a in acts] or [e["name"]],
                     "attraction_ids": [a["id"] for a in acts] or [None], "artist_handles": [],
-                    "repeats": bool(conn.execute(  # the same act at the same venue on another day (2 nights, weekly)
-                        """SELECT 1 FROM events o WHERE o.active = 1 AND o.id != ? AND o.venue_id = ?
-                           AND o.local_date != ? AND (o.name = ? OR EXISTS (SELECT 1 FROM event_attractions oa
-                               WHERE oa.event_id = o.id AND oa.position = 0 AND oa.attraction_id = ?)) LIMIT 1""",
-                        (event_id, e["venue_id"], e["local_date"], e["name"], acts[0]["id"] if acts else None)
-                    ).fetchone())})
+                    **_other_nights(conn, e, acts)})
     return out
+
+
+RUN_DAYS = 3  # nights of one act at one venue this close together are one run, announced with one poster
+
+
+def _other_nights(conn, e, acts) -> dict:
+    """The same act at the same venue on other days. `repeats`: a separate visit (a weekly night, a return later),
+    so only a post naming this date is about this show. `run`: back-to-back nights (Nov 7 and 8), which share
+    their announcement, so an undated post fits every night of the run."""
+    gaps = [abs((date.fromisoformat(r["local_date"]) - date.fromisoformat(e["local_date"])).days) for r in conn.execute(
+        """SELECT DISTINCT o.local_date FROM events o WHERE o.active = 1 AND o.id != ? AND o.venue_id = ?
+           AND o.local_date != ? AND (o.name = ? OR EXISTS (SELECT 1 FROM event_attractions oa
+               WHERE oa.event_id = o.id AND oa.position = 0 AND oa.attraction_id = ?))""",
+        (e["id"], e["venue_id"], e["local_date"], e["name"], acts[0]["id"] if acts else None))]
+    return {"repeats": any(g > RUN_DAYS for g in gaps), "run": bool(gaps) and all(g <= RUN_DAYS for g in gaps)}
 
 
 def _posts_for(conn, show: dict) -> list:

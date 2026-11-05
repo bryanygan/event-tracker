@@ -335,6 +335,13 @@ VENUE_CALENDARS = [
      "parser": "rhp"},
     {"key": "philamoca", "name": "PhilaMOCA", "url": "https://www.philamoca.org/", "city": "Philadelphia",
      "parser": "philamoca"},
+    # Posters only: everything here is on Ticketmaster, but the arena's site has each tour's poster (Ticketmaster
+    # only has artist photos). Its "load more" endpoint returns 6 events a request (per_page is capped), so a read
+    # is ~25 small requests a second apart; robots.txt allows all (checked 2026-11-05). Nothing is added as a show.
+    {"key": "xfinity-mobile-arena", "name": "Xfinity Mobile Arena", "city": "Philadelphia", "parser": "eventitem",
+     "posters_only": True, "page_size": 6,
+     "url": "https://www.xfinitymobilearena.com/events/events_ajax/{offset}?category=0&venue=0&team=0&exclude="
+            "&per_page=6&came_from_page=event-list-page"},
 ]
 # Calendar entries that aren't concerts (matched against the cleaned show name).
 VENUE_JUNK_PATTERNS = [

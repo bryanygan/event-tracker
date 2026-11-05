@@ -122,13 +122,24 @@ def test_short_names_need_the_date(conn):
     assert instagram.match(row("echohall", f"{day}: Mogi and friends"), s) == instagram._STRONG
 
 
-def test_another_night_needs_the_date(conn):
+def test_another_visit_needs_the_date(conn):
+    conn.execute("""INSERT INTO events (id, name, url, local_date, status, venue_id, active, first_seen, last_seen)
+                    VALUES ('e2', 'Nova Vale', 'https://t/e2', ?, 'onsale', 'v1', 1, 'x', 'x')""",
+                 ((SHOW_DAY + timedelta(days=7)).isoformat(),))
+    s = show(conn)
+    assert s["repeats"] and not s["run"]
+    assert instagram.match(row("echohall", "Nova Vale tomorrow!"), s) is None  # which visit? can't tell
+    assert instagram.match(row("echohall", f"Nova Vale {SHOW_DAY.month}/{SHOW_DAY.day}"), s) == instagram._STRONG
+
+
+def test_back_to_back_nights_share_an_undated_announcement(conn):
     conn.execute("""INSERT INTO events (id, name, url, local_date, status, venue_id, active, first_seen, last_seen)
                     VALUES ('e2', 'Nova Vale', 'https://t/e2', ?, 'onsale', 'v1', 1, 'x', 'x')""",
                  ((SHOW_DAY + timedelta(days=1)).isoformat(),))
     s = show(conn)
-    assert s["repeats"]
-    assert instagram.match(row("echohall", "Nova Vale tomorrow!"), s) is None  # which night? can't tell
+    assert s["run"] and not s["repeats"]
+    assert instagram.match(row("echohall", "Nova Vale tickets on sale Friday"), s) == \
+        "names the artist (for the run of nights, not one date)"
     assert instagram.match(row("echohall", f"Nova Vale {SHOW_DAY.month}/{SHOW_DAY.day}"), s) == instagram._STRONG
 
 

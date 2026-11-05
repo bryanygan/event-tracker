@@ -69,6 +69,10 @@ def fetch_calendars(conn, run_id: int, tm_events: list[dict], from_cache: bool =
             failed.append(prefix)
             continue
         kept, dupes = venue_calendars.drop_duplicates(shows, tm_events)
+        if venue.get("posters_only"):  # read for its posters (set on the Ticketmaster twins above), not its shows
+            store.record_source(conn, run_id, venue["key"], ok=True, count=dupes)
+            log.info("Venue calendar %s: posters for %d Ticketmaster shows", venue["name"], dupes)
+            continue
         if not conn.execute("SELECT 1 FROM events WHERE id LIKE ? LIMIT 1", (prefix + "%",)).fetchone():
             first_seen.append(prefix)  # first read of this venue: its shows aren't "just announced"
         store.record_source(conn, run_id, venue["key"], ok=True, count=len(kept))
