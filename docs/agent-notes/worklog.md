@@ -318,3 +318,8 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   Instagram post about her was undated and her two nights counted as "repeats", and Meta has blocked the app since
   2026-11-05 15:29. Added the arena's site as a posters-only calendar (85 of 87 arena shows get its poster) and
   the run-of-nights rule. 445 tests.
+- User restored Meta access the same evening; one test call and a refresh worked (usage 0%).
+- Posters panel "Save all to Photos" / "Download all": the saved posters are fetched as files when the panel
+  opens (iOS only opens the share sheet straight from a tap). Phones (`pointer: coarse`) get `navigator.share`,
+  whose "Save N Images" goes to Photos (an `<a download>` on iOS lands in Files); computers get one download each.
+  Needs HTTPS, which the tunnel gives; posters aren't on the static snapshot.
