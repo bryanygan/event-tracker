@@ -132,6 +132,41 @@ def test_ticketmaster_show_keeps_the_venues_poster(conn):
     assert posters.fetch(conn, "e1", s)["kind"] == "poster" and s.calls == ["https://static.tixr.com/a.jpg"]
 
 
+def _picture(path, size, shapes, colour="white"):
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (400, 400), colour)
+    d = ImageDraw.Draw(img)
+    for box, fill in shapes:
+        d.rectangle(box, fill=fill)
+    img.resize(size).save(path, "JPEG")
+
+
+def _entry(key, event_id, kind="poster", match=None, date="2027-03-06"):
+    return {"key": key, "event_id": event_id, "kind": kind, "label": key, "date": date, "match": match,
+            "source_url": f"https://x/{key}", "saved": True, "image": f"/i/{key}", "download": f"/d/{key}", "error": None}
+
+
+def test_copies_of_one_picture_show_once_and_blank_covers_count_as_unsaved(conn):
+    posters.POSTER_DIR.mkdir(parents=True)
+    tour = [((0, 0, 400, 80), "red"), ((40, 120, 360, 300), "navy"), ((100, 330, 300, 380), "gold")]
+    _picture(posters.POSTER_DIR / "site.jpg", (600, 600), tour)
+    _picture(posters.POSTER_DIR / "ig_1.jpg", (1080, 1080), tour)  # the venue's Instagram copy, bigger
+    _picture(posters.POSTER_DIR / "other.jpg", (600, 600), [((0, 300, 400, 400), "green"), ((150, 20, 250, 250), "black")])
+    _picture(posters.POSTER_DIR / "ig_2.jpg", (640, 1136), [], colour="black")  # a video's black cover
+    (posters.POSTER_DIR / "ig_3.jpg").write_bytes(JPEG)  # unreadable: kept as it is
+    entries = [_entry("e1", "e1"), _entry("ig:1", "e1", "instagram", "names the date"),
+               _entry("e2", "e2", date="2027-03-07"), _entry("ig:2", "e2", "instagram", "names the date"),
+               _entry("ig:3", "e1", "instagram", "names the date"), _entry("ig:3", "e2", "instagram", "names the date")]
+    files = {"e1": "site.jpg", "ig:1": "ig_1.jpg", "e2": "other.jpg", "ig:2": "ig_2.jpg", "ig:3": "ig_3.jpg"}
+    got = posters._merge_copies(conn, entries, files)
+    assert [p["key"] for p in got] == ["ig:1", "e2", "ig:2", "ig:3"]
+    assert [c["event_id"] for c in got[0]["copies"]] == ["e1"]  # the biggest copy kept, the site's listed on it
+    assert got[2]["saved"] is False and got[2]["image"] is None and "blank" in got[2]["error"]
+    assert [c["event_id"] for c in got[3]["copies"]] == ["e2"]  # one post matched to both nights
+    assert conn.execute("SELECT COUNT(*) FROM poster_prints").fetchone()[0] == 5  # printed once, cached
+    assert posters._merge_copies(conn, [_entry("e1", "e1"), _entry("e2", "e2")], files)[1]["key"] == "e2"
+
+
 def test_download_is_named_after_the_show(conn, monkeypatch, tmp_path):
     _event(conn, "e1", "https://static.tixr.com/a.jpg", source="underground-arts", name="Nova Vale: Live / Tour")
     posters.fetch(conn, "e1", FakeSession())

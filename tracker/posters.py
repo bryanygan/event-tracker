@@ -191,7 +191,7 @@ def for_alert(conn, alert_id: int, fetch_missing: int = 8) -> list[dict]:
         raise KeyError(alert_id)
     ids = _alert_event_ids(conn, alert)
     from_instagram = instagram.for_shows(conn, ids)
-    out = []
+    out, files = [], {}
     for event_id in ids:
         e = _event(conn, event_id)
         url, kind = image_of(e) if e else (None, None)
@@ -204,6 +204,8 @@ def for_alert(conn, alert_id: int, fetch_missing: int = 8) -> list[dict]:
                     fetch_missing -= 1
                     poster = fetch(conn, event_id)
             saved = bool(poster and poster.get("file"))
+            if saved:
+                files[event_id] = poster["file"]
             out.append({
                 "key": event_id, "event_id": event_id, "name": e["name"], "venue": e["venue_name"],
                 "date": e["local_date"], "kind": kind, "label": LABELS[kind], "source_url": url,
@@ -214,6 +216,98 @@ def for_alert(conn, alert_id: int, fetch_missing: int = 8) -> list[dict]:
                 "download": f"/api/posters/{quote(event_id, safe='')}?download=1" if saved else None,
             })
         out += from_instagram.get(event_id, [])
+    for p in out:
+        if p["kind"] == "instagram" and p["saved"]:
+            row = conn.execute("SELECT file FROM instagram_posts WHERE media_id=?", (p["key"][3:],)).fetchone()
+            if row and row["file"]:
+                files[p["key"]] = row["file"]
+    return _merge_copies(conn, out, files)
+
+
+SAME_DISTANCE = 4  # differing bits (of 64) for "the same picture"; template posts for other shows sit at 8+
+BLANK_STDDEV = 4   # grey spread below which an image is one flat colour
+
+
+def _dhash(img) -> int:
+    from PIL import Image
+    px = list(img.convert("L").resize((9, 8), Image.LANCZOS).tobytes())
+    return sum(1 << i for i in range(64) if px[(i // 8) * 9 + i % 8] > px[(i // 8) * 9 + i % 8 + 1])
+
+
+def fingerprint(conn, file: str) -> dict | None:
+    """What a saved image looks like (cached in poster_prints): {hashes, width, height, blank}, or None when it
+    can't be read. Hashing the centre square too catches Instagram's crop of a square poster."""
+    path = POSTER_DIR / file
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    stamp = f"{st.st_size}:{st.st_mtime_ns}"
+    row = conn.execute("SELECT * FROM poster_prints WHERE file=?", (file,)).fetchone()
+    if not row or row["stamp"] != stamp:
+        printed, w, h, blank = None, None, None, 0
+        try:
+            from PIL import Image, ImageStat
+            with Image.open(path) as img:
+                w, h = img.size
+                s = min(w, h)
+                left, top = (w - s) // 2, (h - s) // 2
+                printed = f"{_dhash(img):016x}{_dhash(img.crop((left, top, left + s, top + s))):016x}"
+                grey = img.convert("L")
+                grey.thumbnail((64, 64))
+                blank = int(ImageStat.Stat(grey).stddev[0] < BLANK_STDDEV)
+        except Exception as exc:  # not installed, or not an image Pillow reads: shown as it is, never merged
+            log.debug("No fingerprint for %s: %s", file, exc)
+        conn.execute("INSERT OR REPLACE INTO poster_prints (file, stamp, print, width, height, blank) VALUES (?,?,?,?,?,?)",
+                     (file, stamp, printed, w, h, blank))
+        conn.commit()
+        row = conn.execute("SELECT * FROM poster_prints WHERE file=?", (file,)).fetchone()
+    if not row["print"]:
+        return None
+    return {"hashes": (int(row["print"][:16], 16), int(row["print"][16:], 16)),
+            "area": (row["width"] or 0) * (row["height"] or 0), "blank": bool(row["blank"])}
+
+
+def _distance(a: dict, b: dict) -> int:
+    return min(bin(x ^ y).count("1") for x in a["hashes"] for y in b["hashes"])
+
+
+def _merge_copies(conn, entries: list[dict], files: dict[str, str]) -> list[dict]:
+    """One entry per picture: copies of the same image (both nights of a run, the venue's site and its Instagram)
+    fold into the one most likely to be this show's: listing posters and posts naming the date first, then the
+    biggest, then the newest. The rest are listed on it under `copies`. Blank images count as not saved."""
+    prints = {}
+    for p in entries:
+        f = files.get(p["key"]) if p["saved"] else None
+        fp = fingerprint(conn, f) if f else None
+        if fp and fp["blank"]:
+            p.update(saved=False, image=None, download=None,
+                     error="the saved image is blank (a video's cover): open the post")
+        elif fp:
+            prints[p["key"]] = fp
+    groups: list[list[dict]] = []
+    for p in entries:
+        fp = prints.get(p["key"])
+        g = next((g for g in groups if p["saved"] and any(  # the same post matched to two nights, or a lookalike
+            q["key"] == p["key"] or (fp and q["key"] in prints and _distance(fp, prints[q["key"]]) <= SAME_DISTANCE)
+            for q in g)), None)
+        if g is None:
+            groups.append([p])
+        else:
+            g.append(p)
+
+    def rank(p):
+        named = p["kind"] != "instagram" or "date" in (p.get("match") or "")
+        return (named, prints[p["key"]]["area"] if p["key"] in prints else 0, p.get("posted_at") or "")
+    out = []
+    for g in groups:
+        if len(g) == 1:
+            out.append(g[0])
+            continue
+        keep = max(g, key=rank)
+        keep["copies"] = [{"label": q["label"], "date": q["date"], "event_id": q["event_id"], "source_url": q["source_url"]}
+                          for q in g if q is not keep]
+        out.append(keep)
     return out
 
 

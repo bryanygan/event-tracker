@@ -323,3 +323,7 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   opens (iOS only opens the share sheet straight from a tap). Phones (`pointer: coarse`) get `navigator.share`,
   whose "Save N Images" goes to Photos (an `<a download>` on iOS lands in Files); computers get one download each.
   Needs HTTPS, which the tunnel gives; posters aren't on the static snapshot.
+- Duplicate posters: of 276 saved entries across ideas, 6 were byte-identical (mostly both nights of a run) and more
+  were the same artwork re-sized (venue site vs Instagram). Added Pillow and `_merge_copies` (see gotchas); on the
+  live ideas 12 entries fold into others (all 7 distinct pairs checked by eye) and 2 black video covers stop
+  counting as saved. Download all skips the copies. 446 tests.

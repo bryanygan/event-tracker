@@ -83,6 +83,7 @@ export type Poster = {
   saved: boolean; error: string | null; credit: string | null; warnings: string[]
   image: string | null; download: string | null // served by the API once saved
   match?: string; posted_at?: string; caption?: string // Instagram posts (tracker/instagram.py)
+  copies?: { label: string; date: string; event_id: string; source_url: string }[] // the same picture elsewhere, folded in
 }
 export type ContextUsage ={ today: number; auto_today: number; cap: number; auto_cap: number; cost_today_usd: number; enabled: boolean }
 

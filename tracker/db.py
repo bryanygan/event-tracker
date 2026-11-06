@@ -267,6 +267,15 @@ CREATE TABLE IF NOT EXISTS posters (
     seen TEXT                       -- JSON: the listing when saved (date, time, venue, name), for warnings
 );
 
+-- What each saved image looks like, to show a poster once per idea (posters.py `fingerprint`)
+CREATE TABLE IF NOT EXISTS poster_prints (
+    file TEXT PRIMARY KEY,          -- name under data/posters/
+    stamp TEXT NOT NULL,            -- size and mtime when printed; a new download is printed again
+    print TEXT,                     -- two 64-bit difference hashes (whole image, centre square), hex; NULL if unreadable
+    width INTEGER, height INTEGER,
+    blank INTEGER NOT NULL DEFAULT 0  -- one flat colour, e.g. a video's black cover frame
+);
+
 -- Writes made from your phone through the Cloudflare Tunnel (tracker/remote.py), for the record.
 -- Instagram accounts read with Business Discovery (tracker/instagram.py): venues and artists.
 CREATE TABLE IF NOT EXISTS instagram_accounts (

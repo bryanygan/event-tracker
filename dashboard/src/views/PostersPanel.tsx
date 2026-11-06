@@ -37,9 +37,10 @@ export default function PostersPanel({ alertId }: { alertId: number }) {
     if (posters || error) return
     api.posters(alertId).then(setPosters).catch((e) => setError(String(e.message ?? e)))
   }
-  // A show's artist press photo only shows when that show has no poster at all
+  // A show's artist press photo only shows when that show has no poster at all (its own, or a copy folded in)
   const shown = posters?.filter((p) => p.kind !== 'artist_photo'
-    || !posters.some((q) => q.event_id === p.event_id && q.kind !== 'artist_photo')) ?? null
+    || !posters.some((q) => q.kind !== 'artist_photo'
+      && (q.event_id === p.event_id || q.copies?.some((c) => c.event_id === p.event_id)))) ?? null
   const saved = shown?.filter((p) => p.saved) ?? []
   const savable = saved.filter((p) => p.download)
   // Fetched ahead of the tap: iOS only opens the share sheet straight from a tap, not after a wait
@@ -101,6 +102,14 @@ export default function PostersPanel({ alertId }: { alertId: number }) {
                 {p.kind === 'instagram' && (
                   <div className="muted" title={p.caption}>
                     Posted {p.posted_at?.slice(0, 10)}: {p.match} · <a href={p.source_url} target="_blank" rel="noreferrer">post ↗</a>
+                  </div>
+                )}
+                {p.copies && p.copies.length > 0 && (
+                  <div className="muted">
+                    Same picture: {p.copies.map((c, i) => (
+                      <span key={i}>{i > 0 && ', '}<a href={c.source_url} target="_blank" rel="noreferrer">
+                        {c.label}{c.date !== p.date ? ` (${c.date})` : ''} ↗</a></span>
+                    ))}
                   </div>
                 )}
                 {p.download && <a href={p.download} download>Download</a>}

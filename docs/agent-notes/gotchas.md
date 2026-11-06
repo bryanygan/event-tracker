@@ -257,6 +257,12 @@
   every `image_url` and has no posters endpoint. The empty `slide_decks` table is left in old databases, unused.
 - Coverage on the first real run: 274 upcoming shows have a venue poster, but only 14 of 85 open ideas, because
   most ideas are big-venue Ticketmaster shows. Instagram Business Discovery is the route for those.
+- Copies (2026-11-05): `_merge_copies` folds the same picture into one entry per idea (Pillow difference hashes of
+  the whole image and its centre square, cached in `poster_prints`). Measured on 459 files: real copies sit at
+  0-3 bits; venue "Just announced" templates for different shows at 8+; one tour-wide vs Philly-date poster at 5.
+  So `SAME_DISTANCE = 4`, and only within one idea. Folded copies can be updated versions (a banner, openers
+  added); they stay listed under "Same picture". Instagram VIDEO covers can be solid black: `blank` = not saved.
+  Test fixtures' fake JPEG bytes don't decode; unreadable images are never merged, only the same post twice is.
 
 ## Instagram posters (instagram.py, 2026-11-03)
 
