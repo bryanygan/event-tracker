@@ -327,3 +327,9 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
   were the same artwork re-sized (venue site vs Instagram). Added Pillow and `_merge_copies` (see gotchas); on the
   live ideas 12 entries fold into others (all 7 distinct pairs checked by eye) and 2 black video covers stop
   counting as saved. Download all skips the copies. 446 tests.
+
+## 2026-11-06
+
+- "What to post" cards had no "Facts & draft" button for 38 of 138 ideas: the view loaded `/api/alerts` (vinyl left
+  out, newest 100 only) and the button needs the idea. It now asks for `kind=any&limit=1000`. Vinyl story drafts
+  ("Research & write draft") were only reachable from the Vinyl tab before.

@@ -465,7 +465,8 @@ const staticApi = {
   summary: () => snapshot<Summary>('summary'),
   job: () => Promise.resolve<Job>({ name: null, started: null, finished: null, error: null, running: false }),
   alerts: (status: 'open' | 'dismissed' | 'all', kind = '') =>
-    snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? [] : all.filter((a) => (a.kind === 'vinyl') === (kind === 'vinyl')))),
+    snapshot<Alert[]>('alerts').then((all) => (status === 'dismissed' ? []
+      : all.filter((a) => kind === 'any' || (a.kind === 'vinyl') === (kind === 'vinyl')))),
   vinyl: () => snapshot<VinylOverview>('vinyl').catch(() => ({ enabled: false, synced_at: null, pending_lookups: 0, value: null,
                                                                  records: [], formats: {}, manual_formats: [] })),
   vinylSync: readOnly,
@@ -529,7 +530,9 @@ const staticApi = {
 const liveApi = {
   summary: () => req<Summary>('/api/summary'),
   job: () => req<Job>('/api/job'),
-  alerts: (status: 'open' | 'dismissed' | 'all', kind = '') => req<Alert[]>(`/api/alerts?status=${status}${kind ? `&kind=${kind}` : ''}`),
+  // kind: '' events + music, 'vinyl', or 'any' (every idea, for What to post, which needs all of them)
+  alerts: (status: 'open' | 'dismissed' | 'all', kind = '') =>
+    req<Alert[]>(`/api/alerts?status=${status}${kind ? `&kind=${kind}` : ''}${kind === 'any' ? '&limit=1000' : ''}`),
   vinyl: () => req<VinylOverview>('/api/vinyl'),
   vinylSync: () => req<Job>('/api/vinyl/sync', { method: 'POST' }),
   vinylIdea: (instanceId: number, format: string) =>

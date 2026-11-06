@@ -47,7 +47,7 @@ export default function QueueView({ refreshKey, busy, job, summary, onJob, onCha
   const [pillar, setPillar] = useState<'all' | QueueItem['pillar']>('all')
   const load = () => {
     api.queue().then(setQueue)
-    api.alerts(STATIC ? 'open' : 'all').then(setAlerts)
+    api.alerts(STATIC ? 'open' : 'all', 'any').then(setAlerts)  // vinyl too, so every card can open its draft
   }
   useEffect(() => { load() }, [refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const changed = () => { load(); onChange() }

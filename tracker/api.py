@@ -173,14 +173,16 @@ def source_health(c=Depends(get_db)):
 
 @app.get("/api/alerts")
 def list_alerts(status: str = "open", limit: int = 100, kind: str = "", c=Depends(get_db)):
-    """Ideas for the Alerts tab. Vinyl ideas live on the Vinyl tab: they're left out unless kind=vinyl."""
+    """Ideas for the Alerts tab. Vinyl ideas live on the Vinyl tab: they're left out unless kind=vinyl.
+    kind=any is every idea, for "What to post", which lists all of them."""
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
     if where is None:
         raise HTTPException(400, "status must be open, dismissed or all")
-    pillar = "a.kind = ?" if kind == config.VINYL_KIND else "a.kind != ?"
+    pillar, args = {config.VINYL_KIND: ("a.kind = ?", [config.VINYL_KIND]), "any": ("1=1", [])}.get(
+        kind, ("a.kind != ?", [config.VINYL_KIND]))
     alerts = [dict(r) for r in c.execute(
         f"SELECT * FROM alerts a WHERE {where} AND {pillar} ORDER BY a.created_at DESC, a.score DESC LIMIT ?",
-        (config.VINYL_KIND, limit))]
+        (*args, limit))]
     posted = posts.posts_by_alert(c)
     news = music.news_index(c)  # cross-pillar (M8): the acts' recent music stories, shown on event cards
     for a in alerts:

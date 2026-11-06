@@ -201,6 +201,8 @@ def test_api_keeps_vinyl_on_its_own_tab(conn, tmp_path, monkeypatch):
     client = TestClient(api.app)
     assert client.get("/api/alerts").json() == []
     assert [a["kind"] for a in client.get("/api/alerts", params={"kind": "vinyl"}).json()] == ["vinyl"]
+    # What to post lists vinyl ideas too, so its cards need them to open the draft
+    assert [a["kind"] for a in client.get("/api/alerts", params={"kind": "any", "status": "all"}).json()] == ["vinyl"]
     v = client.get("/api/vinyl").json()
     assert len(v["records"]) == 6 and v["value"]["median"] == "$250.00"
     assert client.post("/api/vinyl/4/idea", json={"format": "vinyl_value"}).status_code == 400
