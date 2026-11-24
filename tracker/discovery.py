@@ -163,12 +163,12 @@ def refresh(conn, lastfm=None, now: datetime | None = None, force: bool = False)
 
 # ---------- daily snapshots ----------
 
-def _subjects(conn) -> list[dict]:
-    """Who gets snapshotted: the watchlist and the current candidates (not dismissed)."""
+def _subjects(conn, now: datetime) -> list[dict]:
+    """Who gets snapshotted: the watchlist and the current candidates (not dismissed) as of `now`."""
     out = [{"key": r["key"], "name": r["name"], "mbid": r["mbid"], "deezer_id": r["deezer_id"], "candidate": None}
            for r in conn.execute("SELECT * FROM artist_identities WHERE muted=0 AND tier IN ('core', 'watch', 'adjacent', 'breakout')")]
     have = {s["key"] for s in out}
-    since = (_now() - timedelta(days=2 * config.DISCOVERY_REFRESH_DAYS)).isoformat()
+    since = (now - timedelta(days=2 * config.DISCOVERY_REFRESH_DAYS)).isoformat()
     for r in conn.execute("SELECT * FROM artist_candidates WHERE status='new' AND last_seen >= ?", (since,)):
         if r["key"] not in have:
             out.append({"key": r["key"], "name": r["name"], "mbid": r["mbid"], "deezer_id": r["deezer_id"], "candidate": r["id"]})
@@ -215,7 +215,7 @@ def snapshot_due(conn, now: datetime | None = None, limit: int | None = None, cl
     limit = config.METRICS_ARTISTS_PER_CHECK if limit is None else limit
     lastfm, deezer, lb = clients or (LastfmClient(), DeezerClient(), ListenBrainzClient())
     done = 0
-    for s in _subjects(conn):
+    for s in _subjects(conn, now):
         if done >= limit:
             break
         if (conn.execute("SELECT body FROM api_cache WHERE key=?", (f"metrics:{s['key']}",)).fetchone() or {"body": "null"})["body"] == json.dumps(day):
@@ -259,7 +259,7 @@ def mentions(conn, now: datetime | None = None) -> int:
             for h in matcher.match(a["title"], None):
                 counts.setdefault(by_id[h["artist_id"]]["key"], set()).add(a["source_id"])
     n = 0
-    for s in _subjects(conn):
+    for s in _subjects(conn, now):
         _put(conn, s["key"], "news", "mentions", len(counts.get(s["key"], ())), day)
         n += 1
     _mark(conn, "mentions:day", now, day)

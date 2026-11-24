@@ -117,15 +117,18 @@ def export(conn, out_dir: Path = SITE_DIR) -> Path:
     summary["last_run"] = next((r for r in _runs(conn) if last and r["id"] == last["id"]), None)
     alerts = api.list_alerts(status="open", limit=200, c=conn)
     vinyl_ideas = api.list_alerts(status="open", limit=100, kind="vinyl", c=conn)
+    queue = api.queue(c=conn)  # the main list: the recaps picked for it, not the whole Recaps tab
+    recap_ids = ",".join(str(i["alert_id"]) for i in queue["items"] if i["kind"] == "recap")
+    recap_ideas = api.list_alerts(status="open", ids=recap_ids, c=conn) if recap_ids else []
     news_sources = api.news_sources(c=conn)
     files = {
         "summary": summary,
-        "alerts": alerts + vinyl_ideas,
+        "alerts": alerts + vinyl_ideas + recap_ideas,
         "events": api.list_events(q="", genre="", days=config.LOOKAHEAD_DAYS, limit=5000, c=conn),
         "genres": api.genres(c=conn),
         "runs": _runs(conn),
         "posts": api.list_posts(c=conn),
-        "queue": api.queue(c=conn),
+        "queue": queue,
         "calendar": api.calendar(c=conn),
         "analytics": {g: api.analytics(group_by=g, c=conn) for g in posts.GROUP_BY},
         "trends": [],  # your own notes

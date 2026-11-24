@@ -185,6 +185,7 @@ RECENT_POST_DAYS = 14      # warn when you already posted about the same artist 
 # Opportunity score bands on the cards. Set from the first real queue (2026-10-21): at 70/50, 14 of 21 ideas
 # were "strong" because every presale alert is by construction <72h out and maxes the timing component.
 QUEUE_STRONG, QUEUE_MEDIUM = 80, 65
+RECAPS_ON_QUEUE = 6        # new recaps in your lane also listed on "What to post" (recaps.py; all are on Recaps)
 REASON_MIN = 75            # a component counts as a reason on the card at this value or above
 TREND_NOTES_MAX = 500      # refuse new notes past this (each is matched against every idea on every queue load)
 TREND_NOTE_DAYS = 7       # a trend note stops counting this long after you saw it (unless you set expires_at)
@@ -200,7 +201,7 @@ SERIES_FOR_FORMAT = {
     "new_tour": "Just announced", "status_change": "Show update", "team_week": "Game week", "big_game": "Game week",
     "experience": "Philly happenings", "things_to_do": "Things to do this weekend",
     "music_story": "Music news", "new_music_friday": "New Music Friday", "upcoming_albums": "Upcoming albums",
-    "emerging_artists": "Artists to watch",
+    "emerging_artists": "Artists to watch", "recap": "Philly recaps",
 }
 # How often a series usually runs. The Series table marks one "behind" when its last post is older than this.
 SERIES_CADENCE_DAYS = {"Philly this weekend": 7, "Stacked month": 30}

@@ -59,12 +59,12 @@ def seed_sources(conn) -> None:
 ARTIST_CHANNELS_EACH = 2  # an artist's own channel and, say, their VEVO channel
 
 
-def sync_artist_channels(conn) -> int:
+def sync_artist_channels(conn, now: datetime | None = None) -> int:
     """A YouTube source for each watchlist artist's own channel, from the links MusicBrainz lists
     (watchlist.resolve_ids). Muted or dropped artists' channels are disabled. Returns how many are enabled."""
     from .fetchers import youtube
     marks = ",".join("?" * len(watchlist.MATCHED_TIERS))
-    gone = channels_gone(conn, _now())
+    gone = channels_gone(conn, now or _now())
     keys = []
     for a in conn.execute(f"""SELECT id, name, links FROM artist_identities
                               WHERE muted=0 AND tier IN ({marks}) AND links IS NOT NULL""", watchlist.MATCHED_TIERS):
@@ -226,7 +226,7 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
     articles in events_fetched)."""
     from .fetchers import youtube
     seed_sources(conn)
-    sync_artist_channels(conn)
+    sync_artist_channels(conn, now)
     run_id = store.start_run(conn, "news")
     session = session or requests.Session()
     results = []
@@ -256,13 +256,13 @@ def run(conn, session: requests.Session | None = None, now: datetime | None = No
         if not conn.execute("SELECT 1 FROM artist_identities LIMIT 1").fetchone():
             watchlist.refresh(conn)
         else:
-            watchlist.rematch(conn, [i for r in results for i in r["new_ids"]])
+            watchlist.rematch(conn, [i for r in results for i in r["new_ids"]], now)
         failed = [f"{r['source']} ({r['error']})" for r in results if r["error"]]
         # A few artists' release catalogs (Deezer + iTunes), then stories again so catalog evidence shows up
         try:
             releases = catalog.poll(conn)
             if releases["artists"]:
-                stories.rebuild(conn)
+                stories.rebuild(conn, now)
         except Exception as exc:  # the feeds are the job; never lose them over a catalog problem
             log.warning("Catalog check failed: %s", exc)
             releases = {"artists": 0, "new": 0, "error": str(exc)}

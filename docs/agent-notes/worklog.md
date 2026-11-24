@@ -333,3 +333,15 @@ Newest session at the bottom. Keep entries short: what was done, what was found,
 - "What to post" cards had no "Facts & draft" button for 38 of 138 ideas: the view loaded `/api/alerts` (vinyl left
   out, newest 100 only) and the button needs the idea. It now asks for `kind=any&limit=1000`. Vinyl story drafts
   ("Research & write draft") were only reachable from the Vinyl tab before.
+
+## 2026-11-24
+
+- User asked for many more recap videos (genre by week/month, multi-date runs, first half of a month, holiday
+  weeks, after-show plans, underrated shows...) in their own section, with the important/in-niche ones still on
+  What to post. Built on `feature/recaps`: `tracker/recaps.py` (21 types × date windows), a Recaps tab (the queue
+  view with `section=recaps`, a type filter, 40 cards a page), cards load only the ideas on screen
+  (`/api/alerts?ids=`). First live pass: 150 recaps; 3 drafted with Haiku as a check (afterparty, underrated
+  month, Hip-Hop Dec 1–15), no fact warnings. Guide now asks for full dates in long lists (a month draft said
+  only "Friday... Saturday...").
+- Four tests had gone stale with the calendar (see gotchas "Tests and the clock"); fixed by passing `now` down.
+  451 tests.

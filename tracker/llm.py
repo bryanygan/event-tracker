@@ -354,6 +354,9 @@ def build_prompt(facts: dict) -> str:
         guide = guide.format(**{k: v for k, v in facts.items() if isinstance(v, (str, int))})
     except (KeyError, IndexError):
         pass  # leave placeholders; the facts are still below
+    if fmt == "recap":  # one guide per recap type (recaps.py)
+        from . import recaps
+        guide = recaps.guide(facts)
     if facts.get("picked_from"):
         guide += (f"\nThis is a 'my picks' video: only the {len(facts.get('shows', []))} shows below, best first "
                   f"(picked from {facts['picked_from']}). Mention no other shows.")
@@ -577,6 +580,18 @@ def onscreen_lines(facts: dict) -> list[str]:
         lines.append(f"{facts['lane'].upper() + ' · ' if facts.get('lane') else ''}PHILLY THIS WEEKEND · {facts['weekend']}")
     elif fmt == "stacked_month":
         lines.append(f"{facts['month'].upper()} IN PHILLY: {facts['genre'].upper()}")
+    elif fmt == "recap":
+        lines.append(f"{facts.get('theme', '').upper()} · {facts.get('when', '')}")
+        if facts.get("concert"):  # after the show: the concert first, then the late shows
+            c = facts["concert"]
+            lines.append(" · ".join(b for b in (c["date"], c.get("artist"), c.get("venue"), c.get("time")) if b))
+        for s in facts.get("shows", []):
+            bits = [s["date"], s.get("artist") or s.get("event_name"), s.get("venue")]
+            bits += [x for x in (s.get("time") if facts.get("recap_type") in ("late_night", "afterparty") else None,
+                                 s.get("price") if facts.get("recap_type") == "cheap" else None,
+                                 s.get("sale_opens") and f"{s.get('sale')}: {s['sale_opens']}") if x]
+            lines.append(" · ".join(b for b in bits if b))
+        return lines
     elif fmt == "presale":
         if (facts.get("history") or {}).get("is_comeback"):
             lines.append(f"FIRST PHILLY SHOW SINCE {facts['history']['last_philly_show_year']}")

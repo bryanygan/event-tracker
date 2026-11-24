@@ -103,13 +103,13 @@ def test_normalize_handles_missing_fields():
 # ---------- change tracking ----------
 
 def test_first_run_is_baseline_then_changes_are_logged(conn):
-    a = tm_event(event_id="a", name="Band A")
+    a = tm_event(event_id="a", name="Band A", date="2099-11-08")  # far ahead: a past show isn't "removed"
     run1, counts1 = ingest(conn, [a])
     assert counts1 == {}  # baseline: nothing is "new"
 
-    a2 = tm_event(event_id="a", name="Band A", status="rescheduled", price=(50.0, 85.0),
+    a2 = tm_event(event_id="a", name="Band A", date="2099-11-08", status="rescheduled", price=(50.0, 85.0),
                   presales=[("Fan Club", "2026-10-22T14:00:00Z", None)])
-    b = tm_event(event_id="b", name="Band B")
+    b = tm_event(event_id="b", name="Band B", date="2099-11-08")
     run2, counts2 = ingest(conn, [a2, b])
     assert counts2 == {"status": 1, "price": 1, "presale_added": 1, "new": 1}
 

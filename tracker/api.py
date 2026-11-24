@@ -25,8 +25,8 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from . import (angles, config, context, db, discovery, drafts, health, instagram, listening, llm, manual_events,
-               music, news, opportunities, planner, posters, posts, publish, redraft, remote, scoring, search, trends,
-               vinyl, watchlist)
+               music, news, opportunities, planner, posters, posts, publish, recaps, redraft, remote, scoring, search,
+               trends, vinyl, watchlist)
 from .scoring import upcoming_events
 
 log = logging.getLogger(__name__)
@@ -172,14 +172,21 @@ def source_health(c=Depends(get_db)):
 
 
 @app.get("/api/alerts")
-def list_alerts(status: str = "open", limit: int = 100, kind: str = "", c=Depends(get_db)):
-    """Ideas for the Alerts tab. Vinyl ideas live on the Vinyl tab: they're left out unless kind=vinyl.
-    kind=any is every idea, for "What to post", which lists all of them."""
+def list_alerts(status: str = "open", limit: int = 100, kind: str = "", ids: str = "", c=Depends(get_db)):
+    """Ideas for the Alerts tab. Vinyl ideas live on the Vinyl tab and recaps on the Recaps tab: they're left out
+    unless kind=vinyl / kind=recap. kind=any is every idea. `ids` (comma-separated): just these, of any kind, for
+    "What to post" and Recaps, which open whichever cards they list."""
     where = {"open": "a.status != 'dismissed'", "dismissed": "a.status = 'dismissed'", "all": "1=1"}.get(status)
     if where is None:
         raise HTTPException(400, "status must be open, dismissed or all")
-    pillar, args = {config.VINYL_KIND: ("a.kind = ?", [config.VINYL_KIND]), "any": ("1=1", [])}.get(
-        kind, ("a.kind != ?", [config.VINYL_KIND]))
+    pillar, args = {config.VINYL_KIND: ("a.kind = ?", [config.VINYL_KIND]), "recap": ("a.kind = 'recap'", []),
+                    "any": ("1=1", [])}.get(kind, ("a.kind NOT IN (?, 'recap')", [config.VINYL_KIND]))
+    if ids:
+        try:
+            wanted = [int(x) for x in ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(400, "ids must be numbers separated by commas")
+        pillar, args, limit = f"a.id IN ({','.join('?' * len(wanted)) or 'NULL'})", wanted, len(wanted)
     alerts = [dict(r) for r in c.execute(
         f"SELECT * FROM alerts a WHERE {where} AND {pillar} ORDER BY a.created_at DESC, a.score DESC LIMIT ?",
         (*args, limit))]
@@ -228,9 +235,13 @@ def update_alert(alert_id: int, body: AlertUpdate, c=Depends(get_db)):
 
 
 @app.get("/api/queue")
-def queue(c=Depends(get_db)):
-    """Video ideas ranked by the experimental opportunity score (tracker/opportunities.py)."""
-    items = opportunities.queue(c)
+def queue(section: str = "main", c=Depends(get_db)):
+    """Video ideas ranked by the experimental opportunity score (tracker/opportunities.py). section=recaps: only
+    the recaps (recaps.py), every one; the main list has the rest plus the recaps picked for it (`on_queue`)."""
+    if section not in ("main", "recaps"):
+        raise HTTPException(400, "section must be main or recaps")
+    items = [i for i in opportunities.queue(c)
+             if (i["kind"] == "recap" if section == "recaps" else i["on_queue"])]
     now = datetime.now(timezone.utc)
     soon = (now + timedelta(hours=48)).isoformat()
     active = [i for i in items if i["stage"] in opportunities.ACTIVE_STAGES]
@@ -245,6 +256,7 @@ def queue(c=Depends(get_db)):
         },
         "weights": config.OPPORTUNITY_WEIGHTS,
         "rules_version": config.OPPORTUNITY_RULES_VERSION,
+        "recap_types": recaps.TYPE_LABEL,
     }
 
 

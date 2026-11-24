@@ -234,9 +234,9 @@ def _matchable(conn):
     return conn.execute(f"SELECT * FROM artist_identities WHERE muted=0 AND tier IN ({marks})", MATCHED_TIERS).fetchall()
 
 
-def rematch(conn, article_ids: list[int] | None = None) -> int:
-    """Rebuild article_artists for these articles (all of them when None), then the stories. Returns how many links
-    were made."""
+def rematch(conn, article_ids: list[int] | None = None, now: datetime | None = None) -> int:
+    """Rebuild article_artists for these articles (all of them when None), then the stories (as of `now`, default the
+    real time). Returns how many links were made."""
     matchable = _matchable(conn)
     matcher = Matcher(matchable)
     can_match = {a["id"] for a in matchable}
@@ -262,7 +262,7 @@ def rematch(conn, article_ids: list[int] | None = None) -> int:
                          (r["id"], h["artist_id"], h["match"], h["location"], h["confidence"]))
             links += 1
     conn.commit()
-    stories.rebuild(conn)  # tags changed, so the story groups may have too
+    stories.rebuild(conn, now)  # tags changed, so the story groups may have too
     return links
 
 

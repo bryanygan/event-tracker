@@ -23,7 +23,7 @@ from .scoring import is_game, is_music, upcoming_events
 MAX_NOTE = 1000
 MAX_ADD = 10
 # Facts formats whose shows you can add to or leave out (single-show ideas have nothing to choose)
-LIST_FORMATS = {"weekend", "stacked_month", "things_to_do", "team_week"}
+LIST_FORMATS = {"weekend", "stacked_month", "things_to_do", "team_week", "recap"}
 GENRE_SOURCE = {"listing": "the ticket listing", "artist": "Ticketmaster's genre for the artist",
                 "tm_search": "Ticketmaster's genre for the artist", "deezer": "Deezer's genre for the artist"}
 

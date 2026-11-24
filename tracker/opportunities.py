@@ -100,6 +100,9 @@ def story(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
         "experience": (60, f"Local {(facts.get('category') or 'event').lower()}: not a concert, a wider audience"),
         "things_to_do": (45, "Weekend 'things to do' roundup"),
     }
+    if kind == "recap":
+        from . import recaps
+        options["recap"] = recaps.story(facts)
     best = [options.get(kind, (30, "No special angle"))]
     history = facts.get("history") or {}
     if history.get("is_comeback"):
@@ -120,6 +123,9 @@ def local(alert: dict, facts: dict, events: list[dict]) -> tuple[float, str]:
         return 100, f"{facts.get('artist')} home game"
     if alert["kind"] in LOCAL_KINDS:
         return 100, "Happening in Philly"
+    if alert["kind"] == "recap":  # a broad list: in your lane only when most of it is (recaps.in_your_lane)
+        from . import recaps
+        return (100, "Mostly shows in your lane") if recaps.in_your_lane(events) else (70, "Philly shows, a broad mix")
     plays = max([e.get("my_plays") or 0 for e in events] + [facts.get("your_plays") or 0])
     if plays >= config.ROTATION_MIN_PLAYS:
         return 100, f"Philly show, in your rotation ({plays} plays)"
@@ -344,11 +350,24 @@ def queue(conn, now: datetime | None = None, alert_id: int | None = None) -> lis
             "links": links[:6],
             "pillar": "music" if a["kind"] in config.MUSIC_KINDS else "vinyl" if a["kind"] == config.VINYL_KIND
                       else "events",
+            "recap_type": a["facts"].get("recap_type"),  # recaps.py; None for every other idea
             "draft": None if draft is None else {k: draft[k] for k in ("id", "status", "hook", "warnings", "facts_changes")},
             "posts": [{"id": p["id"], "url": p["url"], "posted_at": p["posted_at"]} for p in posts_for.get(a["id"], [])],
             **opp,
         })
     out.sort(key=lambda o: (o["stage"] not in ACTIVE_STAGES, not o["shortlisted"], -(o["score"] or 0)))
+    # Recaps on "What to post" too: ones you've started on (starred, noted, drafted, posted), and the best
+    # RECAPS_ON_QUEUE still-new ones that are mostly in your lane, one per kind of recap for variety. All of them are
+    # on the Recaps tab.
+    best, kinds = set(), set()
+    for o in out:  # best first
+        if (o["kind"] == "recap" and o["lane"] == "lane" and o["stage"] == "new" and o["recap_type"] not in kinds
+                and len(best) < config.RECAPS_ON_QUEUE):
+            best.add(o["alert_id"])
+            kinds.add(o["recap_type"])
+    for o in out:
+        o["on_queue"] = o["kind"] != "recap" or o["alert_id"] in best or bool(
+            o["shortlisted"] or o["note"] or o["draft"] or o["posts"] or o["planned_for"])
     return out
 
 

@@ -36,6 +36,9 @@ def angles_for(facts: dict) -> list[dict]:
     if fmt in config.MUSIC_KINDS:  # music ideas have their own (music_formats.py, roadmap M6)
         from . import music_formats
         return music_formats.angles_for(facts)
+    if fmt == "recap":  # recaps.py
+        from . import recaps
+        return recaps.angles_for(facts)
     artist = facts.get("artist", "")
     history = facts.get("history") or {}
     out = []

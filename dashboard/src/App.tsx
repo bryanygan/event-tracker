@@ -9,9 +9,10 @@ import QueueView from './views/QueueView'
 import RunsView from './views/RunsView'
 import VinylView from './views/VinylView'
 
-type Tab = 'queue' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs' | 'news' | 'vinyl'
-// Calendar and Music news are separate nice-to-have tabs, last (music news merges into What to post later, roadmap M9)
-const TABS: Tab[] = ['queue', 'alerts', 'posts', 'events', 'runs', 'calendar', 'news', 'vinyl']
+type Tab = 'queue' | 'recaps' | 'calendar' | 'alerts' | 'posts' | 'events' | 'runs' | 'news' | 'vinyl'
+// Calendar and Music news are separate nice-to-have tabs, last (music news merges into What to post later, roadmap M9).
+// Recaps sits next to What to post: the same cards, for the many broad roundups (tracker/recaps.py).
+const TABS: Tab[] = ['queue', 'recaps', 'alerts', 'posts', 'events', 'runs', 'calendar', 'news', 'vinyl']
 
 export default function App() {
   // The tab lives in the URL hash (#alerts), so a tab can be bookmarked on the phone
@@ -142,9 +143,9 @@ export default function App() {
       {error && <div className="banner error">{error}</div>}
 
       <nav>
-        {TABS.map((t) => (
+        {TABS.filter((t) => !(STATIC && t === 'recaps')).map((t) => (  // snapshots carry the main list only
           <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-            {{ queue: 'What to post', calendar: 'Calendar', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs', news: 'Music news', vinyl: 'Vinyl' }[t]}
+            {{ queue: 'What to post', recaps: 'Recaps', calendar: 'Calendar', alerts: 'Alerts & drafts', posts: 'Posted', events: 'Events', runs: 'Runs', news: 'Music news', vinyl: 'Vinyl' }[t]}
             {t === 'posts' && !!summary?.metrics_due && <span className="badge" title="posts waiting for 24h/7d numbers">{summary.metrics_due}</span>}
           </button>
         ))}
@@ -152,6 +153,7 @@ export default function App() {
 
       <main>
         {tab === 'queue' && <QueueView refreshKey={refreshKey} busy={!!job?.running} job={job} summary={summary} onJob={setJob} onChange={refresh} />}
+        {tab === 'recaps' && <QueueView key="recaps" section="recaps" refreshKey={refreshKey} busy={!!job?.running} job={job} summary={summary} onJob={setJob} onChange={refresh} />}
         {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChange={refresh} />}
         {tab === 'alerts' && <AlertsView refreshKey={refreshKey} busy={!!job?.running} job={job} onJob={setJob} onChange={refresh} />}
         {tab === 'posts' && <PostsView refreshKey={refreshKey} onChange={refresh} />}

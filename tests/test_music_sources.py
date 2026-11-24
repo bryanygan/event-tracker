@@ -208,7 +208,7 @@ def test_an_unreadable_topic_channel_is_switched_off_and_the_next_link_takes_its
     assert not out["failed"]  # no source problem for a channel we can't fix
     rows = {r["key"]: dict(r) for r in conn.execute("SELECT key, enabled, failures FROM news_sources")}
     assert rows[f"yt-artist:{topic}"]["enabled"] == 0 and rows[f"yt-artist:{topic}"]["failures"] == 0
-    news.sync_artist_channels(conn)
+    news.sync_artist_channels(conn, NOW)
     rows = {r["key"]: r["enabled"] for r in conn.execute("SELECT key, enabled FROM news_sources")}
     assert rows[f"yt-artist:{topic}"] == 0 and rows[f"yt-artist:{second}"] == 1 and rows[f"yt-artist:{third}"] == 1
     # And it stays off on the next check instead of failing again

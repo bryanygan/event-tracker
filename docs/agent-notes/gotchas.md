@@ -13,6 +13,32 @@
 - Fourth time (M6/M7, 2026-10-23): Python-heredoc "replace" scripts turned `"\\n"` into a real line break inside a
   string literal (SyntaxError in llm.py and slides.py) and `\\b` into `\x08` in discovery.py. A plain-text replace
   script is only safe when neither the old nor the new text contains a backslash.
+- PowerShell's version of the same trap (recaps, 2026-11-24): in a double-quoted PowerShell string the backtick is
+  the escape character, so a `.Replace(...)` edit ate the backticks of TypeScript template strings and turned
+  "`now`" in a docstring into a newline + "ow". Use Edit for anything with backticks too.
+
+## Tests and the clock
+
+- Tests with a fixed `NOW` broke a month later (2026-11-24) wherever the code under test read the real clock: a
+  helper called without the `now` its caller had (`stories.rebuild`, `watchlist.rematch`, `sync_artist_channels`,
+  `discovery._subjects`), and factory shows dated 2026-11-08 that are now past (not "removed" when they vanish).
+  Pass `now` all the way down, and date test shows far ahead (2099) when "upcoming" matters.
+
+## Recaps (recaps.py, 2026-11-24)
+
+- Every recap is kind `recap`, format `recap`, `recap_type` for the variety (genre, scene, overview, underrated,
+  cheap, venue, city, late_night, weeknight, big_rooms, small_rooms, comeback, lineups, comedy, sports, local,
+  holiday_shows, multi_night, afterparty, just_announced, on_sale), crossed with date windows (`windows()`).
+- Kept off: Alerts & drafts (`/api/alerts` excludes them unless kind=recap/any), auto-drafting (`draft_pending`).
+  On "What to post": the best `RECAPS_ON_QUEUE` new ones in your lane (one per type), plus any you've touched.
+- Titles use dated words ("the week of Nov 30", "December 1–15"), never "this week": drafts get posted later.
+  Windows with the same dates are one window (Thanksgiving week = the week of Nov 23; the holiday wins), halves
+  of a month that already started are skipped, and a recap listing the same shows as an earlier one is dropped.
+- "Underrated" = Deezer fans 1k-60k in a tier ≤ 40 room, your lane first. It picks some legacy acts (A Flock of
+  Seagulls): small now, not undiscovered. "After the show" = same-night shows from 9:30 PM at other venues, or a
+  listing named an afterparty (only those may be called official). Multiple nights = dates ≤ 7 days apart; a
+  monthly club night isn't a run.
+- ~150 live at a time on real data; untouched ones are deleted 7 days after they expire (`prune`, each run).
 
 ## Windows / Task Scheduler
 

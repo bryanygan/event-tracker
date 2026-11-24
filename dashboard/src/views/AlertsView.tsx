@@ -22,6 +22,7 @@ export const KIND_LABEL: Record<Alert['kind'], string> = {
   upcoming_albums: 'Upcoming albums',
   emerging_artists: 'Artists to watch',
   vinyl: 'Vinyl',
+  recap: 'Recap',
 }
 // Formats whose script comes from Python (tracker/templates.py, tracker/music_formats.py): an angle drafts instantly
 const TEMPLATED = ['presale', 'status_change', 'team_week', 'big_game', 'experience', 'new_music_friday', 'upcoming_albums', 'emerging_artists']
@@ -69,7 +70,7 @@ export default function AlertsView({ refreshKey, busy, job, onJob, onChange }: P
         )}
         <select value={kind} onChange={(e) => setKind(e.target.value as Alert['kind'] | '')}>
           <option value="">All types</option>
-          {Object.entries(KIND_LABEL).filter(([k]) => k !== 'vinyl').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(KIND_LABEL).filter(([k]) => k !== 'vinyl' && k !== 'recap').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <span className="muted small">{shown.length} alerts</span>
       </div>

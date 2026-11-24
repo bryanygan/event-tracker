@@ -38,55 +38,84 @@ function timeLeft(iso: string) {
   return h < 48 ? `${Math.round(h)}h left` : `${Math.round(h / 24)} days left`
 }
 
-type Props = { refreshKey: number; busy: boolean; job: Job | null; summary: Summary | null; onJob: (j: Job) => void; onChange: () => void }
+type Props = {
+  refreshKey: number; busy: boolean; job: Job | null; summary: Summary | null; onJob: (j: Job) => void; onChange: () => void
+  section?: 'main' | 'recaps' // recaps: the Recaps tab (tracker/recaps.py), every recap with a type filter
+}
 
-export default function QueueView({ refreshKey, busy, job, summary, onJob, onChange }: Props) {
+const PAGE = 40 // cards per page: the Recaps tab has hundreds
+
+export default function QueueView({ refreshKey, busy, job, summary, onJob, onChange, section = 'main' }: Props) {
+  const recapsTab = section === 'recaps'
   const [queue, setQueue] = useState<Queue | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [filter, setFilter] = useState<Filter>('active')
   const [pillar, setPillar] = useState<'all' | QueueItem['pillar']>('all')
-  const load = () => {
-    api.queue().then(setQueue)
-    api.alerts(STATIC ? 'open' : 'all', 'any').then(setAlerts)  // vinyl too, so every card can open its draft
-  }
-  useEffect(() => { load() }, [refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [rtype, setRtype] = useState('all')
+  const [limit, setLimit] = useState(PAGE)
+  const load = () => { api.queue(section).then(setQueue) }
+  useEffect(() => { load() }, [refreshKey, section]) // eslint-disable-line react-hooks/exhaustive-deps
   const changed = () => { load(); onChange() }
 
+  const shown = (queue?.items ?? []).filter((i) => FILTERS[filter](i) && (pillar === 'all' || i.pillar === pillar)
+    && (rtype === 'all' || i.recap_type === rtype))
+  const page = shown.slice(0, limit)
+  // The full cards (facts, angles, drafts) of just the ideas on screen, so "Facts & draft" works on every one
+  const ids = page.map((i) => i.alert_id).join(',')
+  useEffect(() => {
+    if (ids) api.alertsByIds(ids.split(',').map(Number)).then(setAlerts)
+  }, [ids, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!queue) return <p className="muted">Loading…</p>
-  const shown = queue.items.filter((i) => FILTERS[filter](i) && (pillar === 'all' || i.pillar === pillar))
   const c = queue.counts
+  const types = Object.entries(queue.recap_types ?? {}).filter(([k]) => queue.items.some((i) => i.recap_type === k))
 
   return (
     <>
       <div className="queue-counts">
-        <Count label="new ideas" value={c.new} />
+        <Count label={recapsTab ? 'new recaps' : 'new ideas'} value={c.new} />
         <Count label="post within 48h" value={c.time_sensitive} hot={c.time_sensitive > 0} />
         <Count label="drafts to review" value={c.to_review} />
         <Count label="ready to film" value={c.ready_to_film} />
-        <Count label="posted this week" value={summary?.posts_this_week} />
+        {!recapsTab && <Count label="posted this week" value={summary?.posts_this_week} />}
       </div>
       <div className="toolbar">
-        <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+        <select value={filter} onChange={(e) => { setFilter(e.target.value as Filter); setLimit(PAGE) }}>
           {Object.keys(FILTERS).map((f) => <option key={f} value={f}>{f[0].toUpperCase() + f.slice(1)}</option>)}
         </select>
-        <select value={pillar} onChange={(e) => setPillar(e.target.value as typeof pillar)} title="Philly events, music news, or both">
-          <option value="all">Events + music</option>
-          <option value="events">Events</option>
-          <option value="music">Music news</option>
-        </select>
+        {recapsTab
+          ? <select value={rtype} onChange={(e) => { setRtype(e.target.value); setLimit(PAGE) }} title="kind of recap">
+              <option value="all">Every kind of recap</option>
+              {types.map(([k, label]) => <option key={k} value={k}>{label} ({queue.items.filter((i) => i.recap_type === k && FILTERS[filter](i)).length})</option>)}
+            </select>
+          : <select value={pillar} onChange={(e) => setPillar(e.target.value as typeof pillar)} title="Philly events, music news, or both">
+              <option value="all">Events + music</option>
+              <option value="events">Events</option>
+              <option value="music">Music news</option>
+            </select>}
         <span className="muted small">
-          {shown.length} ideas · ranked by an <strong>experimental</strong> opportunity score (rules {queue.rules_version}):
-          audience, timing, story, Philly/your lane, readiness, and search demand from your trend notes (left out
-          rather than guessed when none match). Music news ideas have their own: the kind of story, urgency, your
-          artists and how well it’s sourced. It’s a hint for what to make next, not a view prediction.
+          {recapsTab
+            ? <>{shown.length} recaps: broad roundups made from the listings, for as many videos as you want (genres,
+              weeks, halves of the month, holidays, venues, underrated, under $25, runs of nights, what's on after a big
+              show…). They're drafted when you click, not automatically. The best ones in your lane are also on What to
+              post. Same experimental score (rules {queue.rules_version}).</>
+            : <>{shown.length} ideas · ranked by an <strong>experimental</strong> opportunity score (rules {queue.rules_version}):
+              audience, timing, story, Philly/your lane, readiness, and search demand from your trend notes (left out
+              rather than guessed when none match). Music news ideas have their own: the kind of story, urgency, your
+              artists and how well it’s sourced. It’s a hint for what to make next, not a view prediction. More
+              roundups are on the Recaps tab.</>}
         </span>
       </div>
-      {!STATIC && <TrendNotes onChange={changed} />}
+      {!STATIC && !recapsTab && <TrendNotes onChange={changed} />}
       {shown.length === 0 && <p className="muted">Nothing here.</p>}
-      {shown.map((i) => (
+      {page.map((i) => (
         <QueueCard key={i.alert_id} item={i} alert={alerts.find((a) => a.id === i.alert_id)} busy={busy} job={job}
+                   recapLabel={i.recap_type ? queue.recap_types?.[i.recap_type] : undefined}
                    onJob={onJob} onChange={changed} />
       ))}
+      {shown.length > limit && (
+        <button className="ghost" onClick={() => setLimit(limit + PAGE)}>Show {Math.min(PAGE, shown.length - limit)} more of {shown.length - limit}</button>
+      )}
     </>
   )
 }
@@ -95,8 +124,9 @@ function Count({ label, value, hot = false }: { label: string; value?: number; h
   return <div className={hot ? 'stat hot' : 'stat'}><strong>{value ?? '–'}</strong><span>{label}</span></div>
 }
 
-function QueueCard({ item, alert, busy, job, onJob, onChange }: {
+function QueueCard({ item, alert, busy, job, onJob, onChange, recapLabel }: {
   item: QueueItem; alert?: Alert; busy: boolean; job: Job | null; onJob: (j: Job) => void; onChange: () => void
+  recapLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [editingNote, setEditingNote] = useState(false)
@@ -110,7 +140,8 @@ function QueueCard({ item, alert, busy, job, onJob, onChange }: {
     <section className={`card queue-card kind-${item.kind} band-${item.band ?? 'none'}`}>
       <div className="card-head">
         {item.band && <span className={`pill band ${item.band}`}>{BAND_LABEL[item.band]}</span>}
-        <span className={item.pillar === 'music' ? 'pill trend' : 'pill'}>{item.pillar === 'music' ? '🎵 ' : ''}{KIND_LABEL[item.kind]}</span>
+        <span className={item.pillar === 'music' ? 'pill trend' : 'pill'}>{item.pillar === 'music' ? '🎵 ' : ''}
+          {recapLabel ? `Recap · ${recapLabel}` : KIND_LABEL[item.kind]}</span>
         <span className="pill">{STAGE_LABEL[item.stage]}</span>
         {item.post_by && !['expired', 'dismissed', 'posted', 'measured'].includes(item.stage) && (
           <span className={`pill ${timeLeft(item.post_by) === 'past' ? '' : 'due'}`} title={item.expires_at ? `stale after ${fmtWhen(item.expires_at)}` : ''}>

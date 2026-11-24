@@ -197,11 +197,11 @@ def _save(conn, alert, facts: dict, out: dict, warnings: list[str], angle: str |
 
 def draft_pending(conn, limit: int | None = None) -> list[int]:
     """Draft the highest-scoring alerts that don't have a draft yet. Vinyl ideas wait for your click: their
-    researched drafts cost more than an event blurb."""
+    researched drafts cost more than an event blurb. So do recaps (recaps.py): there are far too many to draft all."""
     if limit is None:
         limit = MAX_CLAUDE_DRAFTS_PER_RUN if llm.uses_claude() else MAX_DRAFTS_PER_RUN
     ids = [r["id"] for r in conn.execute(
-        "SELECT id FROM alerts WHERE status='new' AND kind != ? ORDER BY score DESC LIMIT ?",
+        "SELECT id FROM alerts WHERE status='new' AND kind NOT IN (?, 'recap') ORDER BY score DESC LIMIT ?",
         (config.VINYL_KIND, limit))]
     return _draft_all(conn, ids)
 

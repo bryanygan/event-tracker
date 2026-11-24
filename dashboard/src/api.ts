@@ -50,7 +50,7 @@ export type Draft = {
 export type Alert = {
   id: number
   key: string
-  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'experience' | 'things_to_do' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists' | 'vinyl'
+  kind: 'new_tour' | 'presale_soon' | 'weekend' | 'stacked_month' | 'status_change' | 'team_week' | 'big_game' | 'experience' | 'things_to_do' | 'music_story' | 'new_music_friday' | 'upcoming_albums' | 'emerging_artists' | 'vinyl' | 'recap'
   title: string
   score: number
   facts: { shows?: ShowFacts[]; show?: ShowFacts; [k: string]: unknown }
@@ -247,6 +247,8 @@ export type QueueItem = {
   format: string
   lane: 'lane' | 'other' | 'sports' | 'music' | 'local' | 'vinyl'
   pillar: 'events' | 'music' | 'vinyl' // music: a story you sent or a roundup (music_formats.py); vinyl: vinyl.py
+  recap_type: string | null // recaps.py (kind 'recap'): genre, underrated, multi_night...
+  on_queue: boolean // listed on What to post (every recap is on the Recaps tab)
 }
 
 // Editorial calendar (tracker/planner.py)
@@ -296,6 +298,7 @@ export type Queue = {
   counts: { new: number; time_sensitive: number; to_review: number; ready_to_film: number; needs_refresh: number }
   weights: Record<string, number>
   rules_version: string
+  recap_types?: Record<string, string> // recap type -> its label (recaps.py); older snapshots have none
 }
 
 export type AlertPatch = Partial<{ status: Alert['status']; shortlisted: boolean; snoozed_until: string | null; note: string | null
@@ -493,7 +496,9 @@ const staticApi = {
   remoteEdits: () => Promise.resolve<RemoteEdits>({ enabled: false, host: null, edits: [] }),
   triggerRun: readOnly,
   posts: () => snapshot<Post[]>('posts'),
-  queue: () => snapshot<Queue>('queue'),
+  queue: (section: 'main' | 'recaps' = 'main') =>  // the snapshot has the main list only
+    snapshot<Queue>('queue').then((q) => section === 'main' ? q : { ...q, items: [] }),
+  alertsByIds: (ids: number[]) => snapshot<Alert[]>('alerts').then((all) => all.filter((a) => ids.includes(a.id))),
   calendar: (_start?: string) => snapshot<Calendar>('calendar'),
   updateAlert: readOnly,
   analytics: (groupBy: Analytics['group_by']) =>
@@ -564,7 +569,10 @@ const liveApi = {
   triggerRun: () => req<Job>('/api/run', { method: 'POST' }),
   publish: () => req<Job>('/api/publish', { method: 'POST' }),
   posts: () => req<Post[]>('/api/posts'),
-  queue: () => req<Queue>('/api/queue'),
+  queue: (section: 'main' | 'recaps' = 'main') => req<Queue>(`/api/queue?section=${section}`),
+  // Just these ideas (any kind): the cards What to post and Recaps list
+  alertsByIds: (ids: number[]) =>
+    ids.length ? req<Alert[]>(`/api/alerts?status=all&ids=${ids.join(',')}`) : Promise.resolve<Alert[]>([]),
   calendar: (start?: string) => req<Calendar>(`/api/calendar${start ? `?start=${start}` : ''}`),
   updateAlert: (id: number, fields: AlertPatch) =>
     req(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }),

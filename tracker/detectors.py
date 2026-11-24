@@ -681,7 +681,8 @@ def run_all(conn: sqlite3.Connection, run_id: int, now: datetime | None = None) 
         + detect_things_to_do(conn, local_today)
     )
     alerts += detect_lane_weekend(conn, local_today, alerts)  # needs the others to avoid repeating them
-    return alerts
+    from . import recaps  # the Recaps tab: many broad roundups (imports this module)
+    return alerts + recaps.detect_all(conn, now)
 
 
 # Facts that change on every run without anything real happening; ignored when deciding whether an alert changed.
